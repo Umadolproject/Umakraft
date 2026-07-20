@@ -1,30 +1,33 @@
 # Workshop
 
-This directory contains exploratory design notes, drafts, and future migration plans for the UmaMoe pipeline.
+**STAGE 3: Generate Presentation Artifacts**
 
 ## Purpose
 
-`Workshop` is a lightweight sandbox for:
+Render compiled data into Discord-ready embeds, images, and cards.
 
-- capturing draft proposals
-- recording architecture decisions
-- tracking experimental work before it is promoted into the main codebase
+## Departments
 
-## Files
+| Department | Purpose |
+|------------|----------|
+| **Draftsman** | Manage blueprint specs; define deliverable types |
+| **Fabricator** | Build Discord embeds and image cards |
+| **Validator** | Verify deliverables against blueprint specs |
+| **Terminal** | Immutable staging area for approved deliverables |
 
-- `Draftsman/` — directory containing the Draftsman specification and templates.
-- `Draftsman/Draftsman.md` — primary draft tracker and proposal template.
-- `README.md` — onboarding guidance for Workshop contributors.
+## Pipeline Flow
 
-## How to use
+```
+Product → Draftsman → Fabricator → Validator → Terminal → Distribution
+```
 
-1. Add a new section to `Draftsman.md` for each proposal.
-2. Follow the template fields: Summary, Motivation, Design, Backwards compatibility, Tests, Rollback.
-3. Keep drafts concise and link to related files or tests where useful.
-4. When a draft is approved, move implementation details into the main repo and update `Draftsman.md` status.
+## Status
 
-## Best practices
+**IMPLEMENTED** (v1.0.0)
 
-- Prefer one proposal per top-level heading.
-- Keep the document current; remove stale drafts.
-- Use Workshop as a staging area, not as a permanent place for production code.
+Report assimilation in progress.
+
+## See Also
+
+- `GOVERNANCE/PIPELINE_REGISTRY.md` — Workshop stage specification
+- `GOVERNANCE/PIPELINE_EVOLUTION.md` — Assimilation backlog

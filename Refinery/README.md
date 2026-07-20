@@ -1,28 +1,32 @@
 # Refinery
 
-Refinery contains the production pipeline that converts trusted, validated data (from the `Vault`) into finished products for downstream consumption.
+**STAGE 2: Transform & Compile Data**
 
-Structure:
+## Purpose
 
-- `Refiner/` — Business logic and enrichment (calculations, flags, trends)
-- `Compiler/` — Deterministic assembly and packaging of refined results
-- `Depot/` — Persistence, retrieval, and retention of compiled products
+Transform trusted records into refined domain information and assemble into canonical products.
 
-Getting started:
+## Departments
 
-1. Read the dept specs: `Refiner/Refiner.md`, `Compiler/Compiler.md`, `Depot/Depot.md`
-2. Use in-memory adapters for local development (check `Refinery/*/adapters/dev`)
-3. Run unit tests for the target module:
+| Department | Purpose |
+|------------|----------|
+| **Refiner** | Normalize, clean, and derive values |
+| **Compiler** | Assemble refined results into products |
+| **Depot** | Store and retrieve compiled products |
 
-```powershell
-npm test --workspace=Refinery
+## Pipeline Flow
+
+```
+Trusted Record → Refiner → Compiler → Depot → Storage
 ```
 
-Contributing:
+## Status
 
-- Follow the v2.0 spec style in department docs when changing contracts.
-- Update `Version History` in the modified spec files.
+**IMPLEMENTED** (v1.0.0)
 
-Contact:
+Assimilation in progress from fantracking/
 
-Open an issue or PR in the repository for design questions or implementation proposals.
+## See Also
+
+- `GOVERNANCE/PIPELINE_REGISTRY.md` — Refinery stage specification
+- `GOVERNANCE/PIPELINE_EVOLUTION.md` — Assimilation backlog

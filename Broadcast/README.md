@@ -1,64 +1,33 @@
 # Broadcast
 
-Broadcast is the event-notification pipeline of UmaKraft Circle Bot.
+**STAGE 5: Deliver Notifications**
 
-It handles all push notifications — messages that fire automatically on a cron schedule
-or when a data threshold is crossed — without any user request.
+## Purpose
 
-## Structure
+Manage notification lifecycle from trigger through delivery.
+
+## Departments
+
+| Department | Purpose |
+|------------|----------|
+| **Broker** | Notification entry point; scheduled triggers |
+| **Inspector** | Notification approval authority; eligibility check |
+| **Archive** | Persistent notification storage |
+| **Announcer** | Discord delivery |
+
+## Pipeline Flow
 
 ```
-Broadcast/
-  Broker/              — receives triggers, fetches data from Refinery, manages queue
-  archive-inspector/   — validates eligibility, checks dedup, resolves recipients, selects variant, writes to Archive
-  Archive/             — atomic claim, per-step delivery flags, append-only history log
-  archive_transporter/ — fetches full notification record from Archive and hands it to Announcer
-  Announcer/           — renders content via Fabricator and delivers to Discord with restart-safe retry
+Trigger → Broker → Inspector → Archive → Announcer → Delivery
 ```
 
-## Getting Started
+## Status
 
-1. Read `Overview.md` for the full pipeline design and data flow.
-2. Read each department spec in order:
-   - `Broker/Broker.md`
-   - `archive-inspector/archive-inspector.md`
-   - `Archive/Archive.md`
-   - `archive_transporter/archive_transporter.md`
-   - `Announcer/Announcer.md`
-3. Use in-memory Archive adapters for local development and testing.
-4. Run unit tests per department before any change.
+**IN PROGRESS** (v0.9.0 - 1.0.0)
 
-## Key Design Rules
+Assimilating pending modules from fantracking/ and tasks/
 
-- Broadcast is a **push** pipeline. It never responds to slash commands.
-- Only Announcer sends to Discord.
-- Archive-Inspector is the single gatekeeper — nothing reaches Archive or Announcer without passing Archive-Inspector.
-- Archive-Transporter is the single entry point for Announcer — every call to Announcer (new delivery or restart recovery) goes through Archive-Transporter, which pre-fetches the full record from Archive.
-- Archive is the source of truth on restart. Broker reads incomplete Archive records
-  and routes them to Archive-Transporter, which fetches the full record and passes it
-  to Announcer — without re-running Archive-Inspector.
-- Workshop and Broadcast are parallel consumers of Refinery/Depot. They never import each other.
+## See Also
 
-## Notification Types
-
-| Notification | Trigger | Destinations |
-|---|---|---|
-| Daily greeting | 07:00 JST cron | Channel post + per-member DM (local timezone) |
-| Noon / night / midnight messages | Hourly cron, per-member timezone | Member DM |
-| Offline check | Daily cron, days-since-last-online | Member DM (escalating variants) |
-| Daily fan warning | 23:45 JST, fan goal missed | Channel post + all member DMs |
-| Daily achievement tier | Hourly, total fans threshold crossed | Channel post + all member DMs |
-| Weekly fan warning | End of week, weekly goal missed | Channel post + member DMs |
-| Monthly fan warning | End of month, monthly goal missed | Channel post + member DMs |
-| Milestone | Monthly, per-trainer fan tier crossed | Channel post + trainer DM + leader DM |
-| Leaderboard announcement | Daily/weekly tally complete | Channel post + top-3 DMs |
-| Fan deficit image report | Daily tally check | Channel post |
-| Inter-circle leaderboard | Weekly | Channel post |
-
-## Relationship with Other Directories
-
-- **Reads from:** `Refinery/Depot` (computed products, threshold data)
-- **Calls for renders:** `Workshop/Fabricator` (Announcer requests image card renders)
-- **Writes to:** `Broadcast/Archive` only
-- **Sends to:** Discord (channel posts, DMs)
-- **Never imports from:** `Workshop/Terminal`, `Distribution/`, `Umamoe/`
+- `GOVERNANCE/PIPELINE_REGISTRY.md` — Broadcast stage specification
+- `GOVERNANCE/PIPELINE_EVOLUTION.md` — Assimilation backlog
