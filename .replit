@@ -2,3 +2,26 @@ modules = ["nodejs-20"]
 
 [nix]
 channel = "stable-25_05"
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Run tests"
+
+[[workflows.workflow]]
+name = "Run tests"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "node umamoe/test/pipeline.test.js && node Refinery/test/pipeline.test.js"
+
+[workflows.workflow.metadata]
+outputType = "console"
