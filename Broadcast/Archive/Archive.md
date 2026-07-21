@@ -1,5 +1,13 @@
 # Archive
 
+**Authority:** `GOVERNANCE/ARCHITECTURE_AUTHORITY.md`
+**Registry:** `GOVERNANCE/PIPELINE_REGISTRY.md`
+**Version:** v2.0.0
+**Stage:** 5 — Broadcast (Deliver Notifications)
+**Last Updated:** 2026-07-21
+
+---
+
 ## Purpose
 
 The **Archive** is the notification state store of the Broadcast pipeline.
@@ -24,6 +32,20 @@ Archive has four responsibilities and no others:
 
 Archive does not evaluate eligibility, resolve recipients, select variants, render
 content, or send to Discord.
+
+---
+
+## Must Not
+
+Archive must **never**:
+
+* Evaluate eligibility or determine notification thresholds
+* Resolve recipients or select message variants
+* Render content or build message payloads
+* Send to Discord
+* Accept `INSERT` calls from any department other than Archive-Inspector — it is the sole record creator
+* Accept flag updates (`markChannelSent`, `markDmMemberSent`, `markDmLeaderSent`) from any department other than Announcer
+* Store a partial or incomplete record — every write must include the full delivery plan and payload
 
 ---
 

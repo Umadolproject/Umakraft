@@ -1,5 +1,13 @@
 # Archive-Inspector
 
+**Authority:** `GOVERNANCE/ARCHITECTURE_AUTHORITY.md`
+**Registry:** `GOVERNANCE/PIPELINE_REGISTRY.md`
+**Version:** v2.0.0
+**Stage:** 5 — Broadcast (Deliver Notifications)
+**Last Updated:** 2026-07-21
+
+---
+
 ## Purpose
 
 The **Archive-Inspector** is the decision-maker of the Broadcast pipeline and the sole
@@ -38,6 +46,20 @@ Archive-Transporter) or rejects it cleanly so nothing is ever written anywhere.
    handoff to Announcer.
 
 Archive-Inspector is the **only** department that creates new records in Archive.
+
+---
+
+## Must Not
+
+Archive-Inspector must **never**:
+
+* Re-fetch data from Refinery/Depot — all input arrives pre-fetched from Broker
+* Re-implement business logic already computed by Refinery — it reads pre-computed values from Broker's envelope
+* Write a partial Archive record — the write must be atomic: full record or nothing
+* Call Announcer directly — after writing to Archive, it signals Archive-Transporter only
+* Create more than one Archive record per `notificationKey` — the `INSERT OR IGNORE` prevents duplicates, but Inspector must not attempt to insert a modified record for an existing key
+* Modify or delete existing Archive records
+* Approve a notification without completing all six steps in order
 
 ---
 

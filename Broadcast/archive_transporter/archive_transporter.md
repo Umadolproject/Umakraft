@@ -1,5 +1,13 @@
 # Archive-Transporter
 
+**Authority:** `GOVERNANCE/ARCHITECTURE_AUTHORITY.md`
+**Registry:** `GOVERNANCE/PIPELINE_REGISTRY.md`
+**Version:** v2.0.0
+**Stage:** 5 — Broadcast (Deliver Notifications)
+**Last Updated:** 2026-07-21
+
+---
+
 ## Purpose
 
 The **Archive-Transporter** is the fetch-and-handoff stage of the Broadcast pipeline.
@@ -15,6 +23,19 @@ Announcer is pre-loaded with the full Archive record by Archive-Transporter.
 
 Archive-Transporter never evaluates eligibility, writes to Archive, selects variants,
 or renders content. It only fetches and forwards.
+
+---
+
+## Must Not
+
+Archive-Transporter must **never**:
+
+* Evaluate eligibility, dedup, or select variants
+* Write to Archive or create Archive records
+* Call Archive-Inspector
+* Pass a null or malformed record to Announcer — abort immediately if Archive returns nothing
+* Retry fetches that return null — a missing record is a programming error upstream, not a transient failure
+* Distinguish between new deliveries and restart-recovery retries — both use the same `fetch(notificationKey, client)` interface
 
 ---
 

@@ -1,5 +1,13 @@
 # Broker
 
+**Authority:** `GOVERNANCE/ARCHITECTURE_AUTHORITY.md`
+**Registry:** `GOVERNANCE/PIPELINE_REGISTRY.md`
+**Version:** v2.0.0
+**Stage:** 5 — Broadcast (Deliver Notifications)
+**Last Updated:** 2026-07-21
+
+---
+
 ## Purpose
 
 The **Broker** is the entry point and data courier of the Broadcast pipeline.
@@ -29,6 +37,20 @@ re-fetches the full record and hands it to Announcer.
 
 Broker does not evaluate eligibility, resolve recipients, select variants, write to
 Archive, fetch from Archive, or send to Discord.
+
+---
+
+## Must Not
+
+Broker must **never**:
+
+* Decide whether a notification should fire — that is Archive-Inspector's sole responsibility
+* Write to Archive — Archive-Inspector is the only writer
+* Call Announcer directly — all delivery routes through Archive-Transporter
+* Call Discord directly — all Discord delivery goes through Broadcast/Announcer
+* Re-implement eligibility, dedup, or variant selection logic
+* Allow one failing circle to block others — each circle runs in isolation
+* Restart or modify any other pipeline department
 
 ---
 

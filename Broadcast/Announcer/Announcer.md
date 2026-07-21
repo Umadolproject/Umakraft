@@ -1,5 +1,13 @@
 # Announcer
 
+**Authority:** `GOVERNANCE/ARCHITECTURE_AUTHORITY.md`
+**Registry:** `GOVERNANCE/PIPELINE_REGISTRY.md`
+**Version:** v2.0.0
+**Stage:** 5 — Broadcast (Deliver Notifications)
+**Last Updated:** 2026-07-21
+
+---
+
 ## Purpose
 
 The **Announcer** is the final stage of the Broadcast pipeline — the delivery engine.
@@ -44,6 +52,20 @@ surface the incomplete record through Archive-Transporter, which will call Annou
 
 Announcer never evaluates eligibility, checks dedup, selects variants, reads new claim
 records from Archive, or fetches data. It delivers what it receives, exactly once per step.
+
+---
+
+## Must Not
+
+Announcer must **never**:
+
+* Evaluate eligibility, check dedup, or select variants
+* Read new claim records from Archive at the start of delivery — the full record arrives from Archive-Transporter
+* Fetch data from Refinery/Depot
+* Render HTML, SVG, canvas, or Playwright code — all rendering belongs to `Workshop/Fabricator`
+* Send to Discord without first checking the delivery flag for that step — flag = 1 means skip
+* Enter a retry loop itself — retry cadence is the Broker cron interval; Announcer leaves failed flags at 0 and returns
+* Call Discord directly for Operation health alerts — those route through the same Broadcast pipeline
 
 ---
 
