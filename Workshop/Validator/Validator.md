@@ -1,5 +1,13 @@
 # Validator
 
+**Authority:** `GOVERNANCE/ARCHITECTURE_AUTHORITY.md`
+**Registry:** `GOVERNANCE/PIPELINE_REGISTRY.md`
+**Version:** v2.0.0
+**Stage:** 3 — Workshop (Generate Presentation Artifacts)
+**Last Updated:** 2026-07-21
+
+---
+
 ## Purpose
 
 The **Validator** department is responsible for inspecting completed deliverables produced by the Fabricator and confirming they satisfy Draftsman specifications.

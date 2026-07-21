@@ -1,5 +1,13 @@
 # Workshop
 
+**Authority:** `GOVERNANCE/ARCHITECTURE_AUTHORITY.md`
+**Registry:** `GOVERNANCE/PIPELINE_REGISTRY.md`
+**Version:** v2.0.0
+**Stage:** 3 — Workshop (Generate Presentation Artifacts)
+**Last Updated:** 2026-07-21
+
+---
+
 **STAGE 3: Generate Presentation Artifacts**
 
 ## Purpose
