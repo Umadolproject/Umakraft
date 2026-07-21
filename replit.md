@@ -19,10 +19,22 @@ Umamoe (Stage 1) → Refinery (Stage 2) → Workshop (Stage 3) → Distribution 
 
 ## Running the Project
 
-### Run Umamoe pipeline tests (no live API required)
+### Run Umamoe unit tests (no live API required)
 
 ```bash
 node umamoe/test/pipeline.test.js
+```
+
+### Run Refinery unit tests
+
+```bash
+node Refinery/test/pipeline.test.js
+```
+
+### Run Umamoe → Refinery integration tests
+
+```bash
+node umamoe/test/integration.test.js
 ```
 
 ### Environment Variables
@@ -59,9 +71,17 @@ Acquire, transport, validate, and store raw uma.moe data.
 
 Inspector validation categories: Existence → Structure → Completeness → Type Integrity → Range Integrity
 
-### Stage 2 — Refinery (PENDING)
+### Stage 2 — Refinery (BUILT)
 
-Transform and compile validated data.
+Transform and compile validated data from the Vault into canonical products.
+
+| Department | File | Responsibility |
+|------------|------|---------------|
+| Refiner | `Refinery/Refiner/refiner.js` | Business logic — fan gains, trends, delta vs projected |
+| Compiler | `Refinery/Compiler/compiler.js` | Deterministic assembly of refinedResults into compiledProducts |
+| Depot | `Refinery/Depot/depot.js` | Compiled product storage (adapter pattern) |
+
+Trend tiers: `elite` (rank ≤ 10) → `upward` (≤ 50) → `stable` (≤ 200) → `emerging`
 
 ### Stage 3 — Workshop (PENDING)
 
