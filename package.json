@@ -1,0 +1,12 @@
+{
+  "name": "umakraft",
+  "version": "1.0.0",
+  "description": "UmaKraft constitutional data pipeline",
+  "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "test:umamoe": "node --experimental-vm-modules umamoe/test/pipeline.test.js"
+  }
+}

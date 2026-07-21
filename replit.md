@@ -1,29 +1,89 @@
 # UmaKraft Pipeline Architecture
 
-A documentation repository for the **UmaKraft** Uma Musume circle bot pipeline architecture.
+A constitutional data pipeline for acquiring, validating, rendering, and delivering Uma Musume trainer data via Discord bot.
 
 ## About This Repository
 
-This repository contains the architectural documentation, department specifications, and design decisions for the UmaKraft pipeline system. It is a pure documentation project — no runnable code is present.
+UmaKraft is a five-stage data pipeline governed by constitutional architecture documents. Every department has exclusive ownership of its responsibility. The pipeline flows forward only.
 
-## Documentation Structure
+```
+Umamoe (Stage 1) → Refinery (Stage 2) → Workshop (Stage 3) → Distribution (Stage 4) → Broadcast (Stage 5)
+```
 
-Start here:
+## Stack
 
-- `GOVERNANCE/ARCHITECTURE_AUTHORITY.md` — constitutional rules for the entire pipeline
-- `GOVERNANCE/PIPELINE_REGISTRY.md` — registry of all departments
-- `docs/PIPELINE_DESIGN.md` — full 5-stage pipeline design
-- `docs/RoleArchitecture.md` — directory roles and boundary rules
-- `docs/KNOWLEDGE_BASE.md` — comprehensive project knowledge base
+- **Runtime:** Node.js 24 (ESM — `"type": "module"`)
+- **Language:** JavaScript
+- **External API:** uma.moe REST API
+- **Discord:** Discord.js (to be added in Distribution build phase)
 
-## Pipeline Overview
+## Running the Project
 
-The UmaKraft pipeline has 5 stages:
+### Run Umamoe pipeline tests (no live API required)
 
-1. **Umamoe** — Extract raw data from uma.moe API (Miner → Courier → Inspector → Vault)
-2. **Refinery** — Transform and compile data (Refiner → Compiler → Depot)
-3. **Workshop** — Manufacture deliverables (Draftsman → Fabricator → Validator → Terminal)
-4. **Distribution** — Route command responses to Discord
-5. **Broadcast** — Deliver notifications to Discord (Broker → Inspector → Archive → Announcer)
+```bash
+node umamoe/test/pipeline.test.js
+```
 
-## User preferences
+### Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `UMA_MOE_API_BASE_URL` | `https://uma.moe/api` | Base URL for uma.moe API |
+| `API_TIMEOUT_MS` | `30000` | Request timeout in milliseconds |
+| `API_MAX_RETRIES` | `3` | Maximum retry attempts |
+| `API_RETRY_BACKOFF_MS` | `1000` | Initial backoff delay |
+
+## Architecture
+
+### Governance (read before contributing)
+
+| Document | Purpose |
+|----------|---------|
+| `GOVERNANCE/ARCHITECTURE_AUTHORITY.md` | Supreme law — read first |
+| `GOVERNANCE/PIPELINE_REGISTRY.md` | Official department registry |
+| `GOVERNANCE/PIPELINE_OPERATIONS.md` | Operational standards |
+| `GOVERNANCE/PIPELINE_EVOLUTION.md` | How architecture evolves |
+| `GOVERNANCE/ARCHITECTURE_DECISIONS.md` | ADR ledger |
+
+### Stage 1 — Umamoe (BUILT)
+
+Acquire, transport, validate, and store raw uma.moe data.
+
+| Department | File | Responsibility |
+|------------|------|---------------|
+| Miner | `umamoe/Miner/miner.js` | HTTP requests to uma.moe API, retry, rate limiting |
+| Courier | `umamoe/Courier/courier.js` | Transport Miner envelopes to Inspector |
+| Inspector | `umamoe/Inspector/inspector.js` | 5-category data validation |
+| Vault | `umamoe/Vault/vault.js` | Trusted data storage (adapter pattern) |
+
+Inspector validation categories: Existence → Structure → Completeness → Type Integrity → Range Integrity
+
+### Stage 2 — Refinery (PENDING)
+
+Transform and compile validated data.
+
+### Stage 3 — Workshop (PENDING)
+
+Render compiled data into Discord embeds and image cards.
+
+### Stage 4 — Distribution (DOCUMENTED)
+
+Coordinate user-facing Discord command flow.
+
+| Department | Responsibility |
+|------------|---------------|
+| Discord | Raw Discord API surface (events, slash command definitions) |
+| Commands | Slash command intake and validation |
+| Coordinator | Pipeline orchestration per command |
+| Dispatcher | Discord response delivery |
+
+### Stage 5 — Broadcast (DOCUMENTED)
+
+Scheduled notifications and announcements to Discord.
+
+## User Preferences
+
+- Follow the existing governance document format for all new docs.
+- All new departments must be registered in `GOVERNANCE/PIPELINE_REGISTRY.md` and recorded in `GOVERNANCE/ARCHITECTURE_DECISIONS.md`.
+- Never merge department responsibilities or bypass pipeline stages.
