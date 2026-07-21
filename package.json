@@ -7,6 +7,9 @@
     "node": ">=20.0.0"
   },
   "scripts": {
-    "test:umamoe": "node --experimental-vm-modules umamoe/test/pipeline.test.js"
+    "test:umamoe":    "node umamoe/test/pipeline.test.js",
+    "test:refinery":  "node Refinery/test/pipeline.test.js",
+    "test:workshop":  "node Workshop/test/pipeline.test.js",
+    "test":           "node umamoe/test/pipeline.test.js && node Refinery/test/pipeline.test.js && node Workshop/test/pipeline.test.js"
   }
 }
