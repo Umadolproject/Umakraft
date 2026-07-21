@@ -1,0 +1,4 @@
+# GOVERNANCE is protected — changes require owner approval AND the passcode in the PR body.
+# See .github/workflows/governance-guard.yml for enforcement details.
+
+GOVERNANCE/  @Umadolproject

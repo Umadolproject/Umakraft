@@ -1,0 +1,33 @@
+name: Governance Guard
+
+on:
+  pull_request:
+    paths:
+      - 'GOVERNANCE/**'
+
+jobs:
+  check-passcode:
+    name: Verify governance edit passcode
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for passcode in PR body
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          PASSCODE="rules meant to be broken"
+
+          if echo "$PR_BODY" | grep -qF "$PASSCODE"; then
+            echo "✅ Passcode verified. GOVERNANCE edit permitted."
+          else
+            echo ""
+            echo "🔒 GOVERNANCE is protected."
+            echo ""
+            echo "This PR modifies files inside GOVERNANCE/ which is read-only by policy."
+            echo ""
+            echo "To proceed, include the following exact phrase anywhere in your PR description:"
+            echo ""
+            echo "    rules meant to be broken"
+            echo ""
+            echo "Without it, this check will block the merge."
+            exit 1
+          fi
