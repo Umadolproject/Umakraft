@@ -152,6 +152,55 @@ Directory structure created: `Distribution/Commands/`, `Distribution/Coordinator
 
 ---
 
+# ADR-0003
+
+## Title
+
+Add Discord Department to Distribution as Platform Adapter Layer
+
+## Status
+
+IMPLEMENTED
+
+## Category
+
+Architecture
+
+## Date
+
+2026-07-21
+
+## Author
+
+Repository Owner
+
+## Summary
+
+Introduce a dedicated `Discord/` department within Distribution to own all raw Discord API files, separating platform concerns from pipeline logic.
+
+## Decision
+
+A **Discord** department is established at the `Distribution/Discord/` path as a platform adapter. It contains two subdirectories:
+
+* `events/` — one file per Discord gateway event handler (receives raw events, forwards to Commands)
+* `commands/` — one file per slash command definition registered with the Discord API (declarations only, no handler logic)
+
+Both Commands and Dispatcher may consume shared Discord utilities from this department. Neither department directly owns Discord API files.
+
+## Rationale
+
+Commands (intake) and Dispatcher (delivery) both interface with Discord but for different purposes. Without a shared platform layer, Discord API concerns would spread across two departments, violating the single-ownership principle. Centralizing all raw Discord API surface in one department keeps Commands and Dispatcher platform-agnostic in their logic.
+
+## Architectural Impact
+
+Medium. A new department is registered in Stage 4. `PIPELINE_REGISTRY.md` updated with full Discord department entry. `Distribution/README.md` updated. No existing department ownership is changed.
+
+## Implementation Status
+
+Directory structure created: `Distribution/Discord/`, `Distribution/Discord/events/`, `Distribution/Discord/commands/`. Department role documents written. Registry and README updated.
+
+---
+
 # Governance Compliance
 
 Every architectural decision must remain consistent with:

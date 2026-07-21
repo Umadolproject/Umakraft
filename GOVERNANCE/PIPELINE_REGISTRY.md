@@ -404,6 +404,50 @@ Presentation Assets
 
 # ============================================================
 
+## Discord
+
+### Purpose
+
+Own the raw Discord API surface — all files that originate directly from or are registered directly with the Discord API.
+
+### Owns
+
+* Discord gateway event handlers
+* Slash command definitions and registrations
+* Discord client startup bindings
+* Shared Discord platform utilities (permission helpers, embed builders, rate-limit guards)
+
+### Receives
+
+Raw Discord gateway events from the Discord API
+
+### Produces
+
+* Forwarded interaction events passed to Commands
+* Slash command definitions registered with the Discord API
+* Shared Discord utilities consumed by Commands and Dispatcher
+
+### Never Owns
+
+* Business logic
+* Input validation
+* Pipeline orchestration
+* Response delivery
+* Data persistence
+
+### Downstream
+
+Commands
+
+### Implementation
+
+* `Distribution/Discord/events/` — one file per Discord gateway event
+* `Distribution/Discord/commands/` — one file per slash command definition
+* Status: **FORMALIZED**
+* Version: 1.0.0
+
+---
+
 ## Commands
 
 ### Purpose
