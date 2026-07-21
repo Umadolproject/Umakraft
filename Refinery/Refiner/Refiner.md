@@ -1,5 +1,13 @@
 # Refiner
 
+**Authority:** `GOVERNANCE/ARCHITECTURE_AUTHORITY.md`
+**Registry:** `GOVERNANCE/PIPELINE_REGISTRY.md`
+**Version:** v2.0.0
+**Stage:** 2 — Refinery (Transform & Compile Data)
+**Last Updated:** 2026-07-21
+
+---
+
 ## Purpose
 
 The **Refiner** department transforms trusted information from the Vault into meaningful, business-ready results.

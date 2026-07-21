@@ -1,5 +1,13 @@
 # Depot
 
+**Authority:** `GOVERNANCE/ARCHITECTURE_AUTHORITY.md`
+**Registry:** `GOVERNANCE/PIPELINE_REGISTRY.md`
+**Version:** v2.0.0
+**Stage:** 2 — Refinery (Transform & Compile Data)
+**Last Updated:** 2026-07-21
+
+---
+
 ## Purpose
 
 The **Depot** department is responsible for storing and retrieving finished products produced by the Refinery.

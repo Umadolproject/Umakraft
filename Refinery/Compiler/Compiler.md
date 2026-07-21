@@ -1,5 +1,13 @@
 # Compiler
 
+**Authority:** `GOVERNANCE/ARCHITECTURE_AUTHORITY.md`
+**Registry:** `GOVERNANCE/PIPELINE_REGISTRY.md`
+**Version:** v2.0.0
+**Stage:** 2 — Refinery (Transform & Compile Data)
+**Last Updated:** 2026-07-21
+
+---
+
 ## Purpose
 
 The **Compiler** transforms one or more `refinedResult` envelopes produced by the Refiner into complete, standardized products suitable for storage in the `Depot`. It assembles data components, resolves composition rules, and writes canonical product documents.
@@ -31,6 +39,20 @@ Read in conjunction with:
 7. Emit structured logs and metrics for observability.
 
 The Compiler must be deterministic: identical inputs and configuration produce identical outputs.
+
+---
+
+## Must Not
+
+The Compiler must **never**:
+
+* Perform domain calculations or business logic — that belongs to the Refiner
+* Validate data content or enforce business rules — the Refiner and Inspector own validation
+* Fetch from external APIs or call uma.moe
+* Send to Discord or call Broadcast
+* Mutate original `refinedResult` envelopes — always copy and merge into a new `compiledProduct`
+* Persist a product to Depot before compilation succeeds — write only after a clean compile
+* Call Workshop or Distribution directly
 
 ---
 

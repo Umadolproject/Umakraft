@@ -1,5 +1,13 @@
 # Refinery Architecture Overview (v2.0)
 
+**Authority:** `GOVERNANCE/ARCHITECTURE_AUTHORITY.md`
+**Registry:** `GOVERNANCE/PIPELINE_REGISTRY.md`
+**Version:** v2.0.0
+**Stage:** 2 — Refinery (Transform & Compile Data)
+**Last Updated:** 2026-07-21
+
+---
+
 ## Purpose
 
 The **Refinery** transforms trusted information from the `Vault` into finished, canonical products. It does not acquire or validate raw data — those responsibilities belong to the UmaMoe departments (Miner, Inspector, Vault).
