@@ -41,6 +41,7 @@ Available to all members.
 
 | Command | File | Output | Description |
 |---------|------|--------|-------------|
+| `/club_gain` | [club_gain.md](club_gain.md) | Image | 30-day club gain history — daily progress, running totals, and summary stats (Club Owner / Officers only) |
 | `/fan_gain` | [fan_gain.md](fan_gain.md) | Image | Daily, weekly, and monthly fan gain + daily ranking |
 | `/leaderboard` | [leaderboard.md](leaderboard.md) | Image | Circle fan-gain leaderboard — daily / weekly / monthly |
 | `/total_fan` | [total_fan.md](total_fan.md) | Image | Lifetime total fan count and circle rank |
