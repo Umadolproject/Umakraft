@@ -5,7 +5,7 @@
 **Stage:** 3 — Workshop
 **Department:** Draftsman
 **Status:** DEFINED
-**Version:** 1.0.0
+**Version:** 2.0.0
 **Last Updated:** 2026-07-21
 
 ---
@@ -20,7 +20,7 @@ It describes how a standardized warning card is rendered for abnormal conditions
 
 ## Product Overview
 
-The warning card is an alert-style image card or Discord embed delivered automatically by the Broadcast pipeline when the warning engine detects an abnormal condition. It is not triggered by a slash command — it is a Broadcast-initiated deliverable.
+The warning card is an alert-style image card delivered automatically by the Broadcast pipeline when the warning engine detects an abnormal condition. It is not triggered by a slash command — it is a Broadcast-initiated deliverable.
 
 ---
 
@@ -32,58 +32,172 @@ Not a slash command. Triggered automatically by the warning engine.
 
 ---
 
-## Inputs
+## Canvas
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `severity` | String | `info`, `warning`, or `critical` |
-| `context` | Object | Structured context describing the condition |
-
----
-
-## Severity Levels
-
-| Level | Usage | Color |
-|-------|-------|-------|
-| `info` | Informational notice; no action required | `#8A7CF7` (Secondary) |
-| `warning` | Abnormal condition; review recommended | `#FFD54F` (Gold) |
-| `critical` | Serious issue; immediate attention required | `#FF5AA5` (Primary) |
+| Property | Value |
+|----------|-------|
+| Output format | PNG (via Puppeteer) |
+| Canvas width | 900 px |
+| Canvas height | Content-driven (auto) |
+| Outer padding | 40 px |
+| Corner radius | 20–24 px |
+| Gap between sections | 16–24 px |
 
 ---
 
 ## Layout
 
-1. Header
-   - Severity badge (INFO / WARNING / CRITICAL)
-   - Alert title
-   - Timestamp
-2. Condition block
-   - Error code
-   - Human-readable description
-   - Affected trainer / circle (if applicable)
-3. Detail panel
-   - Context fields (key–value pairs from context object)
-   - Remediation steps (if available)
-4. Footer
-   - Source attribution and monitoring channel tag
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ ⚠ WARNING SYSTEM                                                   HH:MM UTC │
+│──────────────────────────────────────────────────────────────────────────────│
+│  ● CRITICAL                                                        #FF5AA5   │
+│  ALERT TITLE                                                        ALERT ID │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│ ERROR CODE                                                                   │
+│ <errorCode>                                                                  │
+│                                                                              │
+│ DESCRIPTION                                                                  │
+│ <description>                                                                │
+│                                                                              │
+├──────────────────────────────────────────────────────────────────────────────┤
+│ AFFECTED TARGET                                                              │
+│                                                                              │
+│ Trainer   : <trainerName>                                                    │
+│ Circle    : <circleName>                                                     │
+│ Target ID : <targetId>                                                       │
+│                                                                              │
+├──────────────────────────────────────────────────────────────────────────────┤
+│ CONTEXT                                                                      │
+│──────────────────────────────────────────────────────────────────────────────│
+│ <label>                   <value>                                            │
+│ <label>                   <value>                                            │
+│ …                                                                            │
+│                                                                              │
+├──────────────────────────────────────────────────────────────────────────────┤
+│ RECOMMENDED ACTIONS                                                          │
+│                                                                              │
+│ • <action>                                                                   │
+│ • <action>                                                                   │
+│                                                                              │
+├──────────────────────────────────────────────────────────────────────────────┤
+│ Source: <source>                                                             │
+│ Delivered via <pipeline>                                                     │
+│ Monitoring Channel: <channel>                                                │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Sections
+
+### 1 — Header bar
+- Left: `⚠ WARNING SYSTEM` — fixed label, always present
+- Right: Timestamp — `HH:MM UTC` format, taken from `meta.generatedAt`
+
+### 2 — Severity row
+- Left: Severity badge — `● INFO` / `● WARNING` / `● CRITICAL` — colored dot matching severity
+- Center: Alert title — `meta.alert.title` in uppercase
+- Right: `ALERT ID` label (static label) with `meta.alertId` value below it
+- Background strip color derived from severity level (see Severity Levels table)
+
+### 3 — Error block
+Two stacked label-value pairs, each on its own line:
+- `ERROR CODE` label → `meta.errorCode` value
+- `DESCRIPTION` label → `alert.description` value (wraps if long)
+
+### 4 — Affected Target
+Displayed only when at least one target field is present. Three optional rows:
+- `Trainer   : <meta.targetName>` — omitted if absent
+- `Circle    : <meta.circleName>` — omitted if absent
+- `Target ID : <meta.targetId>` — omitted if absent
+
+If no target fields are present, this section is omitted entirely.
+
+### 5 — Context
+Key-value table from `alert.context` array. Left column is the label, right column is the value. Rendered as aligned rows separated by a divider from the section title. Omitted if `alert.context` is empty.
+
+### 6 — Recommended Actions
+Bulleted list from `alert.remediation` array. Each item prefixed with `•`. Omitted if `alert.remediation` is empty.
+
+### 7 — Footer
+Three lines:
+- `Source: <alert.source>`
+- `Delivered via <alert.deliveredVia>`
+- `Monitoring Channel: <alert.monitoringChannel>`
+
+---
+
+## Severity Levels
+
+| Level | Badge | Color | Usage |
+|-------|-------|-------|-------|
+| `info` | `● INFO` | `#8A7CF7` | Informational notice; no action required |
+| `warning` | `● WARNING` | `#FFD54F` | Abnormal condition; review recommended |
+| `critical` | `● CRITICAL` | `#FF5AA5` | Serious issue; immediate attention required |
 
 ---
 
 ## Data Contract
 
-The blueprint expects:
+```json
+{
+  "meta": {
+    "alertId": "string",
+    "severity": "info | warning | critical",
+    "errorCode": "string",
+    "generatedAt": "ISO timestamp",
+    "targetId": "string (optional)",
+    "targetName": "string (optional)",
+    "circleName": "string (optional)"
+  },
+  "alert": {
+    "title": "string",
+    "description": "string",
+    "context": [
+      { "label": "string", "value": "string" }
+    ],
+    "remediation": ["string"],
+    "source": "string",
+    "deliveredVia": "string",
+    "monitoringChannel": "string"
+  }
+}
+```
 
-- `meta`
-  - `severity` — `info` | `warning` | `critical`
-  - `errorCode` — string identifier, e.g. `FAN_GAIN_ANOMALY`
-  - `generatedAt`
-  - `targetId` (optional)
-  - `targetName` (optional)
-- `alert`
-  - `title` — short alert title
-  - `description` — human-readable explanation
-  - `context` — array of `{ label, value }` key–value pairs
-  - `remediation` — array of strings describing suggested actions (may be empty)
+---
+
+## Validation Rules
+
+A valid deliverable must satisfy:
+
+| Field | Rule |
+|-------|------|
+| `meta.alertId` | present, non-empty string |
+| `meta.severity` | one of `info`, `warning`, `critical` |
+| `meta.errorCode` | present, non-empty string |
+| `meta.generatedAt` | present, valid ISO timestamp |
+| `alert.title` | present, non-empty string |
+| `alert.description` | present, non-empty string |
+| `alert.source` | present, non-empty string |
+| `alert.deliveredVia` | present, non-empty string |
+| `alert.monitoringChannel` | present, non-empty string |
+| `alert.context` | array (may be empty) |
+| `alert.remediation` | array (may be empty) |
+| PNG buffer | non-null, size > 0 |
+
+---
+
+## Formatting Rules
+
+- Timestamp in header rendered as `HH:MM UTC` from `meta.generatedAt`
+- Alert title always rendered in uppercase
+- Severity badge dot color matches the severity level color (see Severity Levels table)
+- Context label column left-aligned; value column right-aligned within the panel width
+- Numbers in context values formatted with locale comma separators, e.g. `30,153,000`
+- Signed differences prefixed with `+` or `−` as appropriate
+- Monitoring channel displayed with `#` prefix if not already present
 
 ---
 
@@ -110,7 +224,9 @@ The blueprint expects:
 |-----------|----------|
 | Duplicate warning (same error code, same target, within window) | Broadcast Inspector deduplicates — card not rendered |
 | Unknown severity level | Default to `warning`; log classification error |
-| Empty context | Render card without context panel; do not fail |
+| Empty context array | Render card without Context section; do not fail |
+| Empty remediation array | Render card without Recommended Actions section; do not fail |
+| No target fields present | Render card without Affected Target section; do not fail |
 
 ---
 
@@ -151,9 +267,10 @@ Announcer — deliver card to monitoring channel
 ## Implementation Notes
 
 - Integrates with `umamoe/ERROR_HANDLING.md` error code classifications.
-- Warning engine logic (`fantracking/warnings/`) is pending assimilation into the Refinery (per `PIPELINE_REGISTRY.md`).
-- Daily, weekly, and monthly warning variants use the same blueprint with different context payloads.
+- Warning engine logic is pending assimilation into the Refinery (per `GOVERNANCE/PIPELINE_REGISTRY.md`).
+- Daily, weekly, and monthly warning variants use the same blueprint with different `alert.context` payloads.
 - `critical` alerts should also be logged to a dedicated monitoring channel separate from general announcements.
+- Sections 4 (Affected Target), 5 (Context), and 6 (Recommended Actions) are conditionally rendered — Fabricator must omit them cleanly when their data is absent, not render empty boxes.
 
 ---
 
