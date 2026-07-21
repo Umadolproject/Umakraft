@@ -142,25 +142,20 @@ uma.moe API
 #### Miner
 - **Does:** HTTP requests to uma.moe endpoints; rate-limit queue; exponential backoff retry; raw response collection.
 - **Never does:** Validation, persistence, rendering, notifications.
-- **Implementation:** `umamoe/Miner/miner.js`, `umamoe/umaClient.js` (pending absorption), `umamoe/umaQueue.js` (pending absorption)
 - **Endpoint registry:** `umamoe/MINER_ENDPOINTS.md`
 
 #### Courier
 - **Does:** Transports Miner output to Inspector unchanged; basic transportability checks only; envelope routing.
 - **Never does:** Business rules, validation, storage, modification of data content.
-- **Implementation:** `umamoe/Courier/courier.js`
 
 #### Inspector
 - **Does:** Validates structure, completeness, types, and ranges; accepts or rejects; classifies errors; does not modify data.
 - **Never does:** Storage, rendering, notifications, database writes.
-- **Implementation:** `umamoe/Inspector/inspector.js`
 - **Validation rules:** `umamoe/Inspector/VALIDATION_RULES.md`
 
 #### Vault
 - **Does:** Stores accepted validated envelopes; provides retrieval to Refinery only; manages snapshots and version history.
 - **Never does:** Validation, rendering, notifications, API requests.
-- **Implementation:** `umamoe/Vault/vault.js`, `umamoe/Vault/adapters/inmemory.js`, `umamoe/Vault/adapters/file.js`
-- **Legacy shims (pending absorption):** `umamoe/umaCache.js`, `umamoe/uma.js`
 
 ### Data Envelopes
 
@@ -241,21 +236,14 @@ Vault (Stage 1)
 #### Refiner
 - **Does:** Deterministic business logic — fan gain deltas, velocity, trend calculations, milestone tier eligibility, derived values, normalization.
 - **Never does:** API requests, validation of raw data, product assembly, storage.
-- **Implementation:** `Refinery/Refiner/refiner.js`
-- **Pending absorption:** `umamoe/umaStats.js`, `fantracking/velocity/index.js`, `fantracking/milestone/eval.js`
 
 #### Compiler
-- **Does:** Merges one or more Refined Results into a single canonical Compiled Product following documented conflict-resolution rules; records product provenance.
+- **Does:** Combines one or more Refined Results into a single canonical Compiled Product following documented conflict-resolution rules; records product provenance.
 - **Never does:** Domain calculations, API requests, storage.
-- **Implementation:** `Refinery/Compiler/compiler.js`
-- **Pending absorption:** `fantracking/sync/dataSync.js`, `fantracking/sync/circleQueue.js`, `fantracking/aggregation/index.js`
 
 #### Depot
 - **Does:** Persists Compiled Products with explicit `id` and `version`; serves Workshop and Broadcast on request; manages product retention.
 - **Never does:** Refinement, calculations, rendering, notifications.
-- **Implementation:** `Refinery/Depot/depot.js`
-- **Pending absorption:** `fantracking/leaderboard/snapshotDb.js`, `fantracking/links/db.js`, `fantracking/links/repository.js`
-- **Shims:** `db/linksDb.js`, `db/leaderboardSnapshotDb.js`
 
 ### Stage 2 Rules
 - Refinery is the only stage that transforms data. Neither Workshop nor Broadcast applies business logic.
@@ -296,25 +284,19 @@ Depot (Stage 2)
 #### Draftsman
 - **Does:** Manages the blueprint specification library; defines required structure, layout, components, styling, and presentation rules for each deliverable type.
 - **Never does:** Construction, validation, storage, delivery.
-- **Implementation:** `Workshop/Draftsman/draftsman.js`
 - **Blueprints:** `Workshop/Draftsman/Blueprint/` — 15 specs: `leaderboard`, `milestone`, `warning`, `greeting`, `help`, `total_fan`, `circle_master`, `joindate`, `store`, `timeline`, `fan_gain`, `profile`, `circle`, `link`, `set_fans`
 
 #### Fabricator
 - **Does:** Constructs Discord embeds and image cards by reading a blueprint from Draftsman and compiled data from Depot. Renders PNG buffers, embed objects, and attachment payloads.
 - **Never does:** Blueprint definition, output validation, delivery to Discord.
-- **Implementation:** `Workshop/Fabricator/fabricator.js`
-- **Pending absorption:** `fantracking/reports/*.js` (17 render files) → `Workshop/Fabricator/reports/`
-- **Shims:** `utils/reports/*.js` (16 shim files)
 
 #### Validator
 - **Does:** Checks completed deliverables against their blueprint spec; verifies structure, completeness, consistency, and visual quality; approves or rejects before Terminal placement.
 - **Never does:** Construction, delivery, data modification.
-- **Implementation:** `Workshop/Validator/Validator.js`
 
 #### Terminal
 - **Does:** Immutable staging area; holds approved deliverables until Distribution retrieves them; represents the official handoff point from Workshop to Distribution.
 - **Never does:** Modification of deliverables, routing, delivery.
-- **Implementation:** `Workshop/Terminal/terminal.js`
 
 ### Stage 3 Rules
 - Workshop never modifies source data. It renders from what Depot provides; it does not re-calculate.
@@ -331,8 +313,6 @@ Depot (Stage 2)
 **Produces:** Application Response delivered to Discord
 
 **Status: PENDING FORMALIZATION (v0.1.0)**
-
-Currently, Distribution's responsibilities are carried by `commands/` (26 slash command files) and `handlers/` (6 Discord event files) at the repository root. These will be absorbed into formal Distribution departments as the pipeline stabilizes.
 
 ### Planned Internal Flow
 
@@ -353,17 +333,9 @@ Terminal (Stage 3)
 
 #### Retriever
 - **Does:** Pulls approved deliverables from Workshop/Terminal on command invocation.
-- **Currently carried by:** Inline calls inside `commands/*.js` files.
 
 #### Dispatcher
 - **Does:** Routes the fetched deliverable to the correct Discord destination (channel reply, ephemeral reply, DM).
-- **Currently carried by:** `handlers/interactionCreate.js`, `utils/dm.js`, `utils/updateLog.js`, `utils/autoDelete.js`
-
-### Permanent Supporting Utilities
-These utilities are not pending absorption — they stay at their current location as distribution-layer utilities:
-- `utils/dm.js` — DM dispatch helper
-- `utils/updateLog.js` — channel logging helper
-- `utils/autoDelete.js` — ephemeral message TTL cleanup
 
 ### Stage 4 Rules
 - Distribution only delivers what Workshop has approved. It does not construct deliverables.
@@ -422,15 +394,11 @@ Announcer
 #### Broker
 - **Does:** Cron-triggered or threshold-triggered entry point; fetches compiled data from Refinery/Depot; hands raw data to Archive-Inspector; on restart, reads Archive for incomplete records and routes to Archive-Transporter.
 - **Never does:** Eligibility checking, dedup checking, archive writes, Discord delivery.
-- **Implementation:** `Broadcast/Broker/broker.js`
-- **Pending absorption:** `fantracking/milestone/milestones.js`, `tasks/dailyGreetingReport.js`, `tasks/dailyMessages.js`, `tasks/offlineCheck.js`, `tasks/weeklyAnnouncement.js`, `tasks/interCircleAnnouncements.js`
 
 #### Archive-Inspector
 - **Does:** Runs every eligibility check (threshold met? grace period over? tally open?); dedup check (Archive record already exists?); recipient resolution (which channels, which member DMs, whether leader DM); variant selection (message content + image parameters). If all pass → writes full notification record to Archive. If any fail → drops cleanly.
 - **Is the only department that creates new Archive records.**
 - **Never does:** Discord delivery, data retrieval, archive reads after writing.
-- **Implementation:** `Broadcast/archive-inspector/archiveInspector.js`
-- **Pending absorption:** `fantracking/milestone/tiers.js`, `fantracking/milestone/winners.js`, `fantracking/milestone/cleanup.js`, `fantracking/warnings/engine.js`, `fantracking/warnings/daily.js`, `fantracking/warnings/weekly.js`, `fantracking/warnings/monthly.js`
 
 #### Archive
 - **Does:** Pure storage. Holds notification records and delivery state flags. Exposes a clean interface per authorized caller.
@@ -445,20 +413,13 @@ Announcer
 | `SELECT` incomplete records (any flag = 0) | Broker only |
 | `INSERT` delivery history row | Announcer only |
 
-- **Implementation:** `Broadcast/Archive/archive.js`
-- **Pending absorption:** `fantracking/milestone/db.js`, `fantracking/warnings/db.js`, `fantracking/achievements/db.js`
-- **Shims:** `db/milestoneDb.js`, `db/warningDb.js`, `db/achievementDb.js`
-
 #### Archive-Transporter
 - **Does:** Receives a `notificationKey` from Archive-Inspector (new delivery) or Broker (restart recovery); reads full notification record from Archive including all `imageParams`; validates it; passes complete record to Announcer.
 - **Never does:** Creating Archive records, eligibility decisions, Discord delivery.
-- **Implementation:** `Broadcast/archive_transporter/archiveTransporter.js`
 
 #### Announcer
 - **Does:** Receives a fully-loaded notification record from Archive-Transporter; executes delivery plan step by step — for each step: check flag (if 1, skip), execute (render via Fabricator, post channel, send DMs), on success update Archive flag + append history row, on failure log and leave flag at 0 (Broker surfaces it again on next run).
 - **Never does:** Re-evaluating eligibility, reading initial record from Archive, creating Archive records.
-- **Implementation:** `Broadcast/Announcer/announcer.js`
-- **Pending absorption:** Delivery portions of `fantracking/milestone/notifier.js`, `fantracking/leaderboard/announcements.js`, `fantracking/warnings/imageReport.js`, `tasks/fanDeficitImageReport.js`
 
 ### Stage 5 Rules
 - Broadcast never fires from a user command. User commands go through Distribution.
@@ -479,14 +440,14 @@ INFRASTRUCTURE/
 ├── Contracts/    — Canonical data envelope definitions for all stage handoffs
 ├── Errors/       — Error taxonomy, error codes, and shared error handling
 ├── Policy/       — Cross-cutting rules (rate limits, retry policies, retention)
-├── Telemetry/    — Structured logging interface; all departments use core/log.js
-└── core/         — Shared utilities: taskRegistry.js, health.js, errors.js, log.js
+├── Telemetry/    — Structured logging interface
+└── core/         — Shared utilities: task registry, health, error handling, logging
 ```
 
 **Rules:**
-- All departments log through `core/log.js`. Direct `console.log` is prohibited in pipeline departments.
-- Error handling uses `core/errors.js` — `safeRun()` and `withRetry()` for recoverable failures with exponential backoff.
-- Task health tracking uses `core/taskRegistry.js` (last run, success/failure, consecutive failure count).
+- All departments log through a shared logging interface. Direct console output is prohibited in pipeline departments.
+- Error handling uses shared utilities — `safeRun()` and `withRetry()` patterns for recoverable failures with exponential backoff.
+- Task health tracking records last run, success/failure, and consecutive failure counts.
 - Infrastructure never owns pipeline business logic. It only provides utilities.
 
 ---
@@ -554,7 +515,7 @@ These are unconditional violations. No feature request, deadline, or convenience
 2. **New derived metric or fan calculation** → Refiner
 3. **New compiled data product** → Compiler + Depot
 4. **New image card or embed design** → Draftsman (blueprint) + Fabricator (render)
-5. **New slash command** → Distribution (currently `commands/`)
+5. **New slash command** → Distribution
 6. **New automatic notification** → Broker (trigger) + Archive-Inspector (rule) + Fabricator (render template) + Announcer (delivery handler)
 7. **New error type** → INFRASTRUCTURE/Errors
 8. **New shared utility** → INFRASTRUCTURE/core (if stateless and cross-cutting) or the owning stage's utilities
@@ -570,7 +531,7 @@ This document must be updated whenever:
 - A data envelope contract changes between any two departments
 - A new delivery path is added (requires architectural approval first)
 - A stage boundary or handoff point moves
-- Distribution is formally restructured from `commands/` and `handlers/`
+- Distribution is formally restructured
 
 All updates to this document must be accompanied by an entry in `GOVERNANCE/ARCHITECTURE_DECISIONS.md`.
 

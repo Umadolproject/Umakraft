@@ -31,11 +31,9 @@ Product → Draftsman → Fabricator → Validator → Terminal → Distribution
 
 ## Status
 
-**IMPLEMENTED** (v1.0.0)
-
-Report assimilation in progress.
+**DOCUMENTED** (v1.0.0)
 
 ## See Also
 
 - `GOVERNANCE/PIPELINE_REGISTRY.md` — Workshop stage specification
-- `GOVERNANCE/PIPELINE_EVOLUTION.md` — Assimilation backlog
+- `GOVERNANCE/PIPELINE_EVOLUTION.md` — Evolution policy

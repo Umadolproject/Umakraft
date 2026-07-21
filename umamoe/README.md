@@ -31,9 +31,7 @@ API → Miner → Courier → Inspector → Vault → Refinery
 
 ## Status
 
-**IMPLEMENTED** (v1.0.0)
-
-Legacy module absorption pending (umaClient, umaQueue, umaCache, uma.js)
+**DOCUMENTED** (v1.0.0)
 
 ## Specifications
 
@@ -45,4 +43,4 @@ Legacy module absorption pending (umaClient, umaQueue, umaCache, uma.js)
 ## See Also
 
 - `GOVERNANCE/PIPELINE_REGISTRY.md` — Umamoe stage specification
-- `GOVERNANCE/PIPELINE_EVOLUTION.md` — Assimilation backlog
+- `GOVERNANCE/PIPELINE_EVOLUTION.md` — Evolution policy

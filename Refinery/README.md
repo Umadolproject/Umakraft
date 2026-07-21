@@ -30,11 +30,9 @@ Trusted Record → Refiner → Compiler → Depot → Storage
 
 ## Status
 
-**IMPLEMENTED** (v1.0.0)
-
-Assimilation in progress from fantracking/
+**DOCUMENTED** (v1.0.0)
 
 ## See Also
 
 - `GOVERNANCE/PIPELINE_REGISTRY.md` — Refinery stage specification
-- `GOVERNANCE/PIPELINE_EVOLUTION.md` — Assimilation backlog
+- `GOVERNANCE/PIPELINE_EVOLUTION.md` — Evolution policy

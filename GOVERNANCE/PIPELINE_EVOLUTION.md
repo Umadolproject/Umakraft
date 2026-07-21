@@ -492,123 +492,13 @@ Before assimilating any module:
 
 ---
 
-# Current Assimilation Backlog
-
-The following supporting modules have been identified as eligible for assimilation into their rightful pipeline owners. Each entry lists the current location, the responsible owner, and the target path.
-
-## Refinery/Refiner — pending assimilation
-
-| Current Location | Target Path | Reason |
-|---|---|---|
-| `umamoe/umaStats.js` | `Refinery/Refiner/umaStats.js` | Fan delta computation is Refinery work; misplaced in Umamoe |
-| `fantracking/velocity/index.js` | `Refinery/Refiner/velocity.js` | Rolling 7-day avg and projection — derived value calculation |
-| `fantracking/milestone/eval.js` | `Refinery/Refiner/milestoneEval.js` | Milestone eligibility calculation — Refiner responsibility |
-| `fantracking/achievements/daily.js` | `Refinery/Refiner/achievements.js` | Per-trainer achievement flag computation |
-
-## Refinery/Compiler — pending assimilation
-
-| Current Location | Target Path | Reason |
-|---|---|---|
-| `fantracking/sync/dataSync.js` | `Refinery/Compiler/dataSync.js` | Full sync orchestration — product assembly |
-| `fantracking/sync/circleQueue.js` | `Refinery/Compiler/circleQueue.js` | Per-circle queue management — product assembly |
-| `fantracking/aggregation/index.js` | `Refinery/Compiler/aggregation.js` | Weekly/monthly aggregate assembly |
-
-## Refinery/Depot — pending assimilation
-
-| Current Location | Target Path | Reason |
-|---|---|---|
-| `fantracking/leaderboard/snapshotDb.js` | `Refinery/Depot/leaderboardSnapshotDb.js` | Product persistence — Depot responsibility |
-| `fantracking/links/db.js` | `Refinery/Depot/linksDb.js` | Trainer ↔ Discord identity store — Depot responsibility |
-| `fantracking/links/repository.js` | `Refinery/Depot/linksRepository.js` | Links data access layer — Depot responsibility |
-
-## Workshop/Fabricator — pending assimilation
-
-| Current Location | Target Path | Reason |
-|---|---|---|
-| `fantracking/reports/ImageReportStandard.js` | `Workshop/Fabricator/ImageReportStandard.js` | Shared base renderer — Fabricator responsibility |
-| `fantracking/reports/fanGain.js` | `Workshop/Fabricator/reports/fanGain.js` | Render-only report |
-| `fantracking/reports/leaderboard.js` | `Workshop/Fabricator/reports/leaderboard.js` | Render-only report |
-| `fantracking/reports/circleMaster.js` | `Workshop/Fabricator/reports/circleMaster.js` | Render-only report |
-| `fantracking/reports/dailyFanWarning.js` | `Workshop/Fabricator/reports/dailyFanWarning.js` | Render-only report |
-| `fantracking/reports/dailyAchievement.js` | `Workshop/Fabricator/reports/dailyAchievement.js` | Render-only report |
-| `fantracking/reports/milestone.js` | `Workshop/Fabricator/reports/milestone.js` | Render-only report |
-| `fantracking/reports/fanDeficit.js` | `Workshop/Fabricator/reports/fanDeficit.js` | Render-only report |
-| `fantracking/reports/warnings.js` | `Workshop/Fabricator/reports/warnings.js` | Render-only report |
-| `fantracking/reports/warningCard.js` | `Workshop/Fabricator/reports/warningCard.js` | Render-only report |
-| `fantracking/reports/greeting.js` | `Workshop/Fabricator/reports/greeting.js` | Render-only report |
-| `fantracking/reports/help.js` | `Workshop/Fabricator/reports/help.js` | Render-only report |
-| `fantracking/reports/joindate.js` | `Workshop/Fabricator/reports/joindate.js` | Render-only report |
-| `fantracking/reports/profile.js` | `Workshop/Fabricator/reports/profile.js` | Render-only report |
-| `fantracking/reports/store.js` | `Workshop/Fabricator/reports/store.js` | Render-only report |
-| `fantracking/reports/timeline.js` | `Workshop/Fabricator/reports/timeline.js` | Render-only report |
-| `fantracking/reports/linkList.js` | `Workshop/Fabricator/reports/linkList.js` | Render-only report |
-
-## Workshop/Fabricator — split moves (render portion only)
-
-| Current Location | Render → Fabricator | Delivery → Announcer |
-|---|---|---|
-| `fantracking/leaderboard/announcements.js` | `Workshop/Fabricator/renders/leaderboard.js` | `Broadcast/Announcer/leaderboardAnnouncer.js` |
-| `fantracking/milestone/notifier.js` | `Workshop/Fabricator/renders/milestone.js` | `Broadcast/Announcer/milestoneAnnouncer.js` |
-| `fantracking/warnings/imageReport.js` | `Workshop/Fabricator/renders/warningReport.js` | `Broadcast/Announcer/warningAnnouncer.js` |
-
-## Broadcast/Broker — pending assimilation
-
-| Current Location | Target Path | Reason |
-|---|---|---|
-| `fantracking/milestone/milestones.js` | `Broadcast/Broker/milestoneBroker.js` | Orchestration entry + boot guard |
-| `tasks/dailyGreetingReport.js` | `Broadcast/Broker/greetingBroker.js` | Cron trigger |
-| `tasks/dailyMessages.js` | `Broadcast/Broker/dailyMessageBroker.js` | Per-timezone hour check + DM loop |
-| `tasks/offlineCheck.js` | `Broadcast/Broker/offlineCheckBroker.js` | Days-offline trigger |
-| `tasks/weeklyAnnouncement.js` | `Broadcast/Broker/weeklyAnnouncementBroker.js` | Weekly tally event |
-| `tasks/interCircleAnnouncements.js` | `Broadcast/Broker/interCircleBroker.js` | Inter-circle trigger |
-
-## Broadcast/Inspector — pending assimilation
-
-| Current Location | Target Path | Reason |
-|---|---|---|
-| `fantracking/milestone/tiers.js` | `Broadcast/Inspector/milestoneTiers.js` | Tier config + variant pool |
-| `fantracking/milestone/winners.js` | `Broadcast/Inspector/milestoneWinners.js` | Top-3 recipient resolution |
-| `fantracking/milestone/cleanup.js` | `Broadcast/Inspector/milestoneCleanup.js` | Pruning expired records |
-| `fantracking/warnings/engine.js` | `Broadcast/Inspector/warningInspector.js` | Pace calc, level escalation, grace period |
-| `fantracking/warnings/daily.js` | `Broadcast/Inspector/dailyWarningInspector.js` | Daily fan goal eligibility |
-| `fantracking/warnings/weekly.js` | `Broadcast/Inspector/weeklyWarningInspector.js` | Weekly goal eligibility |
-| `fantracking/warnings/monthly.js` | `Broadcast/Inspector/monthlyWarningInspector.js` | Monthly goal eligibility |
-
-## Broadcast/Archive — pending assimilation
-
-| Current Location | Target Path | Reason |
-|---|---|---|
-| `fantracking/milestone/db.js` | `Broadcast/Archive/milestoneArchive.js` | Claim, channel_sent, dm_sent flags |
-| `fantracking/warnings/db.js` | `Broadcast/Archive/warningArchive.js` | warning_state, warning_history tables |
-| `fantracking/achievements/db.js` | `Broadcast/Archive/achievementArchive.js` | Achievement record persistence |
-
-## Broadcast/Announcer — pending assimilation (delivery portions)
-
-| Source | Target Path | Reason |
-|---|---|---|
-| Delivery portion of `fantracking/milestone/notifier.js` | `Broadcast/Announcer/milestoneAnnouncer.js` | Discord delivery is Announcer responsibility |
-| Delivery portion of `fantracking/leaderboard/announcements.js` | `Broadcast/Announcer/leaderboardAnnouncer.js` | Discord delivery is Announcer responsibility |
-| Delivery portion of `fantracking/warnings/imageReport.js` | `Broadcast/Announcer/warningAnnouncer.js` | Discord delivery is Announcer responsibility |
-| `tasks/fanDeficitImageReport.js` (delivery part) | `Broadcast/Announcer/fanDeficitAnnouncer.js` | Discord delivery is Announcer responsibility |
-
-## Umamoe — legacy modules pending absorption into departments
-
-| Current Location | Target Department | Reason |
-|---|---|---|
-| `umamoe/umaClient.js` | `umamoe/Miner/` | HTTP client logic belongs to Miner |
-| `umamoe/umaQueue.js` | `umamoe/Miner/` | Rate-limit logic belongs to Miner |
-| `umamoe/umaCache.js` | `umamoe/Vault/` | In-memory cache belongs to Vault |
-| `umamoe/uma.js` | `umamoe/Vault/` | Barrel snapshot exports belong to Vault |
-
----
-
 # Final Statement
 
 The UmaKraft architecture evolves through **capability acquisition**, not architectural replacement.
 
 Protected pipeline departments are the permanent owners of their responsibilities.
 
-Supporting modules are temporary structures that may be reorganized, deprecated, or assimilated when appropriate.
+Supporting modules are temporary structures that may be reorganized, deprecated, or integrated into the appropriate department when appropriate.
 
 Every evolution should make the architecture clearer, simpler, and more maintainable.
 

@@ -141,7 +141,7 @@ Each entry shows: cron/trigger, what it does, the exact log lines it emits, and 
 
 **Flow:**
 1. `deferReply`
-2. Dynamic `import('./deploy-commands.js')` → command list
+2. Load command list
 3. `renderHelpCard(commands)` → PNG buffer
 4. `editReply` → attachment "BotCommands"
 
@@ -638,7 +638,7 @@ Each entry shows: cron/trigger, what it does, the exact log lines it emits, and 
 
 **Flow:**
 1. `getCircleSnapshot(id)` for all circles
-2. Merge + rank members across circles
+2. Combine + rank members across circles
 3. Post combined embed to update channel
 
 ---
@@ -1068,7 +1068,7 @@ Each entry shows: cron/trigger, what it does, the exact log lines it emits, and 
 ### `broadcastBroker` — `*/5 * * * *` (Asia/Tokyo)
 **What it does:** Polls the Broadcast pipeline for pending products and delivers them to Discord.
 
-**Log lines:** Managed by `Broadcast/Broker/broker.js` internally.
+**Log lines:** Managed by Broadcast/Broker internally.
 
 **Flow:**
 1. `_broker.runOnce()` → `Archive.getPending()` → `ArchiveInspector.validate()`

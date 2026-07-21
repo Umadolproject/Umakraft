@@ -1,44 +1,29 @@
-# Uma Circle Bot
+# UmaKraft Pipeline Architecture
 
-A Discord bot for managing the **UmaKraft** Uma Musume circle on uma.moe (circle ID `974470619`).
+A documentation repository for the **UmaKraft** Uma Musume circle bot pipeline architecture.
 
-## Stack
-- **Runtime**: Node.js ≥ 20, ES modules, no build step
-- **Key libs**: discord.js 14, better-sqlite3, axios, node-cron, cheerio, googleapis
-- **Entry point**: `start.js` → `index.js`
+## About This Repository
 
-## How to run on Replit
+This repository contains the architectural documentation, department specifications, and design decisions for the UmaKraft pipeline system. It is a pure documentation project — no runnable code is present.
 
-1. Set the required secrets (see below).
-2. Run the **Discord Bot** workflow (`node start.js`).
+## Documentation Structure
 
-## Required secrets
+Start here:
 
-| Secret | Description |
-|---|---|
-| `DISCORD_BOT_TOKEN` | Bot token from the Discord Developer Portal |
-| `DISCORD_CLIENT_ID` | Application (client) ID from the Discord Developer Portal |
-| `UMA_MOE_API_KEY` | API key from https://uma.moe |
+- `GOVERNANCE/ARCHITECTURE_AUTHORITY.md` — constitutional rules for the entire pipeline
+- `GOVERNANCE/PIPELINE_REGISTRY.md` — registry of all departments
+- `docs/PIPELINE_DESIGN.md` — full 5-stage pipeline design
+- `docs/RoleArchitecture.md` — directory roles and boundary rules
+- `docs/KNOWLEDGE_BASE.md` — comprehensive project knowledge base
 
-## Optional env vars (defaults shown)
+## Pipeline Overview
 
-```
-CIRCLE_ID=974470619
-GUILD_ID=                        # restrict command registration to one guild
-ANNOUNCEMENT_CHANNEL=announcement
-RESULTS_CHANNEL=result-contribution
-DATA_DIR=./data
-TIMEZONE=Asia/Tokyo
-LOG_LEVEL=info
-```
+The UmaKraft pipeline has 5 stages:
 
-## Useful scripts
-
-```bash
-npm run deploy-commands   # register slash commands with Discord
-npm test                  # run vitest test suite
-npm run lint              # ESLint
-npm run format            # Prettier
-```
+1. **Umamoe** — Extract raw data from uma.moe API (Miner → Courier → Inspector → Vault)
+2. **Refinery** — Transform and compile data (Refiner → Compiler → Depot)
+3. **Workshop** — Manufacture deliverables (Draftsman → Fabricator → Validator → Terminal)
+4. **Distribution** — Route command responses to Discord
+5. **Broadcast** — Deliver notifications to Discord (Broker → Inspector → Archive → Announcer)
 
 ## User preferences
