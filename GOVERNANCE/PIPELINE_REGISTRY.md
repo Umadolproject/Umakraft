@@ -387,7 +387,7 @@ Presentation Assets
 ### Implementation
 
 * `Workshop/Draftsman/draftsman.js` — blueprint management
-* `Workshop/Draftsman/Blueprint/` — 15 blueprint specs: `leaderboard.md`, `milestone.md`, `warning.md`, `greeting.md`, `help.md`, `total_fan.md`, `circle_master.md`, `joindate.md`, `store.md`, `timeline.md`, `fan_gain.md`, `profile.md`, `circle.md`, `link.md`, `set_fans.md`
+* `Workshop/Draftsman/Blueprint/` — 16 blueprint specs: `leaderboard.md`, `milestone.md`, `warning.md`, `greeting.md`, `help.md`, `total_fan.md`, `circle_master.md`, `joindate.md`, `store.md`, `timeline.md`, `fan_gain.md`, `profile.md`, `circle.md`, `link.md`, `set_fans.md`, `club_gain.md`
 * `Workshop/Fabricator/fabricator.js` — deliverable construction
 * `Workshop/Validator/Validator.js` — deliverable validation
 * `Workshop/Terminal/terminal.js` — approved deliverable staging

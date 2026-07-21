@@ -1,0 +1,181 @@
+# /club_gain Command Design Document
+
+## Overview
+
+The `/club_gain` command displays a 30-day history of a club's gains in an organized spreadsheet-style format. It allows club leaders and members to quickly review daily progress, total gains, and performance trends.
+
+---
+
+## Command
+
+```
+/club_gain
+```
+
+### Description
+
+Displays the last 30 days of club gain statistics.
+
+---
+
+## Permissions
+
+- Club Owner
+- Club Officers
+- Administrators (optional)
+
+---
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| club | String | No | View another club (Admin only) |
+| days | Integer | No | Number of days to display (Default: 30, Max: 30) |
+
+---
+
+## Data Source
+
+The command retrieves club gain records from the database.
+
+Example table:
+
+| Column | Type |
+|--------|------|
+| id | Integer |
+| club_id | Integer |
+| date | Date |
+| gain | Integer |
+
+---
+
+## Output
+
+### Discord Embed
+
+**Title**
+
+```
+📈 Club Gain Report
+```
+
+**Description**
+
+```
+Showing the last 30 days of club gains.
+```
+
+---
+
+### Spreadsheet Table
+
+| Date | Daily Gain | Running Total |
+|------|-----------:|--------------:|
+| Jul 01 | +1,250 | 1,250 |
+| Jul 02 | +850 | 2,100 |
+| Jul 03 | +940 | 3,040 |
+| Jul 04 | +1,120 | 4,160 |
+| Jul 05 | +700 | 4,860 |
+| ... | ... | ... |
+| Jul 30 | +980 | 26,780 |
+
+---
+
+## Summary
+
+```
+Total Gain: 26,780
+Average Daily Gain: 892
+Highest Gain: 1,420
+Lowest Gain: 430
+```
+
+---
+
+## Excel Export (Optional)
+
+The command may generate:
+
+```
+club_gain_30days.xlsx
+```
+
+Columns:
+
+- Date
+- Daily Gain
+- Running Total
+
+---
+
+## Error Handling
+
+### No Data
+
+```
+❌ No club gain data found for the last 30 days.
+```
+
+### Invalid Club
+
+```
+❌ Club not found.
+```
+
+### Permission Denied
+
+```
+❌ You do not have permission to use this command.
+```
+
+---
+
+## Performance Requirements
+
+- Response time under 2 seconds.
+- Maximum of 30 records returned.
+- Database query optimized by date and club ID.
+
+---
+
+## Future Enhancements
+
+- Export to CSV
+- Export to PDF
+- Monthly comparison
+- Weekly averages
+- Gain graph visualization
+- Leaderboard comparison
+- Date range selection
+- Auto-generated reports
+
+---
+
+## Example
+
+User:
+
+```
+/club_gain
+```
+
+Bot:
+
+```
+📈 Club Gain Report
+
+Date      Gain      Total
+Jul 01    +1250     1250
+Jul 02    +850      2100
+Jul 03    +940      3040
+...
+Jul 30    +980      26780
+
+━━━━━━━━━━━━━━━━━━━━
+
+Total Gain: 26,780
+Average: 892/day
+Highest: 1,420
+Lowest: 430
+```

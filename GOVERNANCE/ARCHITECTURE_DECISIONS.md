@@ -201,6 +201,60 @@ Directory structure created: `Distribution/Discord/`, `Distribution/Discord/even
 
 ---
 
+# ADR-0004
+
+## Title
+
+Define Club Gain Blueprint for `/club_gain` Command
+
+## Status
+
+IMPLEMENTED
+
+## Category
+
+Blueprint Definition
+
+## Date
+
+2026-07-21
+
+## Author
+
+Repository Owner
+
+## Summary
+
+Introduce a formal blueprint for the `/club_gain` command at `Workshop/Draftsman/Blueprint/club_gain.md`, governing how a 30-day club fan gain history is rendered and delivered via Discord.
+
+## Decision
+
+A **club_gain** blueprint is established at `Workshop/Draftsman/Blueprint/club_gain.md` as the authoritative rendering specification for the `/club_gain` Discord command. The blueprint defines:
+
+* Canvas dimensions: 1080 × 1350 px (4:5), background `#FFF8FB`
+* Four sections: Header (1000×140), Spreadsheet Table (1000×840), Summary Statistics (1000×200), Footer (1000×30)
+* Spreadsheet table displays up to 30 rows of date / daily gain / running total
+* Summary block: total gain, average, highest, and lowest single-day gain
+* Full pipeline ownership assignment across all five stages
+* Data contract (meta, rows, summary) for Fabricator consumption
+* Error handling responses for no data, invalid club, and permission denied
+
+The command accepts two optional parameters: `club` (admin-only alternate club) and `days` (1–30, default 30). Results are cached for 10 minutes and must render within 2 seconds.
+
+## Rationale
+
+The `/club_gain` command represents a distinct deliverable type — a multi-row tabular history rather than a single-snapshot metric card. A dedicated blueprint is required so Draftsman, Fabricator, and Validator each have an unambiguous specification to reference. Without this blueprint, rendering logic would lack a constitutional anchor, violating the Workshop governance standard that requires every deliverable type to be blueprint-defined before implementation.
+
+## Architectural Impact
+
+Low. No existing department ownership changes. A new blueprint file is added to `Workshop/Draftsman/Blueprint/`. The Draftsman registry entry in `PIPELINE_REGISTRY.md` should be updated to include `club_gain.md` in its blueprint list.
+
+## Implementation Status
+
+Blueprint file created: `Workshop/Draftsman/Blueprint/club_gain.md`. Fabricator implementation and Coordinator action pending.
+
+---
+
 # Governance Compliance
 
 Every architectural decision must remain consistent with:
