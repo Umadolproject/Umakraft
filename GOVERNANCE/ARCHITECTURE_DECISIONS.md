@@ -106,6 +106,52 @@ Completed on branch: reorganize/step1-governance-folder
 
 ---
 
+# ADR-0002
+
+## Title
+
+Formalize Distribution Stage with Three Departments: Commands, Coordinator, Dispatcher
+
+## Status
+
+IMPLEMENTED
+
+## Category
+
+Architecture
+
+## Date
+
+2026-07-21
+
+## Author
+
+Repository Owner
+
+## Summary
+
+Formally establish the Distribution stage (Stage 4) with three owned departments replacing the prior unformalized state.
+
+## Decision
+
+Distribution is formalized with the following department structure:
+
+* **Commands** — sole entry point for Discord slash command events; owns input validation and routing to Coordinator.
+* **Coordinator** — sole department authorized to call upstream pipeline stages (Umamoe, Refinery, Workshop); owns orchestration and deliverable retrieval from Workshop/Terminal.
+* **Dispatcher** — sole department authorized to deliver responses outward to Discord; owns destination resolution and Discord payload formatting.
+
+Prior planned departments (`Retriever`, `Dispatcher` as previously noted) are superseded by this formalization. The three-department model (Commands → Coordinator → Dispatcher) reflects the "customer service" flow: intake, fulfillment, delivery.
+
+## Architectural Impact
+
+Medium. Distribution moves from PENDING FORMALIZATION to FORMALIZED. The `PIPELINE_REGISTRY.md` Stage 4 section is updated to register all three departments with full ownership, interface, and downstream entries. `ARCHITECTURE_AUTHORITY.md` Article III protected components list for Distribution is now backed by concrete departments.
+
+## Implementation Status
+
+Directory structure created: `Distribution/Commands/`, `Distribution/Coordinator/`, `Distribution/Dispatcher/`. Department role documents written for each. `Distribution/README.md` updated. `PIPELINE_REGISTRY.md` updated.
+
+---
+
 # Governance Compliance
 
 Every architectural decision must remain consistent with:

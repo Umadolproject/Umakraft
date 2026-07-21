@@ -404,36 +404,126 @@ Presentation Assets
 
 # ============================================================
 
-## Distribution
+## Commands
 
 ### Purpose
 
-Coordinate user-facing application flow.
+Receive Discord slash commands, validate input, and route to Coordinator.
 
 ### Owns
 
-* Routing
-* Commands
-* Scheduling
-* State coordination
-* Request orchestration
+* Slash command intake
+* Input validation
+* Permission checks
+* Command-to-Coordinator routing
 
 ### Receives
 
-Presentation Assets
+Discord slash command interaction event
 
 ### Produces
 
-Application Responses
+Validated command payload
+
+### Never Owns
+
+* Pipeline orchestration
+* Business logic
+* Discord response delivery
+* Data persistence
+* Rendering
+
+### Downstream
+
+Coordinator
 
 ### Implementation
 
-* Formal `Distribution/` directory: **NOT YET CREATED** — pending formalization after Refinery, Workshop, and Broadcast are stable
-* Currently carried by: `commands/` (26 slash command files), `handlers/` (6 Discord event files: `ready.js`, `interactionCreate.js`, `messageCreate.js`, `guildMemberAdd.js`, `presenceUpdate.js`, `onboardingHandler.js`)
-* Planned departments: `Retriever/` (pulls approved deliverables from Workshop/Terminal), `Dispatcher/` (routes to correct Discord destination)
-* Supporting utilities that stay permanently: `utils/dm.js`, `utils/updateLog.js`, `utils/autoDelete.js`
-* Status: **PENDING FORMALIZATION**
-* Version: 0.1.0
+* `Distribution/Commands/` — per-command handlers
+* Status: **FORMALIZED**
+* Version: 1.0.0
+
+---
+
+## Coordinator
+
+### Purpose
+
+Orchestrate pipeline execution per command and retrieve finished deliverables.
+
+### Owns
+
+* Pipeline orchestration per command
+* Umamoe, Refinery, Workshop call sequencing
+* Error handling and retry policy
+* Deliverable retrieval from Workshop/Terminal
+
+### Receives
+
+Validated command payload (from Commands)
+
+### Produces
+
+Finished deliverable or structured error envelope
+
+### Never Owns
+
+* Discord event intake
+* Input validation
+* Discord response delivery
+* Rendering logic
+* Business logic belonging to Refinery
+
+### Downstream
+
+Dispatcher
+
+### Implementation
+
+* `Distribution/Coordinator/` — per-command orchestration actions
+* Status: **FORMALIZED**
+* Version: 1.0.0
+
+---
+
+## Dispatcher
+
+### Purpose
+
+Deliver finished deliverables to the correct Discord destination.
+
+### Owns
+
+* Discord destination resolution (channel, DM, ephemeral, thread)
+* Discord payload formatting (embed, image attachment, plain message)
+* Discord API delivery
+* User-facing error message formatting
+
+### Receives
+
+Finished deliverable or error envelope (from Coordinator)
+
+### Produces
+
+Discord message, embed, or image attachment delivered to user
+
+### Never Owns
+
+* Pipeline orchestration
+* Command intake
+* Business logic
+* Data transformation
+* Content modification of deliverables
+
+### Downstream
+
+User (Discord)
+
+### Implementation
+
+* `Distribution/Dispatcher/` — destination resolvers and delivery handlers
+* Status: **FORMALIZED**
+* Version: 1.0.0
 
 ---
 
