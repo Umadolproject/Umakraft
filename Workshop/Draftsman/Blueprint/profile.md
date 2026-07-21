@@ -2,8 +2,10 @@
 
 **Authority:** `GOVERNANCE/ARCHITECTURE_AUTHORITY.md`
 **Registry:** `GOVERNANCE/PIPELINE_REGISTRY.md`
-**Version:** v2.0.0
-**Stage:** 3 — Workshop (Generate Presentation Artifacts)
+**Stage:** 3 — Workshop
+**Department:** Draftsman
+**Status:** DEFINED
+**Version:** 2.0.0
 **Last Updated:** 2026-07-21
 
 ---
@@ -333,3 +335,69 @@ A valid deliverable must satisfy:
 - Business logic (gain calculations, rank derivation) lives in the Refinery. This blueprint receives pre-computed values only.
 - The yearly performance bar is a CSS-rendered bar (proportional `width` on a filled `div`), not a chart library.
 - Commentary is free text — no character limit enforced at blueprint level, but the Fabricator should clamp to the 1000 × 120 px container.
+
+---
+
+## Pipeline Ownership
+
+| Stage | Department | Responsibility |
+|-------|-----------|---------------|
+| 1 — Umamoe | Miner | Fetch trainer profile and fan data from uma.moe |
+| 1 — Umamoe | Inspector | Validate all profile fields, types, and ranges |
+| 1 — Umamoe | Vault | Store validated trainer records |
+| 2 — Refinery | Refiner | Compute gains, stats, yearly performance, stadium metrics |
+| 2 — Refinery | Compiler | Assemble compiled profile product |
+| 2 — Refinery | Depot | Persist and serve compiled product |
+| 3 — Workshop | Draftsman | Own this blueprint |
+| 3 — Workshop | Fabricator | Render profile card from compiled product |
+| 3 — Workshop | Validator | Approve rendered deliverable before release |
+| 4 — Distribution | Commands | Intake and validate `/profile` interaction |
+| 4 — Distribution | Coordinator | Orchestrate pipeline, retrieve deliverable |
+| 4 — Distribution | Dispatcher | Deliver card to Discord |
+
+---
+
+## Error Handling
+
+| Condition | Response |
+|-----------|----------|
+| Trainer not found | `❌ Trainer not found.` |
+| Avatar unavailable | Render card without avatar; do not fail |
+| Stadium data missing | Render card without Team Stadium section; do not fail |
+| No fan history | Render card without fan history rows; do not fail |
+
+---
+
+## Workflow
+
+```text
+Discord User
+      │
+      ▼
+   /profile
+      │
+      ▼
+Commands — validate input
+      │
+      ▼
+Coordinator — orchestrate pipeline
+      │
+      ▼
+Umamoe → Refinery → Depot (compiled profile product)
+      │
+      ▼
+Workshop — Fabricator renders profile card using this blueprint
+      │
+      ▼
+Dispatcher — deliver card to Discord
+```
+
+---
+
+## Governance Compliance
+
+- [x] Blueprint registered in `Workshop/Draftsman/Blueprint/`
+- [x] Pipeline ownership assigned per stage
+- [x] No department responsibility is duplicated
+- [x] Pipeline direction is forward only
+- [ ] ADR recorded in `GOVERNANCE/ARCHITECTURE_DECISIONS.md`

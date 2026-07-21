@@ -1,5 +1,15 @@
 # Circle Blueprint
 
+**Authority:** `GOVERNANCE/ARCHITECTURE_AUTHORITY.md`
+**Registry:** `GOVERNANCE/PIPELINE_REGISTRY.md`
+**Stage:** 3 — Workshop
+**Department:** Draftsman
+**Status:** DEFINED
+**Version:** 1.0.0
+**Last Updated:** 2026-07-21
+
+---
+
 ## Purpose
 
 This blueprint defines the visual and data structure for the `/circle` deliverable.
@@ -296,6 +306,35 @@ The blueprint expects:
 - `notes`
   - `summary`
 
+## Pipeline Ownership
+
+| Stage | Department | Responsibility |
+|-------|-----------|---------------|
+| 1 — Umamoe | Miner | Fetch raw circle data from uma.moe |
+| 1 — Umamoe | Inspector | Validate circle data structure and fields |
+| 1 — Umamoe | Vault | Store validated circle records |
+| 2 — Refinery | Refiner | Compute member metrics, history summary |
+| 2 — Refinery | Compiler | Assemble compiled circle product |
+| 2 — Refinery | Depot | Persist and serve compiled product |
+| 3 — Workshop | Draftsman | Own this blueprint |
+| 3 — Workshop | Fabricator | Render circle card from compiled product |
+| 3 — Workshop | Validator | Approve rendered deliverable before release |
+| 4 — Distribution | Commands | Intake and validate `/circle` interaction |
+| 4 — Distribution | Coordinator | Orchestrate pipeline, retrieve deliverable |
+| 4 — Distribution | Dispatcher | Deliver card to Discord |
+
+---
+
+## Error Handling
+
+| Condition | Response |
+|-----------|----------|
+| Circle not found | `❌ Circle not found.` |
+| No history events | Render card without Circle History section; do not fail |
+| Trainer not in circle | `❌ Trainer is not a member of this circle.` |
+
+---
+
 ## Workflow
 
 ```text
@@ -305,14 +344,27 @@ Discord User
    /circle
       │
       ▼
-Command validates request
+Commands — validate input
       │
       ▼
-Distribution/Retriever fetches approved circle product
+Coordinator — orchestrate pipeline
       │
       ▼
-Delivery renders the report using the Circle blueprint
+Umamoe → Refinery → Depot (compiled circle product)
       │
       ▼
-Discord Response
+Workshop — Fabricator renders circle card using this blueprint
+      │
+      ▼
+Dispatcher — deliver card to Discord
 ```
+
+---
+
+## Governance Compliance
+
+- [x] Blueprint registered in `Workshop/Draftsman/Blueprint/`
+- [x] Pipeline ownership assigned per stage
+- [x] No department responsibility is duplicated
+- [x] Pipeline direction is forward only
+- [ ] ADR recorded in `GOVERNANCE/ARCHITECTURE_DECISIONS.md`
