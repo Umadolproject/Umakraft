@@ -1,5 +1,13 @@
 # Miner — API Endpoints Specification
 
+**Authority:** `GOVERNANCE/ARCHITECTURE_AUTHORITY.md`
+**Registry:** `GOVERNANCE/PIPELINE_REGISTRY.md`
+**Version:** v2.0.0
+**Stage:** 1 — Umamoe (Extract, Transport, Validate & Store)
+**Last Updated:** 2026-07-21
+
+---
+
 ## Purpose
 
 This document defines the approved **uma.moe API endpoints** that the Miner is authorized to access. The Miner must only communicate with endpoints listed in this specification.

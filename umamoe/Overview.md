@@ -1,5 +1,13 @@
 # UmaMoe Architecture Overview
 
+**Authority:** `GOVERNANCE/ARCHITECTURE_AUTHORITY.md`
+**Registry:** `GOVERNANCE/PIPELINE_REGISTRY.md`
+**Version:** v2.0.0
+**Stage:** 1 — Umamoe (Extract, Transport, Validate & Store)
+**Last Updated:** 2026-07-21
+
+---
+
 ## Purpose
 
 The **UmaMoe** directory is the heart of UmaKraft's data pipeline. It is responsible for communicating with the uma.moe service, processing the retrieved information, validating its integrity, storing it safely, and distributing it to other parts of the project.

@@ -1,5 +1,13 @@
 # Uma.moe Roles (ROLE.md)
 
+**Authority:** `GOVERNANCE/ARCHITECTURE_AUTHORITY.md`
+**Registry:** `GOVERNANCE/PIPELINE_REGISTRY.md`
+**Version:** v2.0.0
+**Stage:** 1 — Umamoe (Extract, Transport, Validate & Store)
+**Last Updated:** 2026-07-21
+
+---
+
 Purpose
 - Describe the responsibilities, inputs, outputs, and boundaries of each core Uma.moe pipeline role so stakeholders and contributors share a single source of truth.
 

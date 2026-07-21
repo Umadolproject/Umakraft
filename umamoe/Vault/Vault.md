@@ -1,5 +1,13 @@
 # Vault
 
+**Authority:** `GOVERNANCE/ARCHITECTURE_AUTHORITY.md`
+**Registry:** `GOVERNANCE/PIPELINE_REGISTRY.md`
+**Version:** v2.0.0
+**Stage:** 1 — Umamoe (Extract, Transport, Validate & Store)
+**Last Updated:** 2026-07-21
+
+---
+
 ## Purpose
 
 The **Vault** is responsible for storing and retrieving data that has successfully passed inspection.

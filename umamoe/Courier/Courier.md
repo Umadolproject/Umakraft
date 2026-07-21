@@ -1,5 +1,13 @@
 # Courier
 
+**Authority:** `GOVERNANCE/ARCHITECTURE_AUTHORITY.md`
+**Registry:** `GOVERNANCE/PIPELINE_REGISTRY.md`
+**Version:** v2.0.0
+**Stage:** 1 — Umamoe (Extract, Transport, Validate & Store)
+**Last Updated:** 2026-07-21
+
+---
+
 ## Purpose
 
 The **Courier** is responsible for transporting acquired data from the Miner to the next stage of the UmaMoe data acquisition pipeline.

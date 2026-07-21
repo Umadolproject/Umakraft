@@ -1,5 +1,13 @@
 # Error Handling Specification
 
+**Authority:** `GOVERNANCE/ARCHITECTURE_AUTHORITY.md`
+**Registry:** `GOVERNANCE/PIPELINE_REGISTRY.md`
+**Version:** v2.0.0
+**Stage:** 1 — Umamoe (Extract, Transport, Validate & Store)
+**Last Updated:** 2026-07-21
+
+---
+
 ## Purpose
 
 This document defines how errors are detected, classified, reported, and handled throughout the UmaMoe pipeline. Each department (Miner, Courier, Inspector, Vault) must implement error handling according to this specification.

@@ -1,5 +1,13 @@
 # Data Format Specification
 
+**Authority:** `GOVERNANCE/ARCHITECTURE_AUTHORITY.md`
+**Registry:** `GOVERNANCE/PIPELINE_REGISTRY.md`
+**Version:** v2.0.0
+**Stage:** 1 — Umamoe (Extract, Transport, Validate & Store)
+**Last Updated:** 2026-07-21
+
+---
+
 ## Purpose
 
 This document defines the exact data structure and format that flows through the UmaMoe pipeline. All departments (Miner, Courier, Inspector, Vault) must understand and respect this format.

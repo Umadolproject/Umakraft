@@ -1,5 +1,13 @@
 # Integration Example — End-to-End Walkthrough
 
+**Authority:** `GOVERNANCE/ARCHITECTURE_AUTHORITY.md`
+**Registry:** `GOVERNANCE/PIPELINE_REGISTRY.md`
+**Version:** v2.0.0
+**Stage:** 1 — Umamoe (Extract, Transport, Validate & Store)
+**Last Updated:** 2026-07-21
+
+---
+
 ## Purpose
 
 This document provides concrete, real-world examples of how data flows through the complete UmaMoe pipeline from start to finish. These examples demonstrate both successful acquisition and failure scenarios.

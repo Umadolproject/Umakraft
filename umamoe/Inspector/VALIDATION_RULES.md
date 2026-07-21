@@ -1,5 +1,13 @@
 # Inspector — Validation Rules Specification
 
+**Authority:** `GOVERNANCE/ARCHITECTURE_AUTHORITY.md`
+**Registry:** `GOVERNANCE/PIPELINE_REGISTRY.md`
+**Version:** v2.0.0
+**Stage:** 1 — Umamoe (Extract, Transport, Validate & Store)
+**Last Updated:** 2026-07-21
+
+---
+
 ## Purpose
 
 This document defines the exact validation rules that the Inspector must apply to all data received from the Courier before it is accepted into the Vault.
