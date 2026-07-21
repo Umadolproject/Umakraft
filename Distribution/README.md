@@ -1,5 +1,13 @@
 # Distribution
 
+**Authority:** `GOVERNANCE/ARCHITECTURE_AUTHORITY.md`
+**Registry:** `GOVERNANCE/PIPELINE_REGISTRY.md`
+**Version:** v2.0.0
+**Stage:** 4 — Distribution (Coordinate User-Facing Application Flow)
+**Last Updated:** 2026-07-21
+
+---
+
 **STAGE 4: Coordinate User-Facing Application Flow**
 
 ## Purpose

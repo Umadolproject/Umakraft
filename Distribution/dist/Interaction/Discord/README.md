@@ -1,5 +1,13 @@
 # Discord Interaction
 
+**Authority:** `GOVERNANCE/ARCHITECTURE_AUTHORITY.md`
+**Registry:** `GOVERNANCE/PIPELINE_REGISTRY.md`
+**Version:** v2.0.0
+**Stage:** 4 — Distribution (Coordinate User-Facing Application Flow)
+**Last Updated:** 2026-07-21
+
+---
+
 Purpose
 - Describe Discord-specific integration patterns and command layout.
 

@@ -1,5 +1,25 @@
 # Adapters
 
+**Authority:** `GOVERNANCE/ARCHITECTURE_AUTHORITY.md`
+**Registry:** `GOVERNANCE/PIPELINE_REGISTRY.md`
+**Version:** v2.0.0
+**Stage:** 4 — Distribution (Coordinate User-Facing Application Flow)
+**Last Updated:** 2026-07-21
+
+---
+
+## Must Not
+
+Adapters must **never**:
+
+* Alter `envelope.metadata` except during intentional update operations
+* Re-validate business logic — adapters are storage only
+* Expose storage internals (file paths, SQL queries) to callers — use the adapter interface
+* Log secrets or full payloads at `INFO` level in production
+
+---
+
+
 Purpose
 - Define the storage adapter contract used by Vault and other persistence consumers (Refinery, backups).
 - Adapters decouple storage implementation (in-memory, file, DB, S3) from Vault and allow swapping backends.
