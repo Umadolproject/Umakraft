@@ -4,14 +4,14 @@
 **Registry:** `GOVERNANCE/PIPELINE_REGISTRY.md`
 **Department:** Knowledge
 **Status:** ACTIVE
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Last Updated:** 2026-07-22
 
 ---
 
 ## Purpose
 
-The Topic Filter is the scope enforcement gate for the AI Knowledge Service. Every request passes through it before any retrieval or generation occurs. It classifies each request into one of four categories — Repository, Umamusume, Message, or Off-topic — and routes accordingly. Off-topic requests are rejected immediately without any AI provider call.
+The Topic Filter is the scope enforcement gate for the AI Knowledge Service. Every request passes through it before any retrieval or generation occurs. It classifies each request into one of five categories — Repository, Umamusume, Live, Message, or Off-topic — and routes accordingly. Off-topic requests are rejected immediately without any AI provider call.
 
 The Topic Filter is also a security control: it prevents the AI from being used as a general-purpose chatbot.
 
@@ -23,8 +23,9 @@ The Topic Filter is also a security control: it prevents the AI from being used 
 |---|---|
 | Classifying repository questions | Answering the question itself |
 | Classifying Umamusume questions | Generating the response |
-| Classifying message generation requests | Retrieving repository content |
-| Rejecting off-topic requests | Validating response quality |
+| Classifying live / current-data questions | Retrieving repository content |
+| Classifying message generation requests | Validating response quality |
+| Rejecting off-topic requests | |
 | Logging all classification decisions | |
 
 ---
@@ -32,7 +33,7 @@ The Topic Filter is also a security control: it prevents the AI from being used 
 ## Responsibilities
 
 - Receive every incoming request before any other pipeline component
-- Classify the request into: `repository`, `umamusume`, `message`, or `off-topic`
+- Classify the request into: `repository`, `umamusume`, `live`, `message`, or `off-topic`
 - Route classified requests to the appropriate downstream component
 - Reject off-topic requests with a polite, consistent message
 - Log every classification decision for audit
@@ -47,6 +48,7 @@ flowchart LR
     GW[Command Gateway] --> TF[Topic Filter]
     TF -->|repository| RE[Repository Engine]
     TF -->|umamusume| KE[Knowledge Engine]
+    TF -->|live| WSE[Web Search Engine]
     TF -->|message| CG[Content Generator]
     TF -->|off-topic| REJ[Reject]
 
@@ -87,6 +89,17 @@ Examples:
 - "/ai message milestone trainerName=Akira milestone=500000"
 - "/ai message leaderboard"
 
+### Live
+
+Requests about current or external data that cannot be answered from the repository or
+the static Umamusume knowledge base. Routes to the Web Search Engine (Tavily).
+
+Examples:
+- "What are the top circles on uma.moe right now?"
+- "Did the game get a patch this week?"
+- "What's the latest MANT threshold change?"
+- "Which trainers are trending today?"
+
 ### Off-topic
 
 Everything else. Rejected without an AI call.
@@ -109,7 +122,8 @@ Examples:
 5. If `off-topic`: return rejection message, log, stop
 6. If `repository`: forward to Repository Engine
 7. If `umamusume`: forward to Knowledge Engine
-8. If `message`: forward to Content Generator
+8. If `live`: forward to Web Search Engine
+9. If `message`: forward to Content Generator
 
 ---
 
@@ -144,6 +158,14 @@ generate, message, greeting, announcement, warning, reminder, milestone message,
 achievement, leaderboard message, /ai message
 ```
 
+#### Live Keywords
+
+```text
+right now, currently, today, this week, latest, recent, update, patch,
+trending, live, current rankings, current top, new event, just announced,
+what changed, new season
+```
+
 #### Off-topic Indicators
 
 ```text
@@ -171,6 +193,7 @@ Some commands bypass the classifier entirely because the intent is explicit:
 | `/ai docs <file>` | Always `repository` |
 | `/ai explain <topic>` | `repository` or `umamusume` based on topic |
 | `/ai glossary <term>` | Always `umamusume` |
+| `/ai live <query>` | Always `live` |
 | `/ai message <type>` | Always `message` |
 
 ---
@@ -183,6 +206,7 @@ Off-topic requests receive a consistent, polite rejection:
 I'm the Umakraft AI Knowledge Service. I can help with:
 • Repository questions — ask about any part of the Umakraft codebase
 • Umamusume knowledge — ask about game mechanics, terms, or circle concepts
+• Live data — use /ai live to ask about current rankings or recent updates
 • Community messages — use /ai message to generate a message
 
 I'm not able to help with general questions outside of these topics.
@@ -198,7 +222,7 @@ Every classification is logged:
 {
   timestamp: string,
   query: string,
-  classification: 'repository' | 'umamusume' | 'message' | 'off-topic',
+  classification: 'repository' | 'umamusume' | 'live' | 'message' | 'off-topic',
   confidence: number,      // 0.0–1.0
   method: 'keyword' | 'semantic' | 'command-override',
   rejected: boolean
@@ -233,6 +257,7 @@ Every classification is logged:
 - `AI/REPOSITORY_ENGINE.md` — downstream for repository classification
 - `AI/KNOWLEDGE_ENGINE.md` — downstream for Umamusume classification
 - `AI/CONTENT_GENERATOR.md` — downstream for message classification
+- `AI/WEB_SEARCH_ENGINE.md` — downstream for live classification
 - `AI/diagrams/AI Pipeline.md` — visual pipeline including Topic Filter
 
 ---
@@ -240,3 +265,4 @@ Every classification is logged:
 ## Version History
 
 - `v1.0.0` — Initial Topic Filter specification; four classification categories; keyword classifier; semantic classifier; command override rules; rejection response format; audit logging schema
+- `v1.1.0` — Added `live` classification category; Web Search Engine routing; live keyword list; `/ai live` command override; five-category audit log schema

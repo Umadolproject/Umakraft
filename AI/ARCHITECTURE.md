@@ -4,7 +4,7 @@
 **Registry:** `GOVERNANCE/PIPELINE_REGISTRY.md`
 **Department:** Knowledge
 **Status:** ACTIVE
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Last Updated:** 2026-07-22
 
 ---
@@ -53,12 +53,16 @@ flowchart TD
 
     C -->|Repository| D[Repository Engine]
     C -->|Umamusume| E[Knowledge Engine]
+    C -->|Live| W[Web Search Engine]
     C -->|Message| F[Content Generator]
     C -->|Off Topic| G[Reject]
 
     D --> H[Context Builder]
     E --> H
+    W --> H
     F --> H
+
+    D -->|low confidence fallback| W
 
     H --> I[Prompt System]
     I --> J[API Provider]
@@ -111,7 +115,8 @@ Retrieves and assembles relevant knowledge for the prompt.
 | Vector Database | Stores embeddings and performs similarity search |
 | RAG Engine | Retrieval-Augmented Generation pipeline |
 | Knowledge Engine | Umamusume domain knowledge and glossary |
-| Context Builder | Assembles retrieved chunks into a coherent prompt context |
+| Web Search Engine | Live web retrieval via Tavily; fallback for low-confidence local results |
+| Context Builder | Assembles chunks from all sources into a coherent prompt context |
 
 ---
 
@@ -160,6 +165,7 @@ graph LR
 
     TF --> RE[Repository Engine]
     TF --> KE[Knowledge Engine]
+    TF --> WSE[Web Search Engine]
     TF --> CG[Content Generator]
 
     RE --> RI[Repository Indexer]
@@ -169,6 +175,9 @@ graph LR
     RAG --> VDB
     RAG --> CB[Context Builder]
     KE --> CB
+    WSE --> CB
+
+    RE -->|low confidence| WSE
 
     CB --> PS[Prompt System]
     CG --> PS
@@ -227,6 +236,39 @@ User: /ai message greeting
 5. API Provider calls the configured AI model
 6. Response Validator enforces 100–150 word limit
 7. Discord receives the generated message
+```
+
+### Live Data Query
+
+```text
+User: /ai live "What are the top circles on uma.moe right now?"
+
+1. Command Gateway receives the request
+2. Topic Filter classifies: Live (command override)
+3. Web Search Engine calls Tavily with scoped query
+4. Tavily returns pre-extracted content chunks
+5. Context Builder assembles web chunks into context block ([WEB] citation tags)
+6. Prompt System builds the prompt
+7. API Provider calls the configured AI model
+8. Response Validator confirms scope and flags web-sourced content
+9. Discord receives the response with [WEB] source citations
+```
+
+### Low-Confidence Fallback
+
+```text
+User: /ask "What changed in the latest uma.moe update?"
+
+1. Command Gateway receives the request
+2. Topic Filter classifies: Repository (keyword match on "uma.moe")
+3. Repository Engine queries Vector Database — RAG confidence: 0.48 (below 0.65 threshold)
+4. Repository Engine signals Web Search Engine as fallback
+5. Web Search Engine calls Tavily with scoped query
+6. Context Builder merges RAG chunks + Tavily chunks, sorted by relevance
+7. Prompt System builds the prompt with combined context
+8. API Provider calls the configured AI model
+9. Response Validator checks scope across both source types
+10. Discord receives the response with mixed repository and [WEB] citations
 ```
 
 ### Off-Topic Rejection
@@ -374,6 +416,7 @@ These guarantees must remain unchanged across all future versions of the archite
 - `AI/KNOWLEDGE_ENGINE.md` — Umamusume domain knowledge
 - `AI/MESSAGE_SYSTEM.md` — community message generation
 - `AI/API_PROVIDER.md` — AI provider abstraction
+- `AI/WEB_SEARCH_ENGINE.md` — Tavily integration, live routing, and fallback path
 - `GOVERNANCE/ARCHITECTURE_AUTHORITY.md` — supreme law
 - `GOVERNANCE/PIPELINE_REGISTRY.md` — official department registry
 - `AI/diagrams/Architecture.md` — visual architecture diagram
@@ -383,3 +426,4 @@ These guarantees must remain unchanged across all future versions of the archite
 ## Version History
 
 - `v1.0.0` — Initial architecture document; five service layers defined; full component dependency map; data flow for all four request types; permission model; architectural guarantees
+- `v1.1.0` — Added Web Search Engine (Tavily) to Layer 2; live classification path in high-level diagram and dependency map; live query and low-confidence fallback data flows; five request type data flows total
