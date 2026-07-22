@@ -19,6 +19,18 @@ import { Client, Collection, GatewayIntentBits } from 'discord.js';
 import { readdirSync }  from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join, dirname } from 'node:path';
+import { createServer }  from 'node:http';
+
+// ─── Health-check server ───────────────────────────────────────────────────────
+// Railway expects a web service to bind a port. This tiny HTTP server satisfies
+// that requirement so the bot isn't killed before it can connect to Discord.
+const PORT = parseInt(process.env.PORT ?? '3000', 10);
+createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/plain' });
+  res.end('OK');
+}).listen(PORT, () => {
+  console.log(`[health] Listening on port ${PORT}`);
+});
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
