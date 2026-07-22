@@ -27,7 +27,7 @@ export function formatEmbed(envelope) {
   const embed = new EmbedBuilder()
     .setColor(result.color ?? BRAND_COLOR)
     .setTitle(result.title ?? 'UmaKraft')
-    .setDescription(result.description ?? '');
+    .setDescription(result.description || null);
 
   if (result.fields?.length) {
     embed.addFields(result.fields);
