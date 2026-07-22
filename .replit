@@ -93,3 +93,7 @@ VDB_INDEX_INTERVAL_HOURS = "6"
 VDB_MIN_SCORE = "0.60"
 VDB_QUERY_CACHE_TTL_MS = "600000"
 VDB_TOP_K = "8"
+
+[[ports]]
+localPort = 3000
+externalPort = 80
