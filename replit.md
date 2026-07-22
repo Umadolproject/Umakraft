@@ -83,7 +83,9 @@ Transform and compile validated data from the Vault into canonical products.
 
 Trend tiers: `elite` (rank ≤ 10) → `upward` (≤ 50) → `stable` (≤ 200) → `emerging`
 
-### Stage 3 — Workshop (PENDING)
+### Stage 3 — Workshop (BUILT)
+
+Draftsman, Fabricator, Validator, and Terminal are all implemented. Fabricator renders image cards via headless Chromium (Puppeteer). Report assimilation from `fantracking/reports/` is in progress.
 
 Render compiled data into Discord embeds and image cards.
 
@@ -98,9 +100,44 @@ Coordinate user-facing Discord command flow.
 | Coordinator | Pipeline orchestration per command |
 | Dispatcher | Discord response delivery |
 
-### Stage 5 — Broadcast (DOCUMENTED)
+### Stage 5 — Broadcast (BUILT)
 
-Scheduled notifications and announcements to Discord.
+Scheduled notifications and announcements to Discord. All five departments are implemented with the in-memory adapter. Production will use the SQLite adapter.
+
+| Department | File | Responsibility |
+|------------|------|---------------|
+| Broker | `Broadcast/Broker/broker.js` | Entry point; fetches data from Depot; restart recovery |
+| Archive-Inspector | `Broadcast/archive-inspector/archiveInspector.js` | Sole approval authority; sole Archive writer |
+| Archive | `Broadcast/Archive/archive.js` | Pure storage; adapter pattern (in-memory / SQLite) |
+| Archive-Transporter | `Broadcast/archive_transporter/archiveTransporter.js` | Fetch-and-handoff between Archive and Announcer |
+| Announcer | `Broadcast/Announcer/announcer.js` | Discord delivery; flag-check-before-act; Operation alerts |
+
+Pipeline wire: `Broadcast/pipeline.js`
+
+Run Broadcast tests:
+
+```bash
+node Broadcast/test/pipeline.test.js
+```
+
+**Startup sequence** (in `tasks/index.js` / bot entry point):
+
+```js
+import * as broadcast from './Broadcast/pipeline.js';
+
+await broadcast.init();
+broadcast.registerType('dailyWarning', { buildKey, checkEligibility, resolveRecipients, selectVariant });
+broadcast.registerFetch('dailyWarning', async (circleId) => depot.fetch(circleId));
+broadcast.setConfiguredCircles(['circle-001']);
+await broadcast.recoverIncomplete(null, discordClient);
+// Wire into cron schedule:
+// cron.schedule('0 23 * * *', () => broadcast.run('dailyWarning', discordClient));
+```
+
+**Pending for production:**
+- `Broadcast/Archive/adapters/sqliteAdapter.js` — SQLite persistence
+- Cron registration in `tasks/index.js`
+- Per-type handler registration for each live notification type (milestone, warning, greeting, etc.)
 
 ## User Preferences
 

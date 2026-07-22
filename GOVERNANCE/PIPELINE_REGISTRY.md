@@ -606,11 +606,12 @@ Decision making
 
 ### Implementation
 
-* `Broadcast/Broker/broker.js` — orchestration entry point; triggered by cron or threshold event; fetches compiled data from Refinery/Depot; on restart reads Archive for incomplete records and routes to Announcer
+* `Broadcast/Broker/broker.js` — orchestration entry point; triggered by cron or threshold event; fetches compiled data from Refinery/Depot via registered fetch handlers; on restart reads Archive for incomplete records and routes to Archive-Transporter (bypassing Archive-Inspector)
+* `Broadcast/pipeline.js` — public entry surface; re-exports run/recoverIncomplete/registerFetch/setConfiguredCircles
 * Pending assimilation: `fantracking/milestone/milestones.js`, `tasks/dailyGreetingReport.js`, `tasks/dailyMessages.js`, `tasks/offlineCheck.js`, `tasks/weeklyAnnouncement.js`, `tasks/interCircleAnnouncements.js`
 * Shims pointing here: `tasks/milestones.js`, `tasks/interCircleAnnouncements.js`, `tasks/weeklyAnnouncement.js`
 * Status: **IMPLEMENTED** (assimilation in progress)
-* Version: 1.0.0
+* Version: 2.0.0
 
 ---
 
@@ -642,11 +643,11 @@ Discord delivery
 
 ### Implementation
 
-* `Broadcast/archive-inspector/archiveInspector.js` — eligibility check, dedup check, recipient resolution, variant selection; if approved: writes full notification record to Archive; if rejected: drops cleanly
+* `Broadcast/archive-inspector/archiveInspector.js` — six-step evaluation: eligibility → dedup → recipient resolution → variant selection → Archive write → Archive-Transporter signal; uses type registry (registerType); sole writer to Archive
 * Pending assimilation: `fantracking/milestone/tiers.js`, `fantracking/milestone/winners.js`, `fantracking/milestone/cleanup.js`, `fantracking/warnings/engine.js`, `fantracking/warnings/daily.js`, `fantracking/warnings/weekly.js`, `fantracking/warnings/monthly.js`
 * Shims pointing here: `tasks/warningEngine.js`, `tasks/dailyFanWarning.js`, `tasks/weeklyWarning.js`, `tasks/monthlyWarning.js`, `tasks/milestone-tiers.js`, `tasks/milestoneCleanup.js`, `tasks/milestoneWinners.js`
-* Status: **IN PROGRESS**
-* Version: 0.9.0
+* Status: **IMPLEMENTED** (assimilation in progress)
+* Version: 2.0.0
 
 ---
 
@@ -673,12 +674,14 @@ Stored Notification
 
 ### Implementation
 
-* `Broadcast/Archive/archive.js` — pure storage; written by Inspector (new records) and Announcer (flag updates + history); read by Announcer (delivery plan) and Broker (incomplete records on restart)
-* `Broadcast/archive_transporter/archiveTransporter.js` — transport adapter for Archive operations
-* Pending assimilation: `fantracking/milestone/db.js` (claim, channel_sent, dm_sent flags), `fantracking/warnings/db.js` (warning_state, warning_history tables), `fantracking/achievements/db.js` (achievement record persistence)
+* `Broadcast/Archive/archive.js` — pure storage; adapter pattern (in-memory for tests, SQLite for production); sole record creator is Archive-Inspector; sole flag updater is Announcer; sole incomplete-record reader is Broker; sole SELECT-by-key caller is Archive-Transporter
+* `Broadcast/Archive/adapters/memoryAdapter.js` — in-memory adapter (development and tests)
+* `Broadcast/archive_transporter/archiveTransporter.js` — fetch-and-handoff stage; receives notificationKey from Archive-Inspector or Broker; fetches full record from Archive; validates and passes to Announcer
+* Schema: `broadcast_claims` (one record per event, INSERT OR IGNORE) + `broadcast_history` (append-only delivery log)
+* Pending assimilation: `fantracking/milestone/db.js`, `fantracking/warnings/db.js`, `fantracking/achievements/db.js`
 * Shims pointing here: `db/milestoneDb.js`, `db/warningDb.js`, `db/achievementDb.js`
-* Status: **IMPLEMENTED** (assimilation in progress)
-* Version: 1.0.0
+* Status: **IMPLEMENTED** (assimilation in progress; SQLite adapter pending)
+* Version: 2.0.0
 
 ---
 
@@ -697,7 +700,7 @@ Deliver approved notifications.
 
 ### Receives
 
-Stored Notification
+Stored Notification (pre-fetched record from Archive-Transporter)
 
 ### Produces
 
@@ -705,11 +708,11 @@ Delivered Notification
 
 ### Implementation
 
-* `Broadcast/Announcer/announcer.js` — reads full notification record from Archive by notificationKey; renders image card via Workshop/Fabricator; posts to channel; sends member DMs; sends leader DM; updates each delivery flag in Archive on success
+* `Broadcast/Announcer/announcer.js` — receives full pre-fetched record from Archive-Transporter; checks each delivery flag before acting; renders image card via Workshop/Fabricator; posts to channel; sends member DMs; sends leader DM; updates each flag in Archive on success; also exposes announceOperationAlert() for Operation/Manager fire-and-forget alerts
 * Pending assimilation: delivery portions of `fantracking/milestone/notifier.js`, `fantracking/leaderboard/announcements.js`, `fantracking/warnings/imageReport.js`, `tasks/fanDeficitImageReport.js`
 * Shims pointing here: `utils/milestoneNotifier.js`, `tasks/leaderboardAnnouncements.js`, `tasks/fanDeficitImageReport.js`
 * Status: **IMPLEMENTED** (assimilation in progress)
-* Version: 1.0.0
+* Version: 2.0.0
 
 ---
 

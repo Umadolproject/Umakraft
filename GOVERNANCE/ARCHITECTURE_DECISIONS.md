@@ -255,6 +255,63 @@ Blueprint file created: `Workshop/Draftsman/Blueprint/club_gain.md`. Fabricator 
 
 ---
 
+# ADR-0006 — Broadcast Stage 5 Implementation (v2.0.0)
+
+**Date:** 2026-07-22
+**Status:** IMPLEMENTED
+**Decision Owner:** Repository Owner
+
+## Decision
+
+Implement all five Broadcast departments as specified in `Broadcast/Overview.md` and their individual spec files (v2.0.0):
+
+| Department | File |
+|---|---|
+| Archive | `Broadcast/Archive/archive.js` |
+| Archive (in-memory adapter) | `Broadcast/Archive/adapters/memoryAdapter.js` |
+| Archive-Inspector | `Broadcast/archive-inspector/archiveInspector.js` |
+| Archive-Transporter | `Broadcast/archive_transporter/archiveTransporter.js` |
+| Broker | `Broadcast/Broker/broker.js` |
+| Announcer | `Broadcast/Announcer/announcer.js` |
+| Pipeline wire | `Broadcast/pipeline.js` |
+| Tests | `Broadcast/test/pipeline.test.js` |
+
+## Motivation
+
+The Broadcast stage specifications reached v2.0.0 stable status on 2026-07-21. All five department specs were locked, reviewed, and aligned. Implementation was deferred until the specs were stable to avoid rework.
+
+## Key Architectural Decisions Made During Implementation
+
+1. **Archive adapter pattern** — Archive uses a factory (`createArchiveAdapterAsync`) so in-memory and SQLite adapters share an identical interface. Tests run with the in-memory adapter; production uses SQLite. This mirrors the Vault and Depot adapters in earlier stages.
+
+2. **Archive-Inspector type registry** — `registerType(type, { buildKey, checkEligibility, resolveRecipients, selectVariant })` allows each notification type to be registered independently. The evaluate() core loop is type-agnostic. Notification type logic is registered at startup, never hardcoded in the inspector.
+
+3. **Archive-Transporter as sole path into Announcer** — Archive-Inspector does not call Announcer directly; it signals Archive-Transporter. Broker restart-recovery also routes through Archive-Transporter. This means Announcer always receives a fully-loaded record and never reads Archive itself at the start of delivery.
+
+4. **Announcer flag-check-before-act** — Each of the three delivery steps (channel, member DMs, leader DM) checks its flag before executing. If the flag is already 1, the step is skipped. This is the mechanism that prevents duplicate sends on restart recovery.
+
+5. **Broker fetch registry** — `registerFetch(type, fn)` decouples Broker from specific Depot query logic. Each notification type registers its own fetch function. This allows types to be added or modified without changing Broker's core run loop.
+
+6. **Fire-and-don't-await Archive-Transporter signal in Archive-Inspector** — Archive-Inspector fires `archiveTransporter.fetch()` without awaiting it, then returns `{ accepted: true }` immediately. This keeps evaluate() latency low. If Archive-Transporter or Announcer fails, the incomplete record is surfaced by Broker on the next cron tick.
+
+## Alternatives Considered
+
+- **Direct Announcer call from Archive-Inspector**: Rejected — would couple the approval step to delivery latency and make Announcer harder to test independently.
+- **Single monolithic broadcast.js**: Rejected — violates the ownership principle; each department must have exclusive responsibility.
+
+## Architectural Impact
+
+No existing stage ownership changes. Stage 5 is now fully implemented as specified. The SQLite adapter is the remaining production-readiness item before the Broadcast stage can be wired to a live cron schedule.
+
+## Implementation Status
+
+All five departments implemented and verified (43/43 tests pass). Pending:
+- SQLite adapter for production persistence (`Broadcast/Archive/adapters/sqliteAdapter.js`)
+- Cron registration in `tasks/index.js`
+- Per-type handler registration (eligibility rules, recipient resolvers, variant pools) for each live notification type
+
+---
+
 # Governance Compliance
 
 Every architectural decision must remain consistent with:
