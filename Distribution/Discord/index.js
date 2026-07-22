@@ -106,7 +106,7 @@ console.log(`[startup] Loaded ${client.commands.size} commands`);
 // ─── Connect to Discord ────────────────────────────────────────────────────────
 console.log('[startup] Logging in to Discord...');
 
-client.once('ready', () => {
+client.once('clientReady', () => {
   botReady = true;
   console.log(`[startup] Bot is READY — ${client.user.tag}`);
 });

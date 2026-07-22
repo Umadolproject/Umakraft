@@ -226,19 +226,23 @@ class QdrantBackend {
   async listAllFilePaths() {
     const client = await this._getClient();
     const allPaths = new Set();
-    let offset = null;
+    let offset = undefined;
 
     do {
-      const res = await client.scroll(this._collection, {
+      const scrollParams = {
         limit:        100,
-        offset,
-        with_payload: ['filePath'],
-      });
+        with_payload: true,
+      };
+      // Only include offset when paginating — passing null/undefined on first call
+      // causes a 400 Bad Request from the Qdrant REST API.
+      if (offset !== undefined) scrollParams.offset = offset;
+
+      const res = await client.scroll(this._collection, scrollParams);
       for (const p of res.points) {
         if (p.payload?.filePath) allPaths.add(p.payload.filePath);
       }
-      offset = res.next_page_offset ?? null;
-    } while (offset !== null);
+      offset = res.next_page_offset ?? undefined;
+    } while (offset !== undefined);
 
     return [...allPaths];
   }

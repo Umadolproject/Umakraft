@@ -6,7 +6,7 @@ import { schedule, start }          from '../../../tasks/index.js';
 import { runOperationCycle }         from '../../../Operation/operation.js';
 import { initialize as initAI }      from '../../../AI/RepositoryEngine.js';
 
-export const name = 'ready';
+export const name = 'clientReady';
 export const once = true;
 
 export async function execute(client) {
@@ -21,6 +21,7 @@ export async function execute(client) {
     console.log('[ready] AI Repository Engine initialized.');
   } catch (err) {
     console.error(`[ready] AI Repository Engine init failed (AI commands degraded): ${err.message}`);
+    if (err.stack) console.error(err.stack);
   }
 
   // ── Operation supervisor — 5-minute health check cycle ─────────────────
