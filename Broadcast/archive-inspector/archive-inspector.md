@@ -247,3 +247,5 @@ Logic extracted into Archive-Inspector from these files:
   and signals Announcer directly; dedup check queries Archive before any write
 - `v1.2` — Renamed to Archive-Inspector; step 6 now signals Archive-Transporter instead
   of Announcer directly; Archive-Transporter owns the fetch-and-handoff to Announcer
+- `v2.0` — Stable specification; no functional changes from v1.2; marks Archive-Inspector
+  as ready for implementation

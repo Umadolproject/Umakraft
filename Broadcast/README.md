@@ -19,19 +19,20 @@ Manage notification lifecycle from trigger through delivery.
 | Department | Purpose |
 |------------|----------|
 | **Broker** | Notification entry point; scheduled triggers |
-| **Inspector** | Notification approval authority; eligibility check |
+| **Archive-Inspector** | Notification approval authority; eligibility check; sole Archive writer |
 | **Archive** | Persistent notification storage |
+| **Archive-Transporter** | Fetch-and-handoff between Archive and Announcer |
 | **Announcer** | Discord delivery |
 
 ## Pipeline Flow
 
 ```
-Trigger → Broker → Inspector → Archive → Announcer → Delivery
+Trigger → Broker → Archive-Inspector → Archive → Archive-Transporter → Announcer → Delivery
 ```
 
 ## Status
 
-**IN PROGRESS** (v0.9.0 - 1.0.0)
+**IN PROGRESS** (v1.0.0 - v2.0.0)
 
 Assimilating pending modules from fantracking/ and tasks/
 

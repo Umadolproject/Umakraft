@@ -182,3 +182,5 @@ record via Archive-Transporter.
 - `v1.0` — Initial Archive-Transporter specification; introduced as the fetch-and-handoff
   stage between Archive and Announcer; replaces the direct notificationKey pass that
   Archive-Inspector and Broker previously made to Announcer
+- `v2.0` — Stable specification; no functional changes from v1.0; marks
+  Archive-Transporter as ready for implementation

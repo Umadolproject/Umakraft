@@ -192,3 +192,8 @@ No other directory needs to change.
   the fetch-and-handoff stage between Archive and Announcer; Announcer no longer reads
   from Archive at the start of delivery; all paths into Announcer now go through
   Archive-Transporter
+- `v2.0` — Stable specification; all department specs aligned to v1.2 architecture;
+  README corrected (Archive-Transporter added to pipeline flow and departments table);
+  Archive Restart-Safety Illustration corrected to reflect Archive-Transporter handoff
+  path; all department version histories complete; full Broadcast stage ready for
+  implementation

@@ -207,9 +207,12 @@ broadcast_claims record:
 On next Broker.run():
   archive.getIncomplete('circle-001')
   → returns this record
-  → Broker routes notificationKey to Announcer
+  → Broker routes notificationKey to Archive-Transporter
 
-Announcer reads record:
+Archive-Transporter fetches full record from Archive
+  → passes full record to Announcer
+
+Announcer receives record and checks each flag:
   → channel step:    flag=1, skip
   → member DM step:  flag=0, execute → markDmMemberSent() on success
   → leader DM step:  no recipient, skip
@@ -254,3 +257,6 @@ Logic and schema extracted into Archive from these files:
 - `v1.2` — Inspector renamed to Archive-Inspector; Archive-Transporter is now the
   sole caller of `SELECT by key` (previously Announcer); Announcer no longer reads
   from Archive at the start of delivery
+- `v2.0` — Stable specification; Restart-Safety Illustration corrected to reflect the
+  Archive-Transporter handoff path introduced in v1.2; marks Archive as ready for
+  implementation

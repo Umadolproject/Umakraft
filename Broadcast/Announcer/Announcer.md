@@ -238,3 +238,5 @@ Note: the render portions of these files move to `Workshop/Fabricator/renders/`.
 - `v1.2` — Announcer no longer reads from Archive at the start of delivery;
   Archive-Transporter now owns the fetch step and passes the full record directly;
   `deliver()` signature changed from `(notificationKey, client)` to `(record, client)`
+- `v2.0` — Stable specification; no functional changes from v1.2; marks Announcer
+  as ready for implementation

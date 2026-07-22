@@ -198,3 +198,5 @@ Logic extracted into Broker from these files:
   responsibility; eligibility decisions belong entirely to Inspector
 - `v1.2` — Inspector renamed to Archive-Inspector; restart recovery now routes
   notificationKey values to Archive-Transporter instead of Announcer directly
+- `v2.0` — Stable specification; no functional changes from v1.2; marks Broker as
+  ready for implementation
