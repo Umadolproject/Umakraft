@@ -47,9 +47,12 @@ ENV PUPPETEER_SKIP_DOWNLOAD=true \
 # ── App ────────────────────────────────────────────────────────────────────────
 WORKDIR /app
 
-# Install dependencies first (better layer caching — only re-runs on lockfile change)
-COPY package*.json ./
-RUN npm ci --omit=dev
+# Install dependencies first (better layer caching — only re-runs on package.json change).
+# Note: package-lock.json is excluded via .dockerignore because Replit's lockfile
+# contains internal mirror URLs (package-firewall.replit.local) that are unreachable
+# on Railway. We use npm install with the public registry instead of npm ci.
+COPY package.json ./
+RUN npm install --omit=dev --registry https://registry.npmjs.org
 
 # Copy the rest of the source
 COPY . .
