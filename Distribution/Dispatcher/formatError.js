@@ -40,6 +40,10 @@ const ERROR_MESSAGES = {
   PERMISSION_DENIED:
     'You do not have permission to use this command.',
 
+  // AI Knowledge Service
+  AI_GATEWAY_ERROR:
+    'The AI Knowledge Service could not generate a response right now. Please try again shortly.',
+
   // Fallback
   UNEXPECTED_ERROR:
     'Something went wrong. Please try again shortly.',

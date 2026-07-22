@@ -41,9 +41,10 @@ export async function dispatch(envelope) {
   }
 
   // Text-only deliverable
-  if (envelope.content) {
+  if (envelope.content != null) {
     const ephemeral = envelope.ephemeral ?? true;
-    return send(interaction, { content: envelope.content }, { ephemeral });
+    const content   = envelope.content.trim() || '*(No response was generated. Please try again.)*';
+    return send(interaction, { content }, { ephemeral });
   }
 
   console.warn('[Dispatcher] Unrecognised envelope shape — no delivery performed', envelope);

@@ -78,7 +78,7 @@ function errorEnvelope(message, interaction) {
   return {
     success:   false,
     failedAt:  'AI/Gateway',
-    error:     new Error(message),
+    error:     'AI_GATEWAY_ERROR',
     message,
     retriable: true,
     interaction,
