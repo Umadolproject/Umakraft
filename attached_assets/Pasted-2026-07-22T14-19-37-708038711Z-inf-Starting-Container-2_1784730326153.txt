@@ -1,0 +1,144 @@
+2026-07-22T14:19:37.708038711Z [inf]  Starting Container
+2026-07-22T14:19:37.825095922Z [inf]  [startup] Environment OK — DISCORD_TOKEN and DISCORD_CLIENT_ID present
+2026-07-22T14:19:37.825108686Z [inf]  [startup] Creating Discord client...
+2026-07-22T14:19:37.825114618Z [inf]  [startup] Loading event handlers...
+2026-07-22T14:19:37.825124831Z [inf]  [startup] Health server listening on 0.0.0.0:8080
+2026-07-22T14:19:37.825131755Z [inf]  [startup] Registered event: guildMemberAdd
+2026-07-22T14:19:37.825139551Z [inf]  [startup] Registered event: guildMemberRemove
+2026-07-22T14:19:37.825145863Z [inf]  [startup] Registered event: interactionCreate
+2026-07-22T14:19:37.825151871Z [err]  [FATAL] Uncaught exception: SyntaxError: Unexpected token '*'
+2026-07-22T14:19:37.825159578Z [err]      at compileSourceTextModule (node:internal/modules/esm/utils:346:16)
+2026-07-22T14:19:37.825167758Z [err]      at ModuleLoader.moduleStrategy (node:internal/modules/esm/translators:146:18)
+2026-07-22T14:19:37.825174342Z [err]      at #translate (node:internal/modules/esm/loader:497:12)
+2026-07-22T14:19:37.825180134Z [err]      at ModuleLoader.loadAndTranslate (node:internal/modules/esm/loader:544:27)
+2026-07-22T14:19:37.825401795Z [inf]  [startup] Checking required environment variables...
+2026-07-22T14:19:40.258558219Z [inf]  [startup] Checking required environment variables...
+2026-07-22T14:19:40.258562395Z [inf]  [startup] Environment OK — DISCORD_TOKEN and DISCORD_CLIENT_ID present
+2026-07-22T14:19:40.258566405Z [inf]  [startup] Creating Discord client...
+2026-07-22T14:19:40.258570068Z [inf]  [startup] Loading event handlers...
+2026-07-22T14:19:40.258574302Z [inf]  [startup] Health server listening on 0.0.0.0:8080
+2026-07-22T14:19:40.258579419Z [inf]  [startup] Registered event: guildMemberAdd
+2026-07-22T14:19:40.258583353Z [inf]  [startup] Registered event: guildMemberRemove
+2026-07-22T14:19:40.258587456Z [inf]  [startup] Registered event: interactionCreate
+2026-07-22T14:19:40.258591272Z [err]  [FATAL] Uncaught exception: SyntaxError: Unexpected token '*'
+2026-07-22T14:19:40.258594926Z [err]      at compileSourceTextModule (node:internal/modules/esm/utils:346:16)
+2026-07-22T14:19:40.258598826Z [err]      at ModuleLoader.moduleStrategy (node:internal/modules/esm/translators:146:18)
+2026-07-22T14:19:40.258602956Z [err]      at #translate (node:internal/modules/esm/loader:497:12)
+2026-07-22T14:19:40.258607164Z [err]      at ModuleLoader.loadAndTranslate (node:internal/modules/esm/loader:544:27)
+2026-07-22T14:19:41.066340986Z [inf]  [startup] Checking required environment variables...
+2026-07-22T14:19:41.066345532Z [inf]  [startup] Environment OK — DISCORD_TOKEN and DISCORD_CLIENT_ID present
+2026-07-22T14:19:41.066350484Z [inf]  [startup] Creating Discord client...
+2026-07-22T14:19:41.083701331Z [inf]  [startup] Loading event handlers...
+2026-07-22T14:19:41.083711028Z [inf]  [startup] Health server listening on 0.0.0.0:8080
+2026-07-22T14:19:41.083717757Z [inf]  [startup] Registered event: guildMemberAdd
+2026-07-22T14:19:41.083724986Z [inf]  [startup] Registered event: guildMemberRemove
+2026-07-22T14:19:41.119547979Z [inf]  [startup] Registered event: interactionCreate
+2026-07-22T14:19:41.119554545Z [err]  [FATAL] Uncaught exception: SyntaxError: Unexpected token '*'
+2026-07-22T14:19:41.119561133Z [err]      at compileSourceTextModule (node:internal/modules/esm/utils:346:16)
+2026-07-22T14:19:41.119568717Z [err]      at ModuleLoader.moduleStrategy (node:internal/modules/esm/translators:146:18)
+2026-07-22T14:19:41.119582290Z [err]      at #translate (node:internal/modules/esm/loader:497:12)
+2026-07-22T14:19:41.119595707Z [err]      at ModuleLoader.loadAndTranslate (node:internal/modules/esm/loader:544:27)
+2026-07-22T14:19:43.302275168Z [inf]  [startup] Registered event: guildMemberRemove
+2026-07-22T14:19:43.302288609Z [inf]  [startup] Registered event: interactionCreate
+2026-07-22T14:19:43.302296048Z [err]  [FATAL] Uncaught exception: SyntaxError: Unexpected token '*'
+2026-07-22T14:19:43.302301981Z [err]      at compileSourceTextModule (node:internal/modules/esm/utils:346:16)
+2026-07-22T14:19:43.302309980Z [err]      at ModuleLoader.moduleStrategy (node:internal/modules/esm/translators:146:18)
+2026-07-22T14:19:43.302316845Z [err]      at #translate (node:internal/modules/esm/loader:497:12)
+2026-07-22T14:19:43.302321954Z [err]      at ModuleLoader.loadAndTranslate (node:internal/modules/esm/loader:544:27)
+2026-07-22T14:19:43.302387136Z [inf]  [startup] Checking required environment variables...
+2026-07-22T14:19:43.302393456Z [inf]  [startup] Environment OK — DISCORD_TOKEN and DISCORD_CLIENT_ID present
+2026-07-22T14:19:43.302399296Z [inf]  [startup] Creating Discord client...
+2026-07-22T14:19:43.302404922Z [inf]  [startup] Loading event handlers...
+2026-07-22T14:19:43.302411244Z [inf]  [startup] Health server listening on 0.0.0.0:8080
+2026-07-22T14:19:43.302417314Z [inf]  [startup] Registered event: guildMemberAdd
+2026-07-22T14:19:45.125953968Z [inf]  [startup] Checking required environment variables...
+2026-07-22T14:19:45.125961217Z [inf]  [startup] Environment OK — DISCORD_TOKEN and DISCORD_CLIENT_ID present
+2026-07-22T14:19:45.125968406Z [inf]  [startup] Creating Discord client...
+2026-07-22T14:19:45.125975721Z [inf]  [startup] Loading event handlers...
+2026-07-22T14:19:45.125982509Z [inf]  [startup] Health server listening on 0.0.0.0:8080
+2026-07-22T14:19:45.125989072Z [inf]  [startup] Registered event: guildMemberAdd
+2026-07-22T14:19:45.125996001Z [inf]  [startup] Registered event: guildMemberRemove
+2026-07-22T14:19:45.126002941Z [inf]  [startup] Registered event: interactionCreate
+2026-07-22T14:19:45.126010175Z [err]  [FATAL] Uncaught exception: SyntaxError: Unexpected token '*'
+2026-07-22T14:19:45.126018145Z [err]      at compileSourceTextModule (node:internal/modules/esm/utils:346:16)
+2026-07-22T14:19:45.126025550Z [err]      at ModuleLoader.moduleStrategy (node:internal/modules/esm/translators:146:18)
+2026-07-22T14:19:45.126032222Z [err]      at #translate (node:internal/modules/esm/loader:497:12)
+2026-07-22T14:19:45.126044090Z [err]      at ModuleLoader.loadAndTranslate (node:internal/modules/esm/loader:544:27)
+2026-07-22T14:19:46.994840122Z [inf]  [startup] Checking required environment variables...
+2026-07-22T14:19:46.994848599Z [inf]  [startup] Environment OK — DISCORD_TOKEN and DISCORD_CLIENT_ID present
+2026-07-22T14:19:46.994858617Z [inf]  [startup] Creating Discord client...
+2026-07-22T14:19:46.994868163Z [inf]  [startup] Loading event handlers...
+2026-07-22T14:19:46.994878727Z [inf]  [startup] Health server listening on 0.0.0.0:8080
+2026-07-22T14:19:46.994888268Z [inf]  [startup] Registered event: guildMemberAdd
+2026-07-22T14:19:46.994897301Z [inf]  [startup] Registered event: guildMemberRemove
+2026-07-22T14:19:46.994905058Z [inf]  [startup] Registered event: interactionCreate
+2026-07-22T14:19:46.994913480Z [err]  [FATAL] Uncaught exception: SyntaxError: Unexpected token '*'
+2026-07-22T14:19:46.994922953Z [err]      at compileSourceTextModule (node:internal/modules/esm/utils:346:16)
+2026-07-22T14:19:46.994931385Z [err]      at ModuleLoader.moduleStrategy (node:internal/modules/esm/translators:146:18)
+2026-07-22T14:19:46.994941432Z [err]      at #translate (node:internal/modules/esm/loader:497:12)
+2026-07-22T14:19:46.994950369Z [err]      at ModuleLoader.loadAndTranslate (node:internal/modules/esm/loader:544:27)
+2026-07-22T14:19:49.040334689Z [inf]  [startup] Checking required environment variables...
+2026-07-22T14:19:49.040338911Z [inf]  [startup] Environment OK — DISCORD_TOKEN and DISCORD_CLIENT_ID present
+2026-07-22T14:19:49.040342985Z [inf]  [startup] Creating Discord client...
+2026-07-22T14:19:49.040346899Z [inf]  [startup] Loading event handlers...
+2026-07-22T14:19:49.040350828Z [inf]  [startup] Health server listening on 0.0.0.0:8080
+2026-07-22T14:19:49.040355041Z [inf]  [startup] Registered event: guildMemberAdd
+2026-07-22T14:19:49.040359669Z [inf]  [startup] Registered event: guildMemberRemove
+2026-07-22T14:19:49.040363307Z [inf]  [startup] Registered event: interactionCreate
+2026-07-22T14:19:49.040367709Z [err]  [FATAL] Uncaught exception: SyntaxError: Unexpected token '*'
+2026-07-22T14:19:49.040371872Z [err]      at compileSourceTextModule (node:internal/modules/esm/utils:346:16)
+2026-07-22T14:19:49.040376568Z [err]      at ModuleLoader.moduleStrategy (node:internal/modules/esm/translators:146:18)
+2026-07-22T14:19:49.040380274Z [err]      at #translate (node:internal/modules/esm/loader:497:12)
+2026-07-22T14:19:49.040384403Z [err]      at ModuleLoader.loadAndTranslate (node:internal/modules/esm/loader:544:27)
+2026-07-22T14:19:50.131328229Z [inf]  [startup] Checking required environment variables...
+2026-07-22T14:19:50.131339729Z [inf]  [startup] Environment OK — DISCORD_TOKEN and DISCORD_CLIENT_ID present
+2026-07-22T14:19:50.131350349Z [inf]  [startup] Creating Discord client...
+2026-07-22T14:19:50.151408254Z [inf]  [startup] Loading event handlers...
+2026-07-22T14:19:50.151419174Z [inf]  [startup] Health server listening on 0.0.0.0:8080
+2026-07-22T14:19:50.151424893Z [inf]  [startup] Registered event: guildMemberAdd
+2026-07-22T14:19:50.158370935Z [inf]  [startup] Registered event: guildMemberRemove
+2026-07-22T14:19:50.197619737Z [inf]  [startup] Registered event: interactionCreate
+2026-07-22T14:19:50.197626281Z [err]  [FATAL] Uncaught exception: SyntaxError: Unexpected token '*'
+2026-07-22T14:19:50.197632386Z [err]      at compileSourceTextModule (node:internal/modules/esm/utils:346:16)
+2026-07-22T14:19:50.197638397Z [err]      at ModuleLoader.moduleStrategy (node:internal/modules/esm/translators:146:18)
+2026-07-22T14:19:50.197644825Z [err]      at #translate (node:internal/modules/esm/loader:497:12)
+2026-07-22T14:19:50.197650852Z [err]      at ModuleLoader.loadAndTranslate (node:internal/modules/esm/loader:544:27)
+2026-07-22T14:19:52.290052739Z [err]      at #translate (node:internal/modules/esm/loader:497:12)
+2026-07-22T14:19:52.290062543Z [err]      at ModuleLoader.loadAndTranslate (node:internal/modules/esm/loader:544:27)
+2026-07-22T14:19:52.290068744Z [inf]  [startup] Creating Discord client...
+2026-07-22T14:19:52.290074787Z [inf]  [startup] Loading event handlers...
+2026-07-22T14:19:52.290084314Z [err]  [FATAL] Uncaught exception: SyntaxError: Unexpected token '*'
+2026-07-22T14:19:52.290090463Z [err]      at compileSourceTextModule (node:internal/modules/esm/utils:346:16)
+2026-07-22T14:19:52.290096060Z [inf]  [startup] Health server listening on 0.0.0.0:8080
+2026-07-22T14:19:52.290099092Z [err]      at ModuleLoader.moduleStrategy (node:internal/modules/esm/translators:146:18)
+2026-07-22T14:19:52.290099835Z [inf]  [startup] Checking required environment variables...
+2026-07-22T14:19:52.290106548Z [inf]  [startup] Registered event: guildMemberAdd
+2026-07-22T14:19:52.290110211Z [inf]  [startup] Environment OK — DISCORD_TOKEN and DISCORD_CLIENT_ID present
+2026-07-22T14:19:52.290115489Z [inf]  [startup] Registered event: guildMemberRemove
+2026-07-22T14:19:52.290121824Z [inf]  [startup] Registered event: interactionCreate
+2026-07-22T14:19:53.997301314Z [err]      at #translate (node:internal/modules/esm/loader:497:12)
+2026-07-22T14:19:53.997314642Z [err]      at ModuleLoader.loadAndTranslate (node:internal/modules/esm/loader:544:27)
+2026-07-22T14:19:53.997359830Z [inf]  [startup] Checking required environment variables...
+2026-07-22T14:19:53.997367232Z [inf]  [startup] Environment OK — DISCORD_TOKEN and DISCORD_CLIENT_ID present
+2026-07-22T14:19:53.997374430Z [inf]  [startup] Creating Discord client...
+2026-07-22T14:19:53.997380711Z [inf]  [startup] Loading event handlers...
+2026-07-22T14:19:53.997387141Z [inf]  [startup] Health server listening on 0.0.0.0:8080
+2026-07-22T14:19:53.997393209Z [inf]  [startup] Registered event: guildMemberAdd
+2026-07-22T14:19:53.997400486Z [inf]  [startup] Registered event: guildMemberRemove
+2026-07-22T14:19:53.997406524Z [inf]  [startup] Registered event: interactionCreate
+2026-07-22T14:19:53.997412690Z [err]  [FATAL] Uncaught exception: SyntaxError: Unexpected token '*'
+2026-07-22T14:19:53.997418531Z [err]      at compileSourceTextModule (node:internal/modules/esm/utils:346:16)
+2026-07-22T14:19:53.997427751Z [err]      at ModuleLoader.moduleStrategy (node:internal/modules/esm/translators:146:18)
+2026-07-22T14:19:56.184242999Z [err]  [FATAL] Uncaught exception: SyntaxError: Unexpected token '*'
+2026-07-22T14:19:56.184259730Z [err]      at compileSourceTextModule (node:internal/modules/esm/utils:346:16)
+2026-07-22T14:19:56.184268422Z [err]      at ModuleLoader.moduleStrategy (node:internal/modules/esm/translators:146:18)
+2026-07-22T14:19:56.184280791Z [err]      at #translate (node:internal/modules/esm/loader:497:12)
+2026-07-22T14:19:56.184301547Z [err]      at ModuleLoader.loadAndTranslate (node:internal/modules/esm/loader:544:27)
+2026-07-22T14:19:56.184342850Z [inf]  [startup] Checking required environment variables...
+2026-07-22T14:19:56.184347221Z [inf]  [startup] Environment OK — DISCORD_TOKEN and DISCORD_CLIENT_ID present
+2026-07-22T14:19:56.184351750Z [inf]  [startup] Creating Discord client...
+2026-07-22T14:19:56.184356147Z [inf]  [startup] Loading event handlers...
+2026-07-22T14:19:56.184360553Z [inf]  [startup] Health server listening on 0.0.0.0:8080
+2026-07-22T14:19:56.184365063Z [inf]  [startup] Registered event: guildMemberAdd
+2026-07-22T14:19:56.184369566Z [inf]  [startup] Registered event: guildMemberRemove
+2026-07-22T14:19:56.184374033Z [inf]  [startup] Registered event: interactionCreate

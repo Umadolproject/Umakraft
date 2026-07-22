@@ -23,8 +23,8 @@ const _tasks = new Map();
  * Supports the subset of cron expressions used in this project.
  *
  * Recognised patterns:
- *   "*/N * * * *"  → every N minutes
- *   "0 */N * * *"  → every N hours
+ *   "*\/N * * * *"  → every N minutes
+ *   "0 *\/N * * *"  → every N hours
  *   "0 * * * *"    → every hour
  *
  * Falls back to 30 minutes for anything else.
@@ -60,7 +60,7 @@ function cronToMs(cronExpr) {
  * Must be called before start() — tasks registered after start() are not auto-started.
  *
  * @param {string}   name      — unique task identifier (appears in taskRegistry)
- * @param {string}   cronExpr  — cron expression (e.g. "*/5 * * * *")
+ * @param {string}   cronExpr  — cron expression (e.g. "*\/5 * * * *")
  * @param {Function} fn        — async function; receives the Discord client as its first arg
  */
 export function schedule(name, cronExpr, fn) {
