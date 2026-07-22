@@ -250,6 +250,87 @@ const warningSettings = new SlashCommandBuilder()
       ))
     .addStringOption(o => o.setName('value').setDescription('New value — true/false for toggles, a number for thresholds').setRequired(true)));
 
+// ─── AI Commands ──────────────────────────────────────────────────────────────
+
+const ask = new SlashCommandBuilder()
+  .setName('ask')
+  .setDescription('Ask the AI Knowledge Service a question about the repository or Umamusume game mechanics')
+  .addStringOption(o => o
+    .setName('question')
+    .setDescription('Your question')
+    .setRequired(true));
+
+const ai = new SlashCommandBuilder()
+  .setName('ai')
+  .setDescription('Umakraft AI Knowledge Service')
+  .addSubcommand(sub => sub
+    .setName('explain')
+    .setDescription('Get a structured explanation of a repository concept or game mechanic')
+    .addStringOption(o => o
+      .setName('topic')
+      .setDescription('Topic or concept to explain')
+      .setRequired(true)))
+  .addSubcommand(sub => sub
+    .setName('search')
+    .setDescription('Similarity search across the Umakraft repository codebase')
+    .addStringOption(o => o
+      .setName('query')
+      .setDescription('Search query')
+      .setRequired(true)))
+  .addSubcommand(sub => sub
+    .setName('docs')
+    .setDescription('Get a technical summary of a specific file or component')
+    .addStringOption(o => o
+      .setName('file')
+      .setDescription('File path or component name (e.g. Refinery/Refiner/refiner.js)')
+      .setRequired(true)))
+  .addSubcommand(sub => sub
+    .setName('glossary')
+    .setDescription('Look up an Umamusume or Umakraft term in the knowledge base')
+    .addStringOption(o => o
+      .setName('term')
+      .setDescription('Term to look up (e.g. MANT, Fan Deficit, Trend Tier)')
+      .setRequired(true)))
+  .addSubcommand(sub => sub
+    .setName('message')
+    .setDescription('Generate a community message (greeting, milestone, warning, etc.)')
+    .addStringOption(o => o
+      .setName('type')
+      .setDescription('Message type')
+      .setRequired(true)
+      .addChoices(
+        { name: 'Greeting',      value: 'greeting'      },
+        { name: 'Milestone',     value: 'milestone'     },
+        { name: 'Achievement',   value: 'achievement'   },
+        { name: 'Leaderboard',   value: 'leaderboard'   },
+        { name: 'Warning',       value: 'warning'       },
+        { name: 'Reminder',      value: 'reminder'      },
+        { name: 'Documentation', value: 'documentation' },
+      ))
+    .addStringOption(o => o
+      .setName('trainer_name')
+      .setDescription('Trainer name — required for milestone, achievement, and warning messages'))
+    .addIntegerOption(o => o
+      .setName('milestone_value')
+      .setDescription('Fan count milestone (e.g. 1000000) — required for milestone messages')
+      .setMinValue(1))
+    .addStringOption(o => o
+      .setName('achievement_name')
+      .setDescription('Achievement name — required for achievement messages'))
+    .addStringOption(o => o
+      .setName('event_name')
+      .setDescription('Event name — required for reminder messages'))
+    .addStringOption(o => o
+      .setName('event_date')
+      .setDescription('Event date — YYYY-MM-DD, used for reminder messages')))
+  .addSubcommand(sub => sub
+    .setName('live')
+    .setDescription('Search live uma.moe data and current rankings via web')
+    .addStringOption(o => o
+      .setName('query')
+      .setDescription('Your question about current live data')
+      .setRequired(true)));
+
 // ─── Command Array ─────────────────────────────────────────────────────────────
 
 const commands = [
@@ -258,6 +339,7 @@ const commands = [
   keep, setTimezone, status, circleStatus, help,
   link, unlink, linkList, setFans, adminSync, adminSetJoinDate,
   testMilestone, timelineSetup, timelinePost, adminSyncCards, warningSettings,
+  ask, ai,
 ].map(c => c.toJSON());
 
 // ─── Deploy ────────────────────────────────────────────────────────────────────

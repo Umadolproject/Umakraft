@@ -30,6 +30,7 @@ import { timelineSetup }        from './actions/timelineSetup.js';
 import { timelinePost }         from './actions/timelinePost.js';
 import { adminSyncCards }       from './actions/adminSyncCards.js';
 import { warningSettings }      from './actions/warningSettings.js';
+import { aiCommand }            from './actions/aiGateway.js';
 
 export const coordinator = {
   fanGain,
@@ -60,4 +61,5 @@ export const coordinator = {
   timelinePost,
   adminSyncCards,
   warningSettings,
+  aiCommand,
 };
