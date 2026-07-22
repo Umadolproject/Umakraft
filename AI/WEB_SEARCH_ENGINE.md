@@ -4,7 +4,7 @@
 **Registry:** `GOVERNANCE/PIPELINE_REGISTRY.md`
 **Department:** Knowledge
 **Status:** ACTIVE
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Last Updated:** 2026-07-22
 
 ---
@@ -17,9 +17,13 @@ requiring current or external information: recent uma.moe events, live rankings,
 notes, community news, or anything not yet absorbed into the repository or the static
 knowledge base.
 
-It uses the **Tavily Search API**, which returns pre-extracted, LLM-ready content chunks
-rather than raw URLs. This means its output plugs directly into the Context Builder
-alongside RAG chunks and Knowledge Engine entries — no scraping layer required.
+All provider calls are managed by an internal **Search Manager** layer. The Search
+Manager selects the active provider, handles failover between providers, and normalises
+every response into a single chunk schema before passing results to the Context Builder.
+
+The primary provider is **Tavily**, which returns pre-extracted, LLM-ready content
+chunks — no scraping layer required. Three backup providers fire in order if Tavily
+is unavailable: **Brave Search API → Google Custom Search JSON API → SerpAPI**.
 
 ---
 
@@ -39,12 +43,14 @@ alongside RAG chunks and Knowledge Engine entries — no scraping layer required
 
 - Receive a classified `live` query from the Topic Filter, or a low-confidence fallback
   signal from the Repository Engine or Knowledge Engine
-- Build a scoped Tavily search query from the user question (injecting uma.moe domain
-  context where relevant)
-- Call the Tavily Search API and collect the top-k result chunks
+- Build a scoped search query from the user question (injecting uma.moe domain context
+  where relevant)
+- Delegate the call to the Search Manager, which selects the active provider and handles
+  failover automatically
+- Receive normalised chunk objects from the Search Manager
 - Return structured result chunks to the Context Builder in the same format as RAG chunks
-- Never route general off-topic queries through Tavily — Topic Filter enforces scope
-  before Web Search Engine is called
+- Never route general off-topic queries to search — the Topic Filter enforces scope
+  before the Web Search Engine is ever called
 
 ---
 
@@ -55,10 +61,78 @@ flowchart LR
     TF[Topic Filter] -->|live| WSE[Web Search Engine]
     RE[Repository Engine] -->|low confidence| WSE
     KE[Knowledge Engine] -->|low confidence| WSE
-    WSE --> TAV[Tavily API]
-    TAV --> WSE
-    WSE --> CB[Context Builder]
+
+    WSE --> SM[Search Manager]
+
+    SM -->|primary| TAV[Tavily API]
+    SM -->|fallback 1| BRV[Brave Search API]
+    SM -->|fallback 2| GCS[Google CSE API]
+    SM -->|fallback 3| SRP[SerpAPI]
+
+    SM --> CB[Context Builder]
 ```
+
+---
+
+## Search Manager
+
+The Search Manager is the internal component that owns all provider interaction. The
+Web Search Engine calls it with a scoped query and receives a normalised chunk array
+back. The rest of the system never talks to individual providers directly.
+
+### Provider Chain
+
+| Priority | Provider | Notes |
+|----------|----------|-------|
+| 1 | Tavily | Pre-extracted, LLM-ready chunks; no scraping needed |
+| 2 | Brave Search API | Independent index; fast; good coverage for niche topics |
+| 3 | Google Custom Search JSON API | Broadest index; reliable fallback |
+| 4 | SerpAPI | True last resort; most expensive; use only if 1–3 all fail |
+
+### Failover Rules
+
+A backup provider fires **only** when the active provider:
+
+- Returns an HTTP error (4xx / 5xx)
+- Times out (configurable per provider; default `5000 ms`)
+- Hits a rate limit (429 response)
+
+A backup does **not** fire on an empty result set — zero results from Tavily is a valid
+answer (the Context Builder will fall back to local context alone).
+
+Each provider is tried once in order. If all four fail, the Web Search Engine returns an
+empty array and logs a `SEARCH_ALL_PROVIDERS_FAILED` event. The request continues with
+local context only.
+
+### Per-Provider Normaliser
+
+Every provider returns a different response schema. The Search Manager contains a
+normaliser for each provider that maps its output into the shared chunk object before
+anything downstream sees it:
+
+```javascript
+// Shared chunk schema — identical to RAG Engine chunk output
+{
+  content:   String,   // extracted text content
+  filePath:  String,   // source URL
+  heading:   String,   // page title or section heading
+  relevance: Number,   // 0.0 – 1.0; provider score mapped to this range
+  source:    'web'     // always 'web' for Search Manager output
+}
+```
+
+Provider-specific mappings:
+
+| Field | Tavily | Brave | Google CSE | SerpAPI |
+|-------|--------|-------|------------|---------|
+| `content` | `result.content` | `result.description` | `item.snippet` | `result.snippet` |
+| `filePath` | `result.url` | `result.url` | `item.link` | `result.link` |
+| `heading` | `result.title` | `result.title` | `item.title` | `result.title` |
+| `relevance` | `result.score` | mapped from rank position | mapped from rank position | mapped from rank position |
+
+Brave, Google CSE, and SerpAPI do not return a semantic relevance score — relevance is
+approximated from rank position using a linear decay (`1.0` for rank 1, decreasing by
+`0.05` per position).
 
 ---
 
@@ -161,40 +235,69 @@ Top-ranked circle this week: Bloom, with 4.2M fan gain...
 
 ## Rate Limiting and Cost Control
 
+### Per-User and Per-Bot Limits
+
 | Control | Value |
 |---------|-------|
-| Max Tavily calls per user per minute | 3 |
-| Max Tavily calls per bot per minute | 20 |
-| Max results per call | 5 |
+| Max Search Manager calls per user per minute | 3 |
+| Max Search Manager calls per bot per minute | 20 |
+| Max results per call (all providers) | 5 |
 | Cache TTL for identical queries | 10 minutes |
 | Fallback threshold (RAG confidence) | 0.65 |
 
-Caching is handled by the Cache layer. Identical queries within the TTL window return
-the cached Tavily result set without a new API call.
+Caching is handled by the Cache layer. An identical query within the TTL window returns
+the cached result set without any provider call — regardless of which provider originally
+answered it.
+
+### Provider Timeout Budget
+
+| Provider | Timeout |
+|----------|---------|
+| Tavily | 5 000 ms |
+| Brave | 5 000 ms |
+| Google CSE | 5 000 ms |
+| SerpAPI | 5 000 ms |
+
+### Cost Tier (relative, ascending)
+
+Tavily < Brave < Google CSE < SerpAPI
+
+SerpAPI is materially more expensive than the others. It fires only when all three
+preceding providers have failed — which for a 30-user bot should be a rare event.
 
 ---
 
 ## Error Handling
 
+### Provider-Level Failover
+
 | Condition | Behaviour |
 |-----------|-----------|
-| Tavily API unavailable | Log error, continue with local context only (RAG + Knowledge Engine); do not surface the error to the user unless local context is also empty |
-| Tavily returns 0 results | Log, continue with local context |
-| Rate limit hit | Return cached result if available; otherwise continue with local context |
+| Tavily error / timeout / rate-limit | Search Manager moves to Brave; logs `TAVILY_FAILOVER` |
+| Brave error / timeout / rate-limit | Search Manager moves to Google CSE; logs `BRAVE_FAILOVER` |
+| Google CSE error / timeout / rate-limit | Search Manager moves to SerpAPI; logs `GCSE_FAILOVER` |
+| SerpAPI error / timeout / rate-limit | All providers exhausted; logs `SEARCH_ALL_PROVIDERS_FAILED`; returns empty array |
+| Any provider returns 0 results | Not a failover trigger; returns empty array for that call |
+| Rate limit hit with cached result available | Return cached result; no failover needed |
 | Query scoping produces empty string | Use original user question verbatim |
 
-The Web Search Engine never fails the entire request. It degrades gracefully — if Tavily
-cannot be reached, the response is generated from local context alone.
+### Degradation on Empty Array
+
+When the Search Manager returns an empty array (all providers failed or all returned
+zero results), the Context Builder receives only local context (RAG + Knowledge Engine
+chunks). The request continues normally. The error is not surfaced to the Discord user
+unless local context is also empty, in which case the Response Validator triggers a
+polite "I don't have enough information" reply.
 
 ---
 
 ## Security
 
-- The Tavily API key is loaded from environment (`TAVILY_API_KEY`) and never appears in
-  any prompt, log, or response
-- Only scoped, on-topic queries are sent to Tavily — the Topic Filter enforces this
-  before the Web Search Engine is ever called
-- Raw Tavily content is passed through the Response Validator before delivery; no
+- All API keys are loaded from environment variables and never appear in any prompt,
+  log, or Discord response
+- Only scoped, on-topic queries are sent to any provider — the Topic Filter enforces
+  this before the Web Search Engine is ever called
+- Raw provider content is passed through the Response Validator before delivery; no
   unvalidated web content is returned to Discord users
 
 ---
@@ -203,10 +306,15 @@ cannot be reached, the response is generated from local context alone.
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `TAVILY_API_KEY` | Yes | Tavily Search API key |
-| `TAVILY_MAX_RESULTS` | No | Max results per call (default: `5`) |
-| `TAVILY_CACHE_TTL_MS` | No | Cache duration in ms (default: `600000` — 10 min) |
-| `TAVILY_CONFIDENCE_FALLBACK` | No | RAG confidence threshold that triggers fallback (default: `0.65`) |
+| `TAVILY_API_KEY` | Yes | Tavily Search API key (primary provider) |
+| `BRAVE_SEARCH_API_KEY` | Yes | Brave Search API key (fallback 1) |
+| `GOOGLE_CSE_API_KEY` | Yes | Google Custom Search JSON API key (fallback 2) |
+| `GOOGLE_CSE_CX` | Yes | Google Custom Search Engine ID (fallback 2) |
+| `SERPAPI_API_KEY` | Yes | SerpAPI key (fallback 3 — last resort) |
+| `SEARCH_MAX_RESULTS` | No | Max results per call, all providers (default: `5`) |
+| `SEARCH_PROVIDER_TIMEOUT_MS` | No | Per-provider timeout in ms (default: `5000`) |
+| `SEARCH_CACHE_TTL_MS` | No | Cache duration in ms (default: `600000` — 10 min) |
+| `SEARCH_CONFIDENCE_FALLBACK` | No | RAG confidence threshold that triggers web fallback (default: `0.65`) |
 
 ---
 
@@ -219,8 +327,23 @@ const chunks = await webSearchEngine.search(query, options)
 // Fallback call — from Repository Engine or Knowledge Engine
 const chunks = await webSearchEngine.searchFallback(query, localConfidence)
 
-// Returns: Array of chunk objects compatible with Context Builder
+// Both methods delegate to the Search Manager internally.
+// Returns: Array of normalised chunk objects compatible with Context Builder.
 // [{ content, filePath, heading, relevance, source: 'web' }]
+// Returns [] if all providers fail or return zero results.
+```
+
+### Search Manager Interface (internal)
+
+```javascript
+// Called by Web Search Engine only — not exposed to the rest of the system
+const chunks = await searchManager.query(scopedQuery, maxResults)
+
+// searchManager.query() tries providers in order:
+//   Tavily → Brave → Google CSE → SerpAPI
+// Advances to the next provider on error / timeout / rate-limit.
+// Returns normalised chunks from whichever provider answered first.
+// Returns [] if all four fail.
 ```
 
 ---
@@ -242,3 +365,7 @@ const chunks = await webSearchEngine.searchFallback(query, localConfidence)
 - `v1.0.0` — Initial Web Search Engine specification; Tavily integration; primary and
   fallback call paths; chunk normalisation schema; rate limiting and cost controls;
   graceful degradation on API failure
+- `v1.1.0` — Added Search Manager layer with four-provider chain (Tavily → Brave →
+  Google CSE → SerpAPI); per-provider normaliser schema; failover rules (error/timeout/
+  rate-limit only, not on empty results); per-provider timeout budget; cost tier table;
+  expanded environment variables; updated interface docs
