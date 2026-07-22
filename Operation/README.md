@@ -3,7 +3,7 @@
 **Status:** Official Independent Pipeline Supervisor
 **Authority:** Governed by `GOVERNANCE/ARCHITECTURE_AUTHORITY.md`
 **Version:** 2.0.0
-**Last Updated:** 2026-07-20
+**Last Updated:** 2026-07-22
 
 ---
 
@@ -82,6 +82,12 @@ Discord
 
 ---
 
+## Entry Point
+
+`operation.js` — exports `runOperationCycle()`, wired into `tasks/index.js` on a 5-minute cron schedule. Runs the full Investigator → Logger → Manager chain in sequence.
+
+---
+
 ## Departments
 
 | Department | File | Responsibility |
@@ -134,3 +140,11 @@ Discord
 2. `Investigator/Investigator.md` — observation contracts and sample code
 3. `Logger/Logger.md` — log format, status mapping, and sample code
 4. `Manager/Manager.md` — decision thresholds, routing, and sample code
+
+---
+
+## Version History
+
+- `v1.0` — Initial Operation specification; Investigator → Logger → Manager internal pipeline
+- `v2.0` — Entry point `operation.js` / `runOperationCycle()` formally documented; all
+  department specs aligned and dated; `Last Updated` corrected to 2026-07-22

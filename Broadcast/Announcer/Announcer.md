@@ -164,6 +164,11 @@ or Playwright code. That boundary is absolute.
 // Receives the full pre-fetched record — no Archive read at the start.
 await announcer.deliver(record, client)
 
+// Deliver an Operation health alert to the configured ops channel.
+// Called by Operation/Manager for Critical, Failed, and Investigation Required decisions.
+// Does not go through Archive — Operation alerts are fire-and-forget with no dedup.
+await announcer.announceOperationAlert({ decision, summary, affectedSubjects, decidedAt })
+
 // Internal step handlers
 await announcer._postChannel(record, cardBuffer, client)
 await announcer._sendMemberDms(record, cardBuffer, client)

@@ -2,7 +2,7 @@
 
 **Department:** Operation/Investigator
 **Version:** 2.0.0
-**Last Updated:** 2026-07-20
+**Last Updated:** 2026-07-22
 **Governed By:** `GOVERNANCE/ARCHITECTURE_AUTHORITY.md`
 
 ---
@@ -212,3 +212,12 @@ function parseCronIntervalMs(cronExpr) {
 - `core/health.js` — `/health` JSON payload
 - `tasks/index.js` — `schedule()` wrapper that calls `recordTaskStart` / `recordTaskEnd`
 - `core/errors.js` — `safeRun()`, `withRetry()` (wrap task execution, feed failure state into registry)
+
+---
+
+## Version History
+
+- `v1.0` — Initial Investigator specification; four data sources: taskRegistry, dataSync,
+  timeline, runtime; one `InvestigationRecord` per subject per cycle
+- `v2.0` — Stable specification; no functional changes from v1.0; marks Investigator
+  as ready for implementation

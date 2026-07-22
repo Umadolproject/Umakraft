@@ -2,7 +2,7 @@
 
 **Department:** Operation/Manager
 **Version:** 2.0.0
-**Last Updated:** 2026-07-20
+**Last Updated:** 2026-07-22
 **Governed By:** `GOVERNANCE/ARCHITECTURE_AUTHORITY.md`
 
 ---
@@ -281,3 +281,13 @@ export async function runOperationCycle() {
 - `core/errors.js` — `safeRun()`, `withRetry()`
 - `tasks/index.js` — `schedule()` wrapper; registers `runOperationCycle` on cron
 - `Broadcast/Announcer/announcer.js` — `announceOperationAlert()` — delivery target for Critical/Failed/Investigation Required
+
+---
+
+## Version History
+
+- `v1.0` — Initial Manager specification; five health decisions; `HealthDecision` schema;
+  routing to `Broadcast/Announcer` via `announceOperationAlert()`; full `operation.js`
+  cycle entry point documented
+- `v2.0` — Stable specification; no functional changes from v1.0; marks Manager as
+  ready for implementation

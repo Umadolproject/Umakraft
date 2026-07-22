@@ -2,7 +2,7 @@
 
 **Department:** Operation/Logger
 **Version:** 2.0.0
-**Last Updated:** 2026-07-20
+**Last Updated:** 2026-07-22
 **Governed By:** `GOVERNANCE/ARCHITECTURE_AUTHORITY.md`
 
 ---
@@ -169,3 +169,12 @@ function buildMessage(entry) {
 - `core/log.js` — `log.info()`, `log.warn()`, `log.error()`, `log.debug()`
 - `core/taskRegistry.js` — source of raw task stats consumed by Investigator → Logger
 - `core/health.js` — mirrors a subset of what Logger tracks
+
+---
+
+## Version History
+
+- `v1.0` — Initial Logger specification; five status codes: `ok`, `warn`, `error`,
+  `stale`, `unknown`; pipeline label mapping; `OperationalLogEntry` schema
+- `v2.0` — Stable specification; no functional changes from v1.0; marks Logger as
+  ready for implementation
