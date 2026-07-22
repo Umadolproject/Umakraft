@@ -45,19 +45,28 @@ All API keys must be stored as Replit Secrets. They are never committed to sourc
 
 ### Vector Database (Qdrant)
 
-Qdrant is the selected vector database backend. The Qdrant client (`@qdrant/js-client-rest`) reads the three connection vars at startup.
+Qdrant is the selected vector database backend. The Qdrant client (`@qdrant/js-client-rest`) reads the three connection vars at startup. If `QDRANT_URL` is not set, the Vector Database falls back to an in-memory store (development/testing only — data does not survive restarts).
 
 | Variable | Type | Default | Required | Description |
 |---|---|---|---|---|
-| `QDRANT_URL` | string | — | Yes | Qdrant managed service URL |
-| `QDRANT_API_KEY` | string | — | Yes | Qdrant API key (Replit Secret) |
+| `QDRANT_URL` | string | — | No* | Qdrant managed service URL. Omit to use in-memory fallback. |
+| `QDRANT_API_KEY` | string | — | No* | Qdrant API key (Replit Secret). Required when `QDRANT_URL` is set. |
 | `QDRANT_COLLECTION` | string | `umakraft` | No | Collection name for the full repository index |
 | `VDB_EMBEDDING_DIM` | number | `1536` | No | Embedding vector dimension — must match `AI_EMBEDDING_MODEL` |
-| `VDB_TOP_K` | number | `8` | No | Maximum chunks returned per similarity search |
-| `VDB_MIN_SCORE` | number | `0.60` | No | Minimum cosine similarity score to include a result |
+| `VDB_TOP_K` | number | `8` | No | Maximum chunks returned per similarity search (used by RAG Engine) |
+| `VDB_MIN_SCORE` | number | `0.60` | No | Minimum cosine similarity score to include a result (used by RAG Engine) |
 | `VDB_INDEX_INTERVAL_HOURS` | number | `6` | No | Hours between incremental index runs |
 | `VDB_QUERY_CACHE_TTL_MS` | number | `600000` | No | TTL for vector database query cache (ms) |
 | `VDB_BACKUP_PATH` | string | `/data/vdb_backup` | No | Directory for JSON backup exports |
+
+### RAG Engine
+
+| Variable | Type | Default | Required | Description |
+|---|---|---|---|---|
+| `RAG_MAX_CONTEXT_TOKENS` | number | `6000` | No | Maximum tokens the RAG Engine may fill in the context window |
+| `RAG_MIN_CHUNKS` | number | `3` | No | Minimum chunks returned even if some fall below `VDB_MIN_SCORE` threshold |
+
+*\* `QDRANT_URL` and `QDRANT_API_KEY` are optional during development. The in-memory fallback is automatically used when `QDRANT_URL` is absent. Both are required for production deployments.*
 
 ---
 
@@ -186,3 +195,4 @@ If validation fails, startup is aborted with a clear error message listing every
 
 - `v1.0.0` — Initial Configuration specification; all environment variables for all six component groups; startup validation; feature flags
 - `v1.1.0` — Replaced single-provider vars with complexity-tier model vars (`AI_COMPLEX_MODEL`, `AI_SIMPLE_MODEL`); API keys reduced to OpenAI + Gemini only; VDB section replaced with Qdrant vars (`QDRANT_URL`, `QDRANT_API_KEY`, `QDRANT_COLLECTION`); Web Search Engine section added (five provider keys + four tuning vars); retry note corrected to linear backoff
+- `v1.2.0` — `QDRANT_URL` and `QDRANT_API_KEY` marked optional (in-memory fallback when absent); RAG Engine section added with `RAG_MAX_CONTEXT_TOKENS` and `RAG_MIN_CHUNKS`; `VDB_TOP_K` and `VDB_MIN_SCORE` descriptions updated to note RAG Engine usage

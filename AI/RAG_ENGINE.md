@@ -96,12 +96,14 @@ Minimum threshold: `0.60` — chunks below this score are excluded regardless of
 
 ### Top-k Configuration
 
-| Parameter | Default | Description |
+These parameters are loaded from environment variables defined in `AI/CONFIGURATION.md`:
+
+| Environment Variable | Default | Description |
 |---|---|---|
-| `RAG_TOP_K` | 8 | Maximum chunks retrieved before filtering |
-| `RAG_MIN_SCORE` | 0.60 | Minimum relevance score to include a chunk |
-| `RAG_MAX_CONTEXT_TOKENS` | 6000 | Token budget for context window |
-| `RAG_MIN_CHUNKS` | 3 | Minimum chunks returned even if below threshold |
+| `VDB_TOP_K` | 8 | Maximum chunks retrieved before filtering |
+| `VDB_MIN_SCORE` | 0.60 | Minimum relevance score to include a chunk |
+| `RAG_MAX_CONTEXT_TOKENS` | 6000 | Token budget for the context window (tokens) |
+| `RAG_MIN_CHUNKS` | 3 | Minimum chunks returned even if some fall below threshold |
 
 ### Result Schema
 
@@ -181,3 +183,4 @@ Available filter dimensions:
 ## Version History
 
 - `v1.0.0` — Initial RAG Engine specification; cosine similarity; top-k=8; metadata filters; result schema; token budget enforcement; minimum threshold 0.60
+- `v1.1.0` — Config variable names corrected to match CONFIGURATION.md: `RAG_TOP_K` → `VDB_TOP_K`, `RAG_MIN_SCORE` → `VDB_MIN_SCORE`; `RAG_MAX_CONTEXT_TOKENS` and `RAG_MIN_CHUNKS` kept with matching entries added to CONFIGURATION.md

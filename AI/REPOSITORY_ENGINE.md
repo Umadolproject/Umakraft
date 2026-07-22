@@ -65,6 +65,7 @@ The following are excluded from indexing:
 ```text
 node_modules/
 .git/
+.local/
 attached_assets/
 *.log
 *.env
@@ -228,3 +229,4 @@ Confidence: 91% — Repository Source Code + Documentation
 
 - `v1.0.0` — Initial Repository Engine specification; full directory coverage; six search modes; chunk strategy; source citation format; metadata schema
 - `v1.1.0` — Fixed chunk metadata field `lastIndexed` → `indexedAt` to match Repository Indexer spec and Vector Database embedding schema
+- `v1.2.0` — Added `.local/` to exclusion rules to match Repository Indexer exclusion list

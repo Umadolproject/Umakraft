@@ -115,11 +115,18 @@ coverage/
 ### Chunk Builder
 
 ```text
-Target size:     500–1200 characters
-Overlap:         100 characters between adjacent chunks
+Noise floor:     Chunks under INDEXER_CHUNK_MIN_CHARS (default: 50) characters
+                 are silently skipped — they are too short to be meaningful.
+                 This is a discard threshold, not a target minimum.
+
+Target size:     INDEXER_CHUNK_TARGET_CHARS (default: 800) characters
+Allowed range:   INDEXER_CHUNK_MIN_CHARS (50) — INDEXER_CHUNK_MAX_CHARS (1200)
+Overlap:         INDEXER_CHUNK_OVERLAP_CHARS (default: 100) characters between adjacent chunks
 Boundary:        Prefer heading > paragraph > sentence
 Heading context: The nearest heading above the chunk is stored in chunk.heading
 ```
+
+**Clarification:** `INDEXER_CHUNK_MIN_CHARS` (50) is a post-split noise filter. Any fragment produced by the chunker that is shorter than 50 characters is discarded before embedding. It does not mean 50-character chunks are valid targets — the target range is 500–1200 characters.
 
 ### Department Classification
 
@@ -157,7 +164,9 @@ The queue processes embeddings with:
   department: string,
   fileType: string,
   content: string,          // raw chunk text
-  tokenCount: number,
+  tokenCount: number,       // estimated as Math.ceil(content.length / 4)
+                            // (1 token ≈ 4 characters for English/code text).
+                            // No tokenizer dependency required.
   checksum: string,         // SHA-256 of the full source file
   indexedAt: Date
 }
@@ -227,3 +236,4 @@ All logging uses `core/log.js` — output is newline-delimited JSON to stdout:
 
 - `v1.0.0` — Initial Repository Indexer specification; six supported file types; exclusion rules; heading-aware chunking; department classification table; scheduling triggers; embedding queue with concurrency control
 - `v1.1.0` — Log output example updated to show actual `core/log.js` JSON format (newline-delimited JSON, not plain-text prefix format)
+- `v1.2.0` — Chunk Builder clarified: `INDEXER_CHUNK_MIN_CHARS` (50) documented as a noise-discard floor, not a target minimum; `tokenCount` estimation method specified as `Math.ceil(content.length / 4)`

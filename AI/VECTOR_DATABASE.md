@@ -60,7 +60,11 @@ Each stored embedding record:
 
 ```js
 {
-  id: string,               // SHA-256 of (filePath + chunkIndex)
+  id: string,               // UUID formatted from SHA-256(`${filePath}:${chunkIndex}`):
+                            //   take first 32 hex chars, insert dashes as 8-4-4-4-12.
+                            //   e.g. "a3f2b1c4-d5e6-f890-abcd-ef1234567890"
+                            //   Qdrant requires RFC-4122 UUID strings or uint64 integers.
+                            //   This derivation satisfies the UUID format without a uuid package.
   vector: Float32Array,     // embedding vector (e.g. 1536 dimensions for text-embedding-3-small)
   filePath: string,         // e.g. "umamoe/Vault/vault.js"
   chunkIndex: number,       // position of this chunk within the file
@@ -279,3 +283,4 @@ VDB_BACKUP_PATH=/data/vdb_backup
 
 - `v1.0.0` — Initial Vector Database specification; embedding schema; similarity search; update and deletion policy; backup and restore; cache integration; configuration variables
 - `v1.1.0` — Qdrant selected as the vector database backend; Qdrant Integration section added (collection setup, upsert, similarity search, client config); HNSW noted as native (no custom ANN needed); configuration variables updated to Qdrant env vars
+- `v1.2.0` — Point `id` derivation made explicit: UUID formatted from first 32 hex chars of SHA-256(`${filePath}:${chunkIndex}`) in 8-4-4-4-12 grouping; no uuid package required
