@@ -4,14 +4,19 @@
 **Registry:** `GOVERNANCE/PIPELINE_REGISTRY.md`
 **Department:** Knowledge
 **Status:** ACTIVE
-**Version:** 1.1.0
+**Version:** 1.2.0
 **Last Updated:** 2026-07-22
 
 ---
 
 ## Purpose
 
-The Topic Filter is the scope enforcement gate for the AI Knowledge Service. Every request passes through it before any retrieval or generation occurs. It classifies each request into one of five categories — Repository, Umamusume, Live, Message, or Off-topic — and routes accordingly. Off-topic requests are rejected immediately without any AI provider call.
+The Topic Filter is the scope enforcement gate for the AI Knowledge Service. Every request passes through it before any retrieval or generation occurs. It produces **two outputs** for every non-rejected request:
+
+1. **Topic classification** — `repository`, `umamusume`, `live`, `message`, or `off-topic` — determines which retrieval component handles the request.
+2. **Complexity tier** — `simple` or `complex` — determines which AI model the API Provider uses.
+
+Off-topic requests are rejected immediately without any AI provider call.
 
 The Topic Filter is also a security control: it prevents the AI from being used as a general-purpose chatbot.
 
@@ -34,9 +39,10 @@ The Topic Filter is also a security control: it prevents the AI from being used 
 
 - Receive every incoming request before any other pipeline component
 - Classify the request into: `repository`, `umamusume`, `live`, `message`, or `off-topic`
-- Route classified requests to the appropriate downstream component
+- Assign a complexity tier (`simple` or `complex`) to every non-rejected request
+- Route classified requests to the appropriate downstream component, carrying the complexity tier
 - Reject off-topic requests with a polite, consistent message
-- Log every classification decision for audit
+- Log every classification decision including topic and complexity for audit
 - Never allow an off-topic request to reach the API Provider
 
 ---
@@ -104,6 +110,44 @@ Examples:
 
 Everything else. Rejected without an AI call.
 
+---
+
+## Complexity Classification
+
+After topic classification, the Topic Filter assigns a complexity tier. This is passed downstream so the API Provider selects the correct model.
+
+| Tier | AI Model | Used When |
+|------|----------|-----------|
+| `simple` | Gemini 1.5 Flash (free tier) | Factual lookups, single-concept questions, common terms |
+| `complex` | GPT-4o-mini | Multi-step reasoning, strategy analysis, architecture questions, code explanation, message generation |
+
+### Complexity Rules by Topic
+
+| Topic | Default Tier | Upgrade to `complex` When |
+|-------|-------------|---------------------------|
+| `repository` | `complex` | Always — codebase questions require reasoning over code |
+| `umamusume` | `simple` | Complexity keywords present (see below) |
+| `live` | `simple` | Synthesis keywords present (see below) |
+| `message` | `complex` | Always — generated messages must be high quality |
+
+### Complexity Keywords (upgrade `simple` → `complex`)
+
+```text
+explain, analyze, analyse, compare, strategy, why, how does, difference between,
+best way, recommend, guide, optimize, improve, in depth, detailed, breakdown
+```
+
+### Examples
+
+| Query | Topic | Complexity |
+|-------|-------|------------|
+| "What is MANT?" | umamusume | simple |
+| "What is the best training strategy for fan gain?" | umamusume | complex |
+| "What does the Vault do?" | repository | complex |
+| "What are the top circles right now?" | live | simple |
+| "Analyze why circle rankings changed this week" | live | complex |
+| "/ai message milestone trainerName=Akira" | message | complex |
+
 Examples:
 - "Who is the prime minister of Japan?"
 - "Write me a Python script"
@@ -118,12 +162,14 @@ Examples:
 1. Request arrives from the Command Gateway
 2. Topic Filter applies the keyword classifier
 3. If keywords are insufficient, a lightweight semantic classifier is used
-4. Classification is logged with confidence score
+4. Topic classification is logged with confidence score
 5. If `off-topic`: return rejection message, log, stop
-6. If `repository`: forward to Repository Engine
-7. If `umamusume`: forward to Knowledge Engine
-8. If `live`: forward to Web Search Engine
-9. If `message`: forward to Content Generator
+6. Complexity tier is assigned based on topic default and complexity keyword scan
+7. Complexity tier is attached to the routing envelope
+8. If `repository`: forward to Repository Engine (always `complex`)
+9. If `umamusume`: forward to Knowledge Engine (with `simple` or `complex`)
+10. If `live`: forward to Web Search Engine (with `simple` or `complex`)
+11. If `message`: forward to Content Generator (always `complex`)
 
 ---
 
@@ -220,12 +266,13 @@ Every classification is logged:
 
 ```js
 {
-  timestamp: string,
-  query: string,
+  timestamp:      string,
+  query:          string,
   classification: 'repository' | 'umamusume' | 'live' | 'message' | 'off-topic',
-  confidence: number,      // 0.0–1.0
-  method: 'keyword' | 'semantic' | 'command-override',
-  rejected: boolean
+  confidence:     number,      // 0.0–1.0
+  method:         'keyword' | 'semantic' | 'command-override',
+  complexity:     'simple' | 'complex' | null,   // null when rejected
+  rejected:       boolean
 }
 ```
 
@@ -266,3 +313,4 @@ Every classification is logged:
 
 - `v1.0.0` — Initial Topic Filter specification; four classification categories; keyword classifier; semantic classifier; command override rules; rejection response format; audit logging schema
 - `v1.1.0` — Added `live` classification category; Web Search Engine routing; live keyword list; `/ai live` command override; five-category audit log schema
+- `v1.2.0` — Added complexity tier as a second output (`simple` | `complex`); complexity rules by topic; complexity keyword list; per-topic default tier table; updated workflow to eleven steps; `complexity` field added to audit log schema

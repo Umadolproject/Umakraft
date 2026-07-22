@@ -4,7 +4,7 @@
 **Registry:** `GOVERNANCE/PIPELINE_REGISTRY.md`
 **Department:** Knowledge
 **Status:** ACTIVE
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Last Updated:** 2026-07-22
 
 ---
@@ -73,16 +73,16 @@ flowchart LR
 
 ### Chat Generation
 
-1. Prompt System calls `generate(prompt, options)`
-2. API Provider selects the primary provider from configuration
+1. Prompt System calls `generate(prompt, options)` with a `complexity` field (`'simple'` or `'complex'`) set by the Topic Filter
+2. API Provider selects the model based on complexity tier (see Model Selection below)
 3. Rate Limiter checks the current request count against the per-minute limit
 4. If rate limited, the request is queued or rejected with a retry-after value
-5. The request is sent to the primary provider
+5. The request is sent to the selected model
 6. On success, the response text is returned
 7. On failure (network error, 5xx, timeout):
    - Retry handler waits (exponential backoff: 1s, 2s, 4s)
-   - After 3 failures, falls back to the secondary provider
-   - If secondary also fails, returns a graceful error response
+   - After 3 failures, falls back to the other model tier
+   - If fallback also fails, returns a graceful error response
 
 ### Embedding Generation
 
@@ -95,13 +95,33 @@ flowchart LR
 
 ## Technical Design
 
+### Model Selection
+
+The API Provider selects the model based on the `complexity` field passed by the Prompt System (originating from the Topic Filter).
+
+| Complexity | Model | Provider | Rationale |
+|------------|-------|----------|-----------|
+| `simple` | `gemini-1.5-flash` | Google Gemini | Free tier; fast; handles factual lookups well |
+| `complex` | `gpt-4o-mini` | OpenAI | Strong reasoning; cost-effective flagship |
+
+**Fallback on failure:**
+- If `gemini-1.5-flash` fails → retry up to 3 times → fall back to `gpt-4o-mini`
+- If `gpt-4o-mini` fails → retry up to 3 times → fall back to `gemini-1.5-flash`
+
+The model used is always recorded in the response object and in the audit log.
+
 ### Interface
 
 ```js
 /**
  * Generate a chat completion.
  * @param {string} prompt
- * @param {{ model?: string, maxTokens?: number, temperature?: number }} options
+ * @param {{
+ *   complexity?: 'simple' | 'complex',  // from Topic Filter; drives model selection
+ *   model?: string,                      // explicit override; skips complexity routing
+ *   maxTokens?: number,
+ *   temperature?: number
+ * }} options
  * @returns {Promise<{ text: string, model: string, tokens: number }>}
  */
 export async function generate(prompt, options = {}) { ... }
@@ -117,19 +137,14 @@ export async function embed(text) { ... }
 ### Configuration
 
 ```text
-AI_PRIMARY_PROVIDER=openai
-AI_SECONDARY_PROVIDER=gemini
-AI_PRIMARY_MODEL=gpt-4o-mini
-AI_SECONDARY_MODEL=gemini-1.5-flash
+AI_COMPLEX_MODEL=gpt-4o-mini         # model for complex requests
+AI_SIMPLE_MODEL=gemini-1.5-flash     # model for simple requests (free tier)
 AI_EMBEDDING_MODEL=text-embedding-3-small
 AI_MAX_RETRIES=3
 AI_RETRY_BASE_DELAY_MS=1000
 AI_RATE_LIMIT_RPM=60
 OPENAI_API_KEY=<secret>
 GEMINI_API_KEY=<secret>
-ANTHROPIC_API_KEY=<secret>
-OPENROUTER_API_KEY=<secret>
-OLLAMA_BASE_URL=http://localhost:11434
 ```
 
 All API keys are loaded from environment variables. They are never logged, included in prompts, or returned in responses.
@@ -164,11 +179,11 @@ const result = await generate('What is the Vault?', { model: 'gpt-4o-mini' });
 // result.tokens → 287
 ```
 
-### Provider Fallback
+### Model Fallback
 
 ```text
-[API Provider] Primary provider (openai) failed after 3 attempts — falling back to gemini
-[API Provider] Secondary provider (gemini) responded successfully
+[API Provider] gpt-4o-mini failed after 3 attempts — falling back to gemini-1.5-flash
+[API Provider] gemini-1.5-flash responded successfully
 ```
 
 ---
@@ -185,11 +200,10 @@ const result = await generate('What is the Vault?', { model: 'gpt-4o-mini' });
 
 ## Future Expansion
 
-- Dynamic model selection based on query complexity score
-- Cost tracking per request and per day
+- Cost tracking per request and per day (simple vs complex tier breakdown)
 - Provider health dashboard integration
 - Streaming response support for long explanations
-- Multi-provider load balancing (not just primary/secondary)
+- Gemini 2.0 Flash upgrade path when stable (replaces 1.5 Flash for simple tier)
 
 ---
 
@@ -206,3 +220,4 @@ const result = await generate('What is the Vault?', { model: 'gpt-4o-mini' });
 ## Version History
 
 - `v1.0.0` — Initial API Provider specification; five providers; `generate()` and `embed()` interfaces; retry strategy; rate limiting; fallback logic; configuration schema
+- `v1.1.0` — Complexity-driven model selection: `simple` → Gemini 1.5 Flash (free tier), `complex` → GPT-4o-mini; `complexity` field added to `generate()` options; bidirectional fallback between tiers; configuration simplified to two model env vars; dynamic model selection moved from Future Expansion to current design
