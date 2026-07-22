@@ -181,14 +181,15 @@ The queue processes embeddings with:
 
 ### Log Output for an Incremental Run
 
-```text
-[Indexer] Starting incremental index run — 142 files to check
-[Indexer] 6 files changed since last index
-[Indexer] Chunking: umamoe/Miner/miner.js → 4 chunks
-[Indexer] Chunking: GOVERNANCE/ARCHITECTURE_AUTHORITY.md → 11 chunks
-[Indexer] Embedding queue: 41 chunks
-[Indexer] Upserted 41 chunks to Vector Database
-[Indexer] Incremental index complete — duration=3.2s
+All logging uses `core/log.js` — output is newline-delimited JSON to stdout:
+
+```json
+{"timestamp":"2026-07-22T09:00:00.000Z","level":"info","message":"[Indexer] incremental run — 142 files to check"}
+{"timestamp":"2026-07-22T09:00:00.012Z","level":"info","message":"[Indexer] 6 files changed since last index"}
+{"timestamp":"2026-07-22T09:00:00.023Z","level":"info","message":"[Indexer] chunking umamoe/Miner/miner.js — 4 chunks"}
+{"timestamp":"2026-07-22T09:00:00.034Z","level":"info","message":"[Indexer] chunking GOVERNANCE/ARCHITECTURE_AUTHORITY.md — 11 chunks"}
+{"timestamp":"2026-07-22T09:00:01.100Z","level":"info","message":"[Indexer] embedding queue complete — 41 chunks upserted"}
+{"timestamp":"2026-07-22T09:00:01.105Z","level":"info","message":"[Indexer] incremental index complete — duration=3.2s"}
 ```
 
 ---
@@ -225,3 +226,4 @@ The queue processes embeddings with:
 ## Version History
 
 - `v1.0.0` — Initial Repository Indexer specification; six supported file types; exclusion rules; heading-aware chunking; department classification table; scheduling triggers; embedding queue with concurrency control
+- `v1.1.0` — Log output example updated to show actual `core/log.js` JSON format (newline-delimited JSON, not plain-text prefix format)

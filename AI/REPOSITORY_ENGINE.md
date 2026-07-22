@@ -144,7 +144,7 @@ Each chunk carries:
   heading: string | null, // nearest heading above the chunk
   department: string,     // e.g. "Umamoe", "Broadcast", "AI"
   fileType: string,       // e.g. "JavaScript", "Markdown"
-  lastIndexed: Date,
+  indexedAt: Date,        // when this chunk was last indexed
   checksum: string        // SHA-256 of the source file
 }
 ```
@@ -227,3 +227,4 @@ Confidence: 91% — Repository Source Code + Documentation
 ## Version History
 
 - `v1.0.0` — Initial Repository Engine specification; full directory coverage; six search modes; chunk strategy; source citation format; metadata schema
+- `v1.1.0` — Fixed chunk metadata field `lastIndexed` → `indexedAt` to match Repository Indexer spec and Vector Database embedding schema

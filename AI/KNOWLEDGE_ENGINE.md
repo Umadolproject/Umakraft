@@ -4,7 +4,7 @@
 **Registry:** `GOVERNANCE/PIPELINE_REGISTRY.md`
 **Department:** Knowledge
 **Status:** ACTIVE
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Last Updated:** 2026-07-22
 
 ---
@@ -93,11 +93,26 @@ flowchart LR
 | Circle Rank | Social | A circle's standing based on aggregate member fan gain |
 | Trainer Level | Mechanic | A trainer's progression level within the game |
 | Fan Deficit | Mechanic | The gap between a trainer's actual and projected fan count |
-| Milestone | Achievement | A fan count threshold that triggers a special announcement |
-| Blueprint | Repository | A Workshop rendering template for a specific card type |
+| Milestone | Achievement | A fan count threshold that triggers a special announcement (1M, 5M, 10M, 50M, 100M fans) |
+| Blueprint | Repository | A Workshop rendering template for a specific card type (e.g. `fanGain`, `profile`, `leaderboard`) |
 | Circle | Social | A group of trainers competing together as a team |
-| Depot | Repository | Refinery storage for compiled trainer products |
-| Vault | Repository | Umamoe storage for validated raw trainer data |
+| Depot | Repository | Refinery storage for compiled trainer products; API: `store()`, `retrieve()`, `search()` |
+| Vault | Repository | Umamoe storage for validated raw trainer data; API: `receive()`, `retrieve()`, `update()`, `remove()` |
+| Trend | Mechanic | A trainer's momentum tier derived from their uma.moe rank by the Refiner |
+| Gain Source | Mechanic | Whether a trainer's fan gain figures are real deltas (`delta`) or rank-based projections (`projected`) |
+
+### Trainer Trend Tiers
+
+The Refiner (`Refinery/Refiner/refiner.js`) derives a trend tier from a trainer's current uma.moe rank:
+
+| Tier | Rank Range | Meaning |
+|------|-----------|---------|
+| `elite` | 1 – 10 | Top performers; very high fan velocity |
+| `upward` | 11 – 50 | Strong upward momentum |
+| `stable` | 51 – 200 | Consistent, steady growth |
+| `emerging` | 201+ | Early stage or slow-growth trainers |
+
+When historical Vault snapshots are available, the Refiner uses real fan deltas (`gainsSource: 'delta'`). Without history it produces rank-weighted projections (`gainsSource: 'projected'`). Always note the gain source when quoting fan gain numbers.
 
 ### Mechanic Catalog
 
@@ -138,7 +153,7 @@ Each game mechanic is described with:
 
 - Always define terms precisely — avoid vague explanations
 - When a term has multiple meanings in different contexts, address all of them
-- Cross-reference Umamusume concepts with their repository equivalents (e.g. fan gain → `Refinery/Refiner/refiner.js`)
+- Cross-reference Umamusume concepts with their repository equivalents (e.g. fan gain calculation → `Refinery/Refiner/refiner.js`; trend tiers → `refiner.js` `deriveTrend()`; milestone thresholds → `test_milestone` slash command choices: 1M, 5M, 10M, 50M, 100M)
 - If a question cannot be answered with confidence, respond with "I don't have reliable information about that" rather than guessing
 - Keep glossary definitions under 3 sentences for quick lookups
 
@@ -167,3 +182,4 @@ Each game mechanic is described with:
 ## Version History
 
 - `v1.0.0` — Initial Knowledge Engine specification; glossary schema; mechanic catalog; ten core terms defined; scope boundaries established
+- `v1.1.0` — Added Trainer Trend Tiers table (elite/upward/stable/emerging) sourced from `Refinery/Refiner/refiner.js`; added Gain Source term (`delta` vs `projected`); expanded Milestone, Blueprint, Depot, Vault glossary entries with real API signatures and milestone thresholds from `deploy-commands.js`

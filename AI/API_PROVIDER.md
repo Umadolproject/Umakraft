@@ -80,7 +80,7 @@ flowchart LR
 5. The request is sent to the selected model
 6. On success, the response text is returned
 7. On failure (network error, 5xx, timeout):
-   - Retry handler waits (exponential backoff: 1s, 2s, 4s)
+   - Retry handler waits (linear backoff via `core/errors.js` `withRetry`: 1s, 2s, 3s)
    - After 3 failures, falls back to the other model tier
    - If fallback also fails, returns a graceful error response
 
@@ -151,12 +151,16 @@ All API keys are loaded from environment variables. They are never logged, inclu
 
 ### Retry Strategy
 
+Uses `core/errors.js` `withRetry()` — linear backoff (`delayMs * attempt`):
+
 ```text
 Attempt 1 → immediate
-Attempt 2 → wait 1000ms
-Attempt 3 → wait 2000ms
-Attempt 4 → fallback to secondary provider
+Attempt 2 → wait 1000ms  (base × 1)
+Attempt 3 → wait 2000ms  (base × 2)
+→ after 3 failures, fall back to the other model tier
 ```
+
+Note: the backoff is **linear**, not exponential. `core/errors.js` `withRetry` multiplies the base delay by the attempt number, not powers of two.
 
 ### Rate Limiting
 

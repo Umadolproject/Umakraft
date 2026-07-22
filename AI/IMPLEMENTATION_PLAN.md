@@ -4,7 +4,7 @@
 **Registry:** `GOVERNANCE/PIPELINE_REGISTRY.md`
 **Department:** Knowledge
 **Status:** ACTIVE
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Last Updated:** 2026-07-22
 
 ---
@@ -48,7 +48,7 @@ Each phase builds on the previous. No phase may be skipped. Implementation must 
 
 ### Tasks
 
-- [ ] Implement `API_PROVIDER` — abstract layer supporting OpenAI, Gemini, Claude, OpenRouter, Ollama
+- [ ] Implement `API_PROVIDER` — two-model complexity routing: `simple` → Gemini 1.5 Flash, `complex` → GPT-4o-mini; linear-backoff retry via `core/errors.js` `withRetry()`
 - [ ] Implement `CONFIGURATION` — environment variables, model selection, feature flags
 - [ ] Implement `SECURITY` — read-only enforcement wrapper, permission matrix
 - [ ] Implement `CACHE` — in-memory response cache and embedding cache
@@ -57,8 +57,8 @@ Each phase builds on the previous. No phase may be skipped. Implementation must 
 
 ### Acceptance Criteria
 
-- [ ] API provider can call OpenAI and return a response
-- [ ] Provider falls back to secondary model on failure
+- [ ] Complex requests use GPT-4o-mini; simple requests use Gemini 1.5 Flash (free tier)
+- [ ] Failed model tier falls back to the other tier after 3 linear-backoff retries
 - [ ] All secrets loaded from environment — never hardcoded
 - [ ] Read-only enforcement blocks any write attempt
 
@@ -71,7 +71,7 @@ Each phase builds on the previous. No phase may be skipped. Implementation must 
 ### Tasks
 
 - [ ] Implement `REPOSITORY_INDEXER` — file scanner, document classifier, chunk builder
-- [ ] Implement `VECTOR_DATABASE` — embedding storage, similarity search
+- [ ] Implement `VECTOR_DATABASE` — Qdrant backend via `@qdrant/js-client-rest`; collection `umakraft`; HNSW native index; cosine similarity
 - [ ] Implement `RAG_ENGINE` — retrieval pipeline: query → embed → search → rank → return
 - [ ] Implement `REPOSITORY_ENGINE` — orchestrates indexer, vector database, and RAG
 - [ ] Implement `CONTEXT_BUILDER` — assembles retrieved chunks into a coherent prompt context
@@ -131,16 +131,17 @@ Each phase builds on the previous. No phase may be skipped. Implementation must 
 
 ### Tasks
 
-- [ ] Implement `TOPIC_FILTER` — repository scope, Umamusume scope, message scope, off-topic rejection
+- [ ] Implement `TOPIC_FILTER` — repository / umamusume / live / message / off-topic classification; complexity tier (`simple` | `complex`) as a second output on every non-rejected request
 - [ ] Implement `RESPONSE_VALIDATOR` — scope check, grammar check, length check, hallucination check
-- [ ] Register slash commands: `/ask`, `/ai explain`, `/ai search`, `/ai docs`, `/ai glossary`, `/ai message`
-- [ ] Integrate with `Distribution/Discord` event pipeline
+- [ ] Register slash commands in `Distribution/Discord/deploy-commands.js`: `/ask`, `/ai explain`, `/ai search`, `/ai docs`, `/ai glossary`, `/ai message`, `/ai live`
+- [ ] Route AI commands through `Distribution/Commands/handlers/` → AI Knowledge Service → Dispatcher (bypasses Coordinator's Umamoe→Refinery→Workshop chain)
 
 ### Acceptance Criteria
 
-- [ ] `/ask "explain fan gain"` returns an accurate repository-sourced answer
+- [ ] `/ask "explain fan gain"` returns an accurate repository-sourced answer (GPT-4o-mini for complex, Gemini for simple)
 - [ ] `/ask "who is the president"` returns a polite off-topic rejection
 - [ ] `/ai search "Miner"` returns relevant file references
+- [ ] `/ai live "top circles right now"` calls the Web Search Engine (Tavily primary)
 - [ ] Response validator blocks any answer that references out-of-scope content
 
 ---
@@ -212,3 +213,4 @@ No exception may be made to this constraint without a formal Architecture Decisi
 ## Version History
 
 - `v1.0.0` — Initial implementation plan; seven phases defined; full task breakdown and acceptance criteria per phase
+- `v1.1.0` — Phase 1 updated to reflect complexity-tier model routing and linear-backoff retry; Phase 2 names Qdrant as the vector DB backend; Phase 5 adds `/ai live` command, complexity routing to Topic Filter task, and correct Distribution routing (bypasses Coordinator)

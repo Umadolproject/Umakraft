@@ -4,7 +4,7 @@
 **Registry:** `GOVERNANCE/PIPELINE_REGISTRY.md`
 **Department:** Knowledge
 **Status:** ACTIVE
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Last Updated:** 2026-07-22
 
 ---
@@ -19,44 +19,45 @@ API keys and secrets are never documented with their values here. This document 
 
 ## Environment Variables
 
-### API Provider
+### API Provider — Model Routing
+
+The AI Knowledge Service uses two AI models selected by complexity tier (set by the Topic Filter).
 
 | Variable | Type | Default | Required | Description |
 |---|---|---|---|---|
-| `AI_PRIMARY_PROVIDER` | string | `openai` | No | Primary AI provider (`openai`, `gemini`, `claude`, `openrouter`, `ollama`) |
-| `AI_SECONDARY_PROVIDER` | string | `gemini` | No | Fallback provider when primary is unavailable |
-| `AI_PRIMARY_MODEL` | string | `gpt-4o-mini` | No | Primary chat model |
-| `AI_SECONDARY_MODEL` | string | `gemini-1.5-flash` | No | Fallback chat model |
-| `AI_EMBEDDING_MODEL` | string | `text-embedding-3-small` | No | Embedding model for indexing and query |
-| `AI_MAX_RETRIES` | number | `3` | No | Max retry attempts per provider before fallback |
-| `AI_RETRY_BASE_DELAY_MS` | number | `1000` | No | Base delay in ms for exponential backoff |
-| `AI_RATE_LIMIT_RPM` | number | `60` | No | Max requests per minute to any single provider |
+| `AI_COMPLEX_MODEL` | string | `gpt-4o-mini` | No | Model for complex requests (codebase, strategy, message generation) |
+| `AI_SIMPLE_MODEL` | string | `gemini-1.5-flash` | No | Model for simple requests — Gemini free tier |
+| `AI_EMBEDDING_MODEL` | string | `text-embedding-3-small` | No | Embedding model for indexing and query (OpenAI) |
+| `AI_MAX_RETRIES` | number | `3` | No | Max retry attempts before falling back to the other model tier |
+| `AI_RETRY_BASE_DELAY_MS` | number | `1000` | No | Base delay in ms for linear backoff (actual delay = `base * attempt`) |
+| `AI_RATE_LIMIT_RPM` | number | `60` | No | Max requests per minute across both model tiers |
 
 ### API Keys (Secrets)
 
 | Variable | Required | Description |
 |---|---|---|
-| `OPENAI_API_KEY` | If using OpenAI | OpenAI API key |
-| `GEMINI_API_KEY` | If using Gemini | Google Gemini API key |
-| `ANTHROPIC_API_KEY` | If using Claude | Anthropic API key |
-| `OPENROUTER_API_KEY` | If using OpenRouter | OpenRouter API key |
-| `OLLAMA_BASE_URL` | If using Ollama | Base URL for local Ollama server (default: `http://localhost:11434`) |
+| `OPENAI_API_KEY` | Yes | OpenAI key — used for `AI_COMPLEX_MODEL` and `AI_EMBEDDING_MODEL` |
+| `GEMINI_API_KEY` | Yes | Google Gemini key — used for `AI_SIMPLE_MODEL` |
 
-All API keys must be stored as Replit Secrets (or equivalent). They are never committed to source code, never logged, and never included in prompts or responses.
+All API keys must be stored as Replit Secrets. They are never committed to source code, never logged, and never included in prompts or responses.
 
 ---
 
-### Vector Database
+### Vector Database (Qdrant)
+
+Qdrant is the selected vector database backend. The Qdrant client (`@qdrant/js-client-rest`) reads the three connection vars at startup.
 
 | Variable | Type | Default | Required | Description |
 |---|---|---|---|---|
-| `VDB_BACKEND` | string | `memory` | No | Storage backend (`memory`, `sqlite`, `qdrant`, `pinecone`) |
-| `VDB_EMBEDDING_DIM` | number | `1536` | No | Embedding vector dimension — must match embedding model |
+| `QDRANT_URL` | string | — | Yes | Qdrant managed service URL |
+| `QDRANT_API_KEY` | string | — | Yes | Qdrant API key (Replit Secret) |
+| `QDRANT_COLLECTION` | string | `umakraft` | No | Collection name for the full repository index |
+| `VDB_EMBEDDING_DIM` | number | `1536` | No | Embedding vector dimension — must match `AI_EMBEDDING_MODEL` |
 | `VDB_TOP_K` | number | `8` | No | Maximum chunks returned per similarity search |
 | `VDB_MIN_SCORE` | number | `0.60` | No | Minimum cosine similarity score to include a result |
 | `VDB_INDEX_INTERVAL_HOURS` | number | `6` | No | Hours between incremental index runs |
 | `VDB_QUERY_CACHE_TTL_MS` | number | `600000` | No | TTL for vector database query cache (ms) |
-| `VDB_BACKUP_PATH` | string | `/data/vdb_backup` | No | Directory for embedding store backups |
+| `VDB_BACKUP_PATH` | string | `/data/vdb_backup` | No | Directory for JSON backup exports |
 
 ---
 
@@ -84,12 +85,28 @@ All API keys must be stored as Replit Secrets (or equivalent). They are never co
 
 ---
 
+### Web Search Engine
+
+| Variable | Type | Default | Required | Description |
+|---|---|---|---|---|
+| `TAVILY_API_KEY` | string | — | Yes | Tavily Search API key (primary search provider) |
+| `BRAVE_SEARCH_API_KEY` | string | — | Yes | Brave Search API key (fallback 1) |
+| `GOOGLE_CSE_API_KEY` | string | — | Yes | Google Custom Search JSON API key (fallback 2) |
+| `GOOGLE_CSE_CX` | string | — | Yes | Google Custom Search Engine ID (fallback 2) |
+| `SERPAPI_API_KEY` | string | — | Yes | SerpAPI key (fallback 3 — last resort) |
+| `SEARCH_MAX_RESULTS` | number | `5` | No | Max results per call, all providers |
+| `SEARCH_PROVIDER_TIMEOUT_MS` | number | `5000` | No | Per-provider timeout before failover |
+| `SEARCH_CACHE_TTL_MS` | number | `600000` | No | Cache duration in ms for identical queries (10 min) |
+| `SEARCH_CONFIDENCE_FALLBACK` | number | `0.65` | No | RAG confidence score below which web search is also called |
+
+---
+
 ### Topic Filter
 
 | Variable | Type | Default | Required | Description |
 |---|---|---|---|---|
 | `TOPIC_FILTER_CONFIDENCE_THRESHOLD` | number | `0.70` | No | Minimum confidence for semantic classification before defaulting to off-topic |
-| `TOPIC_FILTER_AUDIT_LOG` | boolean | `true` | No | Log every classification decision |
+| `TOPIC_FILTER_AUDIT_LOG` | boolean | `true` | No | Log every classification decision including complexity tier |
 
 ---
 
@@ -148,9 +165,10 @@ If validation fails, startup is aborted with a clear error message listing every
 ## Best Practices
 
 - Use Replit Secrets for all API keys — never hardcode them
-- Keep `AI_PRIMARY_MODEL` as the cheapest model that meets quality requirements — upgrade only for complex queries
-- Set `VDB_BACKEND=sqlite` for production deployments to ensure index persistence across restarts
-- Monitor `AI_RATE_LIMIT_RPM` against actual usage — too low causes user-visible throttling; too high risks unexpected provider costs
+- The two-model setup (`AI_COMPLEX_MODEL` + `AI_SIMPLE_MODEL`) is driven by the Topic Filter complexity tier; never override it per-request without a documented reason
+- Qdrant is the production vector store; the JSON backup (`VDB_BACKUP_PATH`) is a supplementary safety net, not a restore path
+- Monitor `AI_RATE_LIMIT_RPM` against actual usage — for 30 users the default of 60 RPM is ample but lower it if provider costs spike unexpectedly
+- All five search provider keys must be present at startup even if the top-priority providers rarely fail — the fallback chain requires them
 
 ---
 
@@ -167,3 +185,4 @@ If validation fails, startup is aborted with a clear error message listing every
 ## Version History
 
 - `v1.0.0` — Initial Configuration specification; all environment variables for all six component groups; startup validation; feature flags
+- `v1.1.0` — Replaced single-provider vars with complexity-tier model vars (`AI_COMPLEX_MODEL`, `AI_SIMPLE_MODEL`); API keys reduced to OpenAI + Gemini only; VDB section replaced with Qdrant vars (`QDRANT_URL`, `QDRANT_API_KEY`, `QDRANT_COLLECTION`); Web Search Engine section added (five provider keys + four tuning vars); retry note corrected to linear backoff
