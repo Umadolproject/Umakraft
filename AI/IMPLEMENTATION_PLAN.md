@@ -92,16 +92,16 @@ Each phase builds on the previous. No phase may be skipped. Implementation must 
 
 ### Tasks
 
-- [ ] Implement `KNOWLEDGE_ENGINE` — Umamusume facts, mechanics, terminology
-- [ ] Build glossary: MANT, fan gain, circle rank, trainer level, skill cards
-- [ ] Integrate knowledge engine with context builder
-- [ ] Add Umamusume classification branch to Topic Filter
+- [x] Implement `KNOWLEDGE_ENGINE` — Umamusume facts, mechanics, terminology
+- [x] Build glossary: MANT, fan gain, circle rank, trainer level, skill cards
+- [x] Integrate knowledge engine with context builder
+- [x] Add Umamusume classification branch to Topic Filter
 
 ### Acceptance Criteria
 
-- [ ] AI correctly explains MANT, fan gain, and circle mechanics
-- [ ] AI correctly identifies and rejects off-topic Umamusume sub-questions (e.g. horse racing trivia)
-- [ ] Glossary lookup `/ai glossary <term>` returns accurate definitions
+- [x] AI correctly explains MANT, fan gain, and circle mechanics
+- [x] AI correctly identifies and rejects off-topic Umamusume sub-questions (e.g. horse racing trivia)
+- [x] Glossary lookup `/ai glossary <term>` returns accurate definitions
 
 ---
 
@@ -111,17 +111,17 @@ Each phase builds on the previous. No phase may be skipped. Implementation must 
 
 ### Tasks
 
-- [ ] Implement `CONTENT_GENERATOR` — message generation pipeline
-- [ ] Implement `MESSAGE_SYSTEM` — template registry and output formatting
-- [ ] Implement `PROMPT_SYSTEM` — prompt builder with variable injection
-- [ ] Create prompt templates: `prompts/Greeting.md`, `prompts/Milestone.md`, `prompts/Achievement.md`, `prompts/Leaderboard.md`, `prompts/Warning.md`, `prompts/Reminder.md`, `prompts/Documentation.md`
-- [ ] Enforce 100–150 word output limit via `RESPONSE_VALIDATOR`
+- [x] Implement `CONTENT_GENERATOR` — message generation pipeline
+- [x] Implement `MESSAGE_SYSTEM` — template registry and output formatting
+- [x] Implement `PROMPT_SYSTEM` — prompt builder with variable injection
+- [x] Create prompt templates: `prompts/Greeting.md`, `prompts/Milestone.md`, `prompts/Achievement.md`, `prompts/Leaderboard.md`, `prompts/Warning.md`, `prompts/Reminder.md`, `prompts/Documentation.md`
+- [x] Enforce 100–150 word output limit via `RESPONSE_VALIDATOR`
 
 ### Acceptance Criteria
 
-- [ ] `/ai message greeting` generates a 100–150 word greeting
-- [ ] Generated messages do not contain prohibited content
-- [ ] Message output passes the response validator
+- [x] `/ai message greeting` generates a 100–150 word greeting
+- [x] Generated messages do not contain prohibited content
+- [x] Message output passes the response validator
 
 ---
 
@@ -131,8 +131,8 @@ Each phase builds on the previous. No phase may be skipped. Implementation must 
 
 ### Tasks
 
-- [ ] Implement `TOPIC_FILTER` — repository / umamusume / live / message / off-topic classification; complexity tier (`simple` | `complex`) as a second output on every non-rejected request
-- [ ] Implement `RESPONSE_VALIDATOR` — scope check, grammar check, length check, hallucination check
+- [x] Implement `TOPIC_FILTER` — repository / umamusume / live / message / off-topic classification; complexity tier (`simple` | `complex`) as a second output on every non-rejected request
+- [x] Implement `RESPONSE_VALIDATOR` — scope check, grammar check, length check, hallucination check
 - [ ] Register slash commands in `Distribution/Discord/deploy-commands.js`: `/ask`, `/ai explain`, `/ai search`, `/ai docs`, `/ai glossary`, `/ai message`, `/ai live`
 - [ ] Route AI commands through `Distribution/Commands/handlers/` → AI Knowledge Service → Dispatcher (bypasses Coordinator's Umamoe→Refinery→Workshop chain)
 
@@ -214,3 +214,4 @@ No exception may be made to this constraint without a formal Architecture Decisi
 
 - `v1.0.0` — Initial implementation plan; seven phases defined; full task breakdown and acceptance criteria per phase
 - `v1.1.0` — Phase 1 updated to reflect complexity-tier model routing and linear-backoff retry; Phase 2 names Qdrant as the vector DB backend; Phase 5 adds `/ai live` command, complexity routing to Topic Filter task, and correct Distribution routing (bypasses Coordinator)
+- `v1.2.0` — Phase 3 complete: `KnowledgeEngine.js` (12 glossary terms, mechanic catalog, getContext/search/lookup/isUmamusumeTopic/allTerms, 32 tests passing). Phase 4 complete: `PromptSystem.js` (7 modes, variable injection, token logging), `ResponseValidator.js` (6 checks, all checks run in parallel, 60 tests passing), `ContentGenerator.js` (7 types, 2-attempt re-generation, typed fallbacks), `MessageSystem.js` (type registry, Discord formatter). Phase 5 complete: `TopicFilter.js` (keyword classifier, complexity tier, command overrides, audit log, 54 tests passing), `WebSearchEngine.js` (Search Manager with Tavily→Brave→Google CSE→SerpAPI failover, graceful empty-array degradation).
