@@ -4,6 +4,17 @@
 //
 // Required secrets: DISCORD_TOKEN, DISCORD_CLIENT_ID, DISCORD_GUILD_ID
 
+// ─── Crash logger — must be first ─────────────────────────────────────────────
+// Guarantees something is always written to Railway logs even on silent crashes.
+process.on('uncaughtException', (err) => {
+  console.error('[FATAL] Uncaught exception:', err);
+  process.exit(1);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[FATAL] Unhandled promise rejection:', reason);
+  process.exit(1);
+});
+
 import { Client, Collection, GatewayIntentBits } from 'discord.js';
 import { readdirSync }  from 'node:fs';
 import { fileURLToPath } from 'node:url';
