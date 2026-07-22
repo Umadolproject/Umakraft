@@ -20,8 +20,9 @@ export async function execute(interaction, client) {
   }
 
   try {
-    // command.execute defers the reply and returns the result envelope
-    const result = await command.execute(interaction, coordinator);
+    // client is passed as a third arg so handlers can inject it into the
+    // coordinator payload without importing Discord/index.js directly.
+    const result = await command.execute(interaction, coordinator, client);
 
     // Dispatcher turns the result envelope into a Discord response
     await dispatch(result);

@@ -1,14 +1,14 @@
 // Distribution/Coordinator/actions/status.js
 // Returns live bot health — uptime, last sync time, active circle count.
-
-import { client } from '../../Discord/index.js';
+// client is received via payload (dependency injection) to avoid a circular
+// import back to Discord/index.js.
 
 export async function status(payload) {
-  const { interaction } = payload;
+  const { interaction, client } = payload;
 
   const uptimeMs   = process.uptime() * 1000;
   const uptimeStr  = formatUptime(uptimeMs);
-  const guildCount = client.guilds.cache.size;
+  const guildCount = client?.guilds.cache.size ?? 0;
   const memoryMb   = (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(1);
 
   // TODO: Pull last sync time and next sync time from Umamoe scheduler state.
