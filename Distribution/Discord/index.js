@@ -5,7 +5,6 @@
 // Required secrets: DISCORD_TOKEN, DISCORD_CLIENT_ID, DISCORD_GUILD_ID
 
 // ─── Crash logger — must be first ─────────────────────────────────────────────
-// Guarantees something is always written to Railway logs even on silent crashes.
 process.on('uncaughtException', (err) => {
   console.error('[FATAL] Uncaught exception:', err);
   process.exit(1);
@@ -21,22 +20,51 @@ import { fileURLToPath } from 'node:url';
 import { join, dirname } from 'node:path';
 import { createServer }  from 'node:http';
 
-// ─── Health-check server ───────────────────────────────────────────────────────
-// Railway expects a web service to bind a port. This tiny HTTP server satisfies
-// that requirement so the bot isn't killed before it can connect to Discord.
-const PORT = parseInt(process.env.PORT ?? '3000', 10);
-createServer((req, res) => {
-  res.writeHead(200, { 'Content-Type': 'text/plain' });
-  res.end('OK');
-}).listen(PORT, () => {
-  console.log(`[health] Listening on port ${PORT}`);
-});
-
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// ─── Client ────────────────────────────────────────────────────────────────────
-// GuildMembers and MessageContent are privileged intents — they must be
-// enabled in the Discord Developer Portal under the bot settings.
+// ─── Health-check server ───────────────────────────────────────────────────────
+// Must bind to 0.0.0.0 (not localhost) so Railway's health check can reach it.
+// Started before Discord login so Railway doesn't kill the process during startup.
+const PORT = parseInt(process.env.PORT ?? '3000', 10);
+let botReady = false;
+
+const healthServer = createServer((req, res) => {
+  if (req.url === '/health' || req.url === '/') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ status: 'ok', botReady }));
+  } else {
+    res.writeHead(404);
+    res.end('Not found');
+  }
+});
+
+healthServer.listen(PORT, '0.0.0.0', () => {
+  console.log(`[startup] Health server listening on 0.0.0.0:${PORT}`);
+});
+
+// ─── Environment validation ────────────────────────────────────────────────────
+console.log('[startup] Checking required environment variables...');
+
+const { DISCORD_TOKEN, DISCORD_CLIENT_ID, DISCORD_GUILD_ID } = process.env;
+
+if (!DISCORD_TOKEN) {
+  console.error('[startup] FATAL: DISCORD_TOKEN is not set — add it to Railway Variables');
+  // Keep health server alive so logs are visible, then exit after flush
+  setTimeout(() => process.exit(1), 2000);
+  throw new Error('Missing DISCORD_TOKEN');
+}
+if (!DISCORD_CLIENT_ID) {
+  console.error('[startup] FATAL: DISCORD_CLIENT_ID is not set — add it to Railway Variables');
+  setTimeout(() => process.exit(1), 2000);
+  throw new Error('Missing DISCORD_CLIENT_ID');
+}
+
+console.log('[startup] Environment OK — DISCORD_TOKEN and DISCORD_CLIENT_ID present');
+
+// ─── Discord client ────────────────────────────────────────────────────────────
+// GuildMembers and MessageContent are privileged intents.
+// Enable both in Discord Developer Portal → Bot → Privileged Gateway Intents.
+console.log('[startup] Creating Discord client...');
 
 export const client = new Client({
   intents: [
@@ -47,13 +75,10 @@ export const client = new Client({
   ],
 });
 
-// ─── Command Collection ────────────────────────────────────────────────────────
-// Populated from Distribution/Commands/index.js so the interactionCreate
-// event can route to the correct handler by commandName.
-
 client.commands = new Collection();
 
-// ─── Load Events ──────────────────────────────────────────────────────────────
+// ─── Load events ──────────────────────────────────────────────────────────────
+console.log('[startup] Loading event handlers...');
 
 const eventsPath = join(__dirname, 'events');
 const eventFiles = readdirSync(eventsPath).filter(f => f.endsWith('.js'));
@@ -66,19 +91,34 @@ for (const file of eventFiles) {
   } else {
     client.on(event.name, (...args) => event.execute(...args, client));
   }
+  console.log(`[startup] Registered event: ${event.name}`);
 }
 
-// ─── Load Commands ─────────────────────────────────────────────────────────────
-// Commands/index.js exports a Map of commandName → { execute, defer, ephemeral }
+// ─── Load commands ─────────────────────────────────────────────────────────────
+console.log('[startup] Loading command handlers...');
 
 import { commandMap } from '../Commands/index.js';
 for (const [name, handler] of commandMap) {
   client.commands.set(name, handler);
 }
+console.log(`[startup] Loaded ${client.commands.size} commands`);
 
-// ─── Connect ───────────────────────────────────────────────────────────────────
+// ─── Connect to Discord ────────────────────────────────────────────────────────
+console.log('[startup] Logging in to Discord...');
 
-const { DISCORD_TOKEN } = process.env;
-if (!DISCORD_TOKEN) throw new Error('Missing DISCORD_TOKEN secret');
+client.once('ready', () => {
+  botReady = true;
+  console.log(`[startup] Bot is READY — ${client.user.tag}`);
+});
+
+client.on('error', (err) => {
+  console.error('[discord] Client error:', err);
+});
+
+client.on('disconnect', () => {
+  botReady = false;
+  console.warn('[discord] Client disconnected');
+});
 
 await client.login(DISCORD_TOKEN);
+console.log('[startup] Login call completed — waiting for ready event');
