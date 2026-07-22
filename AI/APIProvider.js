@@ -54,6 +54,52 @@ function checkRateLimit(limitRpm = config.rateLimitRpm) {
 // Provider implementations
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Key pool helpers
+// ---------------------------------------------------------------------------
+
+/** Returns all configured OpenAI keys (primary first, backup second). */
+function openaiKeys() {
+  return [config.openaiApiKey, config.openaiApiKey2].filter(Boolean);
+}
+
+/** Returns all configured Gemini keys (primary first, backup second). */
+function geminiKeys() {
+  return [config.geminiApiKey, config.geminiApiKey2].filter(Boolean);
+}
+
+/**
+ * Try fn(keys[0]); if it throws a rate-limit error (HTTP 429) and a
+ * second key exists, log a warning and retry with fn(keys[1]).
+ *
+ * @template T
+ * @param {string}   label  — logging label
+ * @param {string[]} keys   — ordered key pool
+ * @param {(key: string) => Promise<T>} fn
+ * @returns {Promise<T>}
+ */
+async function withKeyRotation(label, keys, fn) {
+  if (keys.length === 0) {
+    throw new Error(`[AI/APIProvider] No API key configured for ${label}.`);
+  }
+  try {
+    return await fn(keys[0]);
+  } catch (err) {
+    if (err.isRateLimit && keys.length > 1) {
+      log.warn(
+        `[AI/APIProvider] ${label} primary key rate-limited (429) — ` +
+        `rotating to backup key.`
+      );
+      return await fn(keys[1]);
+    }
+    throw err;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Provider implementations
+// ---------------------------------------------------------------------------
+
 /**
  * Call OpenAI chat completions API (used for complex tier: gpt-4o-mini).
  *
@@ -61,16 +107,15 @@ function checkRateLimit(limitRpm = config.rateLimitRpm) {
  * @param {string} model
  * @param {number} maxTokens
  * @param {number} temperature
+ * @param {string} apiKey
  * @returns {Promise<{ text: string, model: string, tokens: number }>}
  */
-async function callOpenAI(prompt, model, maxTokens, temperature) {
-  requireApiKey('openai');
-
+async function callOpenAI(prompt, model, maxTokens, temperature, apiKey) {
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
       'Content-Type':  'application/json',
-      'Authorization': `Bearer ${config.openaiApiKey}`,
+      'Authorization': `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
       model,
@@ -80,6 +125,12 @@ async function callOpenAI(prompt, model, maxTokens, temperature) {
     }),
   });
 
+  if (response.status === 429) {
+    const body = await response.text();
+    const err = new Error(`[AI/APIProvider] OpenAI 429 rate limit: ${body}`);
+    err.isRateLimit = true;
+    throw err;
+  }
   if (!response.ok) {
     const body = await response.text();
     throw new Error(`[AI/APIProvider] OpenAI ${response.status}: ${body}`);
@@ -99,14 +150,13 @@ async function callOpenAI(prompt, model, maxTokens, temperature) {
  * @param {string} model
  * @param {number} maxTokens
  * @param {number} temperature
+ * @param {string} apiKey
  * @returns {Promise<{ text: string, model: string, tokens: number }>}
  */
-async function callGemini(prompt, model, maxTokens, temperature) {
-  requireApiKey('gemini');
-
+async function callGemini(prompt, model, maxTokens, temperature, apiKey) {
   const url =
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent` +
-    `?key=${config.geminiApiKey}`;
+    `?key=${apiKey}`;
 
   const response = await fetch(url, {
     method: 'POST',
@@ -120,6 +170,13 @@ async function callGemini(prompt, model, maxTokens, temperature) {
     }),
   });
 
+  // Gemini returns 429 for quota exceeded and 503 for resource exhausted
+  if (response.status === 429 || response.status === 503) {
+    const body = await response.text();
+    const err = new Error(`[AI/APIProvider] Gemini ${response.status} rate limit: ${body}`);
+    err.isRateLimit = true;
+    throw err;
+  }
   if (!response.ok) {
     const body = await response.text();
     throw new Error(`[AI/APIProvider] Gemini ${response.status}: ${body}`);
@@ -138,16 +195,15 @@ async function callGemini(prompt, model, maxTokens, temperature) {
  * Call OpenAI Embeddings API to produce a float32 vector.
  *
  * @param {string} text
+ * @param {string} apiKey
  * @returns {Promise<number[]>}
  */
-async function callOpenAIEmbed(text) {
-  requireApiKey('openai');
-
+async function callOpenAIEmbed(text, apiKey) {
   const response = await fetch('https://api.openai.com/v1/embeddings', {
     method: 'POST',
     headers: {
       'Content-Type':  'application/json',
-      'Authorization': `Bearer ${config.openaiApiKey}`,
+      'Authorization': `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
       model: config.embeddingModel,
@@ -155,6 +211,12 @@ async function callOpenAIEmbed(text) {
     }),
   });
 
+  if (response.status === 429) {
+    const body = await response.text();
+    const err = new Error(`[AI/APIProvider] OpenAI Embeddings 429 rate limit: ${body}`);
+    err.isRateLimit = true;
+    throw err;
+  }
   if (!response.ok) {
     const body = await response.text();
     throw new Error(`[AI/APIProvider] OpenAI Embeddings ${response.status}: ${body}`);
@@ -220,9 +282,10 @@ export async function generate(prompt, options = {}) {
   // Explicit model override — bypass complexity routing
   if (explicitModel) {
     const isGemini = explicitModel.startsWith('gemini');
-    const caller   = isGemini ? callGemini : callOpenAI;
+    const keys     = isGemini ? geminiKeys() : openaiKeys();
+    const caller   = isGemini ? callGemini   : callOpenAI;
     return withRetry(
-      () => caller(prompt, explicitModel, maxTokens, temperature),
+      () => withKeyRotation(explicitModel, keys, key => caller(prompt, explicitModel, maxTokens, temperature, key)),
       { maxAttempts: config.maxRetries, delayMs: config.retryBaseDelayMs, context: `generate[${explicitModel}]` }
     );
   }
@@ -238,10 +301,12 @@ export async function generate(prompt, options = {}) {
 
   const primaryCaller  = primaryProvider  === 'gemini' ? callGemini : callOpenAI;
   const fallbackCaller = fallbackProvider === 'gemini' ? callGemini : callOpenAI;
+  const primaryKeys    = primaryProvider  === 'gemini' ? geminiKeys() : openaiKeys();
+  const fallbackKeys   = fallbackProvider === 'gemini' ? geminiKeys() : openaiKeys();
 
   try {
     const result = await withRetry(
-      () => primaryCaller(prompt, primaryModel, maxTokens, temperature),
+      () => withKeyRotation(primaryModel, primaryKeys, key => primaryCaller(prompt, primaryModel, maxTokens, temperature, key)),
       { maxAttempts: config.maxRetries, delayMs: config.retryBaseDelayMs, context: `generate[${primaryModel}]` }
     );
     log.info(`[AI/APIProvider] Served by primary: ${primaryModel}`);
@@ -254,7 +319,7 @@ export async function generate(prompt, options = {}) {
 
     try {
       const result = await withRetry(
-        () => fallbackCaller(prompt, fallbackModel, maxTokens, temperature),
+        () => withKeyRotation(fallbackModel, fallbackKeys, key => fallbackCaller(prompt, fallbackModel, maxTokens, temperature, key)),
         { maxAttempts: config.maxRetries, delayMs: config.retryBaseDelayMs, context: `generate-fallback[${fallbackModel}]` }
       );
       log.info(`[AI/APIProvider] Served by fallback: ${fallbackModel}`);
@@ -295,9 +360,9 @@ export async function embed(text) {
     return cached;
   }
 
-  // Generate via OpenAI
+  // Generate via OpenAI — rotate to backup key on 429
   const vector = await withRetry(
-    () => callOpenAIEmbed(normalised),
+    () => withKeyRotation('embed', openaiKeys(), key => callOpenAIEmbed(normalised, key)),
     { maxAttempts: config.maxRetries, delayMs: config.retryBaseDelayMs, context: 'embed' }
   );
 

@@ -39,58 +39,106 @@ function scopeQuery(query) {
 // Per-provider callers
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Key pool helpers + rotation wrapper
+// ---------------------------------------------------------------------------
+
+function tavilyKeys()  { return [config.tavilyApiKey,      config.tavilyApiKey2     ].filter(Boolean); }
+function braveKeys()   { return [config.braveSearchApiKey, config.braveSearchApiKey2].filter(Boolean); }
+
+/**
+ * Try fn(keys[0]); on a 429 rate-limit error, rotate to fn(keys[1]) if available.
+ * @template T
+ * @param {string}   label
+ * @param {string[]} keys
+ * @param {(key: string) => Promise<T>} fn
+ * @returns {Promise<T>}
+ */
+async function withKeyRotation(label, keys, fn) {
+  if (keys.length === 0) throw new Error(`[AI/WebSearchEngine] No API key configured for ${label}.`);
+  try {
+    return await fn(keys[0]);
+  } catch (err) {
+    if (err.isRateLimit && keys.length > 1) {
+      log.warn(`[AI/WebSearchEngine] ${label} primary key rate-limited (429) — rotating to backup key.`);
+      return await fn(keys[1]);
+    }
+    throw err;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Per-provider callers
+// ---------------------------------------------------------------------------
+
 async function callTavily(query, maxResults) {
-  if (!config.tavilyApiKey) throw new Error('TAVILY_API_KEY not set');
+  const keys = tavilyKeys();
+  if (keys.length === 0) throw new Error('TAVILY_API_KEY not set');
 
-  const res = await fetch('https://api.tavily.com/search', {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      api_key:         config.tavilyApiKey,
-      query,
-      search_depth:    'advanced',
-      max_results:     maxResults,
-      include_domains: ['uma.moe'],
-      include_answer:  false,
-    }),
-    signal: AbortSignal.timeout(config.searchProviderTimeoutMs),
+  return withKeyRotation('Tavily', keys, async (apiKey) => {
+    const res = await fetch('https://api.tavily.com/search', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        api_key:         apiKey,
+        query,
+        search_depth:    'advanced',
+        max_results:     maxResults,
+        include_domains: ['uma.moe'],
+        include_answer:  false,
+      }),
+      signal: AbortSignal.timeout(config.searchProviderTimeoutMs),
+    });
+
+    if (res.status === 429) {
+      const err = new Error(`Tavily 429 rate limit: ${await res.text()}`);
+      err.isRateLimit = true;
+      throw err;
+    }
+    if (!res.ok) throw new Error(`Tavily ${res.status}: ${await res.text()}`);
+    const data = await res.json();
+
+    return (data.results ?? []).map((r, i) => ({
+      content:  r.content  ?? r.raw_content ?? '',
+      filePath: r.url      ?? '',
+      heading:  r.title    ?? '',
+      score:    r.score    ?? Math.max(1.0 - i * 0.05, 0.1),
+      source:   'web',
+    }));
   });
-
-  if (!res.ok) throw new Error(`Tavily ${res.status}: ${await res.text()}`);
-  const data = await res.json();
-
-  return (data.results ?? []).map((r, i) => ({
-    content:  r.content  ?? r.raw_content ?? '',
-    filePath: r.url      ?? '',
-    heading:  r.title    ?? '',
-    score:    r.score    ?? Math.max(1.0 - i * 0.05, 0.1),
-    source:   'web',
-  }));
 }
 
 async function callBrave(query, maxResults) {
-  if (!config.braveSearchApiKey) throw new Error('BRAVE_SEARCH_API_KEY not set');
+  const keys = braveKeys();
+  if (keys.length === 0) throw new Error('BRAVE_SEARCH_API_KEY not set');
 
-  const url = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=${maxResults}`;
-  const res = await fetch(url, {
-    headers: {
-      'Accept':               'application/json',
-      'Accept-Encoding':      'gzip',
-      'X-Subscription-Token': config.braveSearchApiKey,
-    },
-    signal: AbortSignal.timeout(config.searchProviderTimeoutMs),
+  return withKeyRotation('Brave', keys, async (apiKey) => {
+    const url = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=${maxResults}`;
+    const res = await fetch(url, {
+      headers: {
+        'Accept':               'application/json',
+        'Accept-Encoding':      'gzip',
+        'X-Subscription-Token': apiKey,
+      },
+      signal: AbortSignal.timeout(config.searchProviderTimeoutMs),
+    });
+
+    if (res.status === 429) {
+      const err = new Error(`Brave 429 rate limit: ${await res.text()}`);
+      err.isRateLimit = true;
+      throw err;
+    }
+    if (!res.ok) throw new Error(`Brave ${res.status}: ${await res.text()}`);
+    const data = await res.json();
+
+    return (data.web?.results ?? []).map((r, i) => ({
+      content:  r.description ?? '',
+      filePath: r.url         ?? '',
+      heading:  r.title       ?? '',
+      score:    Math.max(1.0 - i * 0.05, 0.1),
+      source:   'web',
+    }));
   });
-
-  if (!res.ok) throw new Error(`Brave ${res.status}: ${await res.text()}`);
-  const data = await res.json();
-
-  return (data.web?.results ?? []).map((r, i) => ({
-    content:  r.description ?? '',
-    filePath: r.url         ?? '',
-    heading:  r.title       ?? '',
-    score:    Math.max(1.0 - i * 0.05, 0.1),
-    source:   'web',
-  }));
 }
 
 async function callGoogleCSE(query, maxResults) {

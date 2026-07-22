@@ -37,20 +37,26 @@ Set these in the Railway dashboard → **Variables**, or via CLI:
 | Variable | Description |
 |---|---|
 | `OPENAI_API_KEY` | Required for embeddings (`text-embedding-3-small`) and GPT-4o-mini |
+| `OPENAI_API_KEY_2` | Backup OpenAI key — auto-rotated in when the primary hits a 429 |
 | `GEMINI_API_KEY` | Used for the simple-tier model (gemini-1.5-flash) |
+| `GEMINI_API_KEY_2` | Backup Gemini key — auto-rotated in when the primary hits a 429 |
 | `QDRANT_URL` | Qdrant vector database URL |
 | `QDRANT_API_KEY` | Qdrant API key |
 | `QDRANT_COLLECTION` | Collection name (default: `umakraft`) |
 
 > At minimum, `OPENAI_API_KEY` is needed — it powers both embeddings and the
 > complex model tier. `GEMINI_API_KEY` is the simple-tier fallback.
+> The `_2` backup keys are optional but recommended — they kick in automatically
+> when the primary key returns a rate-limit error (HTTP 429), with no downtime.
 
 ### Web Search — `/ai live` command (optional)
 
 | Variable | Description |
 |---|---|
 | `TAVILY_API_KEY` | Tavily search API (primary) |
+| `TAVILY_API_KEY_2` | Backup Tavily key — auto-rotated in on 429 |
 | `BRAVE_SEARCH_API_KEY` | Brave Search fallback |
+| `BRAVE_SEARCH_API_KEY_2` | Backup Brave key — auto-rotated in on 429 |
 
 ### Puppeteer (set automatically by Dockerfile — do NOT override)
 

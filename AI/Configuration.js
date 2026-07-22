@@ -24,8 +24,12 @@ const config = {
   rateLimitRpm:   parseInt(process.env.AI_RATE_LIMIT_RPM    ?? '60', 10),
 
   // ── API Keys (never logged) ───────────────────────────────────────────────
-  openaiApiKey:   process.env.OPENAI_API_KEY  ?? null,
-  geminiApiKey:   process.env.GEMINI_API_KEY  ?? null,
+  // Primary keys
+  openaiApiKey:    process.env.OPENAI_API_KEY    ?? null,
+  geminiApiKey:    process.env.GEMINI_API_KEY    ?? null,
+  // Backup keys — rotated in automatically when the primary hits a 429
+  openaiApiKey2:   process.env.OPENAI_API_KEY_2  ?? null,
+  geminiApiKey2:   process.env.GEMINI_API_KEY_2  ?? null,
 
   // ── Vector Database (Qdrant) ──────────────────────────────────────────────
   qdrantUrl:        process.env.QDRANT_URL         ?? null,
@@ -53,8 +57,12 @@ const config = {
   cacheResponseMax:     parseInt(process.env.CACHE_RESPONSE_MAX     ?? '500',     10),
 
   // ── Web Search Engine ─────────────────────────────────────────────────────
-  tavilyApiKey:       process.env.TAVILY_API_KEY        ?? null,
-  braveSearchApiKey:  process.env.BRAVE_SEARCH_API_KEY  ?? null,
+  // Primary keys
+  tavilyApiKey:        process.env.TAVILY_API_KEY          ?? null,
+  braveSearchApiKey:   process.env.BRAVE_SEARCH_API_KEY    ?? null,
+  // Backup keys — rotated in automatically when the primary hits a 429
+  tavilyApiKey2:       process.env.TAVILY_API_KEY_2        ?? null,
+  braveSearchApiKey2:  process.env.BRAVE_SEARCH_API_KEY_2  ?? null,
   googleCseApiKey:    process.env.GOOGLE_CSE_API_KEY    ?? null,
   googleCseCx:        process.env.GOOGLE_CSE_CX         ?? null,
   serpapiApiKey:      process.env.SERPAPI_API_KEY       ?? null,
