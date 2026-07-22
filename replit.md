@@ -139,6 +139,34 @@ await broadcast.recoverIncomplete(null, discordClient);
 - Cron registration in `tasks/index.js`
 - Per-type handler registration for each live notification type (milestone, warning, greeting, etc.)
 
+### Operation — Health Supervisor (BUILT)
+
+Independent pipeline supervisor. Runs every 5 minutes, observes all pipeline stages, and escalates to Discord via Broadcast/Announcer on Critical/Failed/Investigation Required decisions.
+
+| Department | File | Responsibility |
+|------------|------|---------------|
+| Investigator | `Operation/Investigator/investigator.js` | Observes taskRegistry, syncStatus, timelineStatus, memory — produces InvestigationRecords |
+| Logger | `Operation/Logger/logger.js` | Formats records into OperationalLogEntry; emits to `core/log.js` |
+| Manager | `Operation/Manager/manager.js` | Evaluates entries; emits HealthDecision; routes Critical/Failed/Investigation Required to Announcer |
+| Entry Point | `Operation/operation.js` | `runOperationCycle()` — wired into tasks/index.js on `*/5 * * * *` |
+
+**Core infrastructure** (built as part of Operation):
+
+| File | Purpose |
+|------|---------|
+| `core/log.js` | Structured JSON logger — `log.info/warn/error/debug` |
+| `core/taskRegistry.js` | Per-task execution stats (registerTask, recordTaskStart, recordTaskEnd, getAllTaskStats) |
+| `core/health.js` | Runtime health snapshot — memory, uptime, task stats |
+| `core/errors.js` | `safeRun()` (swallow errors) and `withRetry()` (linear backoff) |
+| `tasks/index.js` | `schedule(name, cronExpr, fn)` + `start(client)` — cron interval runner |
+
+**Wiring:** `Distribution/Discord/events/ready.js` calls `schedule('operation', '*/5 * * * *', runOperationCycle)` then `start(client)` on bot ready.
+
+Run Operation tests:
+```bash
+node Operation/test/pipeline.test.js
+```
+
 ## User Preferences
 
 - Follow the existing governance document format for all new docs.
