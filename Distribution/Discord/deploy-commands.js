@@ -195,8 +195,6 @@ const testMilestone = new SlashCommandBuilder()
   .setName('test_milestone')
   .setDescription('Preview a milestone announcement image without posting it (ephemeral)')
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-  .addUserOption(o => o.setName('member').setDescription('Discord member to preview for'))
-  .addStringOption(o => o.setName('trainer').setDescription('Uma.moe trainer name'))
   .addStringOption(o => o
     .setName('milestone')
     .setDescription('Milestone type to preview')
@@ -207,7 +205,9 @@ const testMilestone = new SlashCommandBuilder()
       { name: '10M fans',  value: '10000000'   },
       { name: '50M fans',  value: '50000000'   },
       { name: '100M fans', value: '100000000'  },
-    ));
+    ))
+  .addUserOption(o => o.setName('member').setDescription('Discord member to preview for'))
+  .addStringOption(o => o.setName('trainer').setDescription('Uma.moe trainer name'));
 
 const timelineSetup = new SlashCommandBuilder()
   .setName('timeline_setup')
