@@ -14,7 +14,7 @@
 import log from '../core/log.js';
 
 // Minimum chunks to preserve even when trimming for token budget
-const MIN_CHUNKS = parseInt(process.env.RAG_MIN_CHUNKS ?? '3', 10);
+const MIN_CHUNKS = 3;
 
 // ---------------------------------------------------------------------------
 // Types (JSDoc)

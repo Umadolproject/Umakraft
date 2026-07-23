@@ -15,6 +15,7 @@ process.on('unhandledRejection', (reason) => {
 });
 
 import { Client, Collection, GatewayIntentBits } from 'discord.js';
+import { DISCORD_CLIENT_ID } from '../../core/botConfig.js';
 import { readdirSync }  from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join, dirname } from 'node:path';
@@ -45,7 +46,7 @@ healthServer.listen(PORT, '0.0.0.0', () => {
 // ─── Environment validation ────────────────────────────────────────────────────
 console.log('[startup] Checking required environment variables...');
 
-const { DISCORD_TOKEN, DISCORD_CLIENT_ID, DISCORD_GUILD_ID } = process.env;
+const { DISCORD_TOKEN } = process.env;
 
 if (!DISCORD_TOKEN) {
   console.error('[startup] FATAL: DISCORD_TOKEN is not set — add it to Railway Variables');
@@ -54,7 +55,7 @@ if (!DISCORD_TOKEN) {
   throw new Error('Missing DISCORD_TOKEN');
 }
 if (!DISCORD_CLIENT_ID) {
-  console.error('[startup] FATAL: DISCORD_CLIENT_ID is not set — add it to Railway Variables');
+  console.error('[startup] FATAL: DISCORD_CLIENT_ID is not set — edit core/botConfig.js');
   setTimeout(() => process.exit(1), 2000);
   throw new Error('Missing DISCORD_CLIENT_ID');
 }

@@ -30,6 +30,7 @@
 import * as archiveInspector   from '../archive-inspector/archiveInspector.js';
 import * as archiveTransporter from '../archive_transporter/archiveTransporter.js';
 import * as archive             from '../Archive/archive.js';
+import { CONFIGURED_CIRCLES as DEFAULT_CIRCLES } from '../../core/botConfig.js';
 
 // ─── Logging ──────────────────────────────────────────────────────────────────
 
@@ -74,9 +75,7 @@ export function setConfiguredCircles(circleIds) {
  */
 export function getConfiguredCircles() {
   if (_configuredCircles) return _configuredCircles;
-  const env = process.env.CONFIGURED_CIRCLES;
-  if (env) return env.split(',').map(s => s.trim()).filter(Boolean);
-  return [];
+  return [...DEFAULT_CIRCLES];
 }
 
 // ─── Fetch registry ───────────────────────────────────────────────────────────

@@ -53,12 +53,6 @@ class HuggingFaceModel {
       log.info(`[AI/LocalModel] Loading "${this._modelId}" (q4 quantised)…`);
       const { pipeline, env } = await import('@huggingface/transformers');
 
-      // Use the default cache dir; set HF_HOME in Railway to a persistent volume
-      // so the model survives redeploys without re-downloading.
-      if (process.env.HF_HOME) {
-        env.cacheDir = process.env.HF_HOME;
-      }
-
       this._pipeline = await pipeline('text-generation', this._modelId, {
         dtype:  'q4',
         device: 'cpu',
@@ -113,8 +107,7 @@ let _model = null;
 /** @returns {HuggingFaceModel} */
 function getModel() {
   if (!_model) {
-    const modelId = process.env.AI_LOCAL_MODEL ?? DEFAULT_MODEL_ID;
-    _model = new HuggingFaceModel(modelId);
+    _model = new HuggingFaceModel(DEFAULT_MODEL_ID);
   }
   return _model;
 }

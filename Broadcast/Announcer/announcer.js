@@ -29,6 +29,7 @@
  */
 
 import * as archive from '../Archive/archive.js';
+import { OPS_CHANNEL_ID } from '../../core/botConfig.js';
 
 // ─── Logging ──────────────────────────────────────────────────────────────────
 
@@ -372,7 +373,6 @@ export async function announceOperationAlert({ decision, summary, affectedSubjec
     return;
   }
 
-  const OPS_CHANNEL_ID = process.env.OPS_CHANNEL_ID;
   if (!OPS_CHANNEL_ID) {
     log('warn', 'announceOperationAlert: OPS_CHANNEL_ID not configured — alert logged only');
     return;

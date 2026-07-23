@@ -18,6 +18,7 @@ import { assemble as assemblePrompt }                         from '../../../AI/
 import { generate as apiGenerate }                            from '../../../AI/APIProvider.js';
 import { validate }                                           from '../../../AI/ResponseValidator.js';
 import { answer as localAnswer }                              from '../../../AI/aiService.js';
+import config                                                 from '../../../AI/Configuration.js';
 import log                                                    from '../../../core/log.js';
 
 // Discord message content cap
@@ -117,7 +118,7 @@ export async function aiCommand(payload) {
   }
 
   // ── Local AI provider — bypass cloud pipeline entirely ───────────────────
-  if (process.env.AI_PROVIDER === 'local') {
+  if (config.aiProvider === 'local') {
     return localAnswer({ query, subcommand, interaction, userId: payload.userId });
   }
 

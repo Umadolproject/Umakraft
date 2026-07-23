@@ -715,7 +715,6 @@ const PUPPETEER_ARGS = [
 // dependencies automatically). Falls back to Puppeteer's own bundled Chrome.
 const CHROMIUM_CANDIDATES = [
   '/nix/store/qa9cnw4v5xkxyip6mb9kxqfq1z4x2dx1-chromium-138.0.7204.100/bin/chromium',
-  process.env.PUPPETEER_EXECUTABLE_PATH,
 ];
 const CHROMIUM_PATH = CHROMIUM_CANDIDATES.find(p => p && existsSync(p)) ?? undefined;
 

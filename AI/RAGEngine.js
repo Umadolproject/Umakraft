@@ -13,8 +13,8 @@ import { embed } from './APIProvider.js';
 import { search } from './VectorDatabase.js';
 
 // Config values for this module
-const MAX_CONTEXT_TOKENS = parseInt(process.env.RAG_MAX_CONTEXT_TOKENS ?? '6000', 10);
-const MIN_CHUNKS         = parseInt(process.env.RAG_MIN_CHUNKS         ?? '3',    10);
+const MAX_CONTEXT_TOKENS = 6000;
+const MIN_CHUNKS         = 3;
 
 // ---------------------------------------------------------------------------
 // Public API

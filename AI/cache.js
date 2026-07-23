@@ -12,8 +12,8 @@
 import { createHash } from 'node:crypto';
 import log from '../core/log.js';
 
-const MAX_ENTRIES = parseInt(process.env.LOCAL_CACHE_MAX   ?? '200',      10);
-const TTL_MS      = parseInt(process.env.LOCAL_CACHE_TTL_MS ?? '3600000', 10); // 1 hour
+const MAX_ENTRIES = 200;
+const TTL_MS      = 3_600_000; // 1 hour
 
 /** @type {Map<string, { text: string, expiresAt: number }>} */
 const _store = new Map();

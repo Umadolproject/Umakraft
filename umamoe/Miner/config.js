@@ -9,13 +9,13 @@
  */
 
 export const API_CONFIG = {
-  baseUrl: process.env.UMA_MOE_API_BASE_URL || 'https://uma.moe/api',
-  timeoutMs: parseInt(process.env.API_TIMEOUT_MS || '30000', 10),
-  maxRetries: parseInt(process.env.API_MAX_RETRIES || '3', 10),
-  initialBackoffMs: parseInt(process.env.API_RETRY_BACKOFF_MS || '1000', 10),
-  maxBackoffMs: 60000,
+  baseUrl:          'https://uma.moe/api',
+  timeoutMs:        30_000,
+  maxRetries:       3,
+  initialBackoffMs: 1_000,
+  maxBackoffMs:     60_000,
   backoffMultiplier: 2,
-  jitterRange: 0.1, // ±10% random variance
+  jitterRange:      0.1, // ±10% random variance
 };
 
 /**

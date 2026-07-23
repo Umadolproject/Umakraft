@@ -8,6 +8,7 @@
 // Required secrets: DISCORD_TOKEN, DISCORD_CLIENT_ID, DISCORD_GUILD_ID (guild mode only)
 
 import { REST, Routes, SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
+import { DISCORD_CLIENT_ID, DISCORD_GUILD_ID } from '../../core/botConfig.js';
 
 const global = process.argv.includes('--global');
 
@@ -344,11 +345,11 @@ const commands = [
 
 // ─── Deploy ────────────────────────────────────────────────────────────────────
 
-const { DISCORD_TOKEN, DISCORD_CLIENT_ID, DISCORD_GUILD_ID } = process.env;
+const { DISCORD_TOKEN } = process.env;
 
 if (!DISCORD_TOKEN)     throw new Error('Missing DISCORD_TOKEN secret');
-if (!DISCORD_CLIENT_ID) throw new Error('Missing DISCORD_CLIENT_ID secret');
-if (!global && !DISCORD_GUILD_ID) throw new Error('Missing DISCORD_GUILD_ID secret (or pass --global)');
+if (!DISCORD_CLIENT_ID) throw new Error('DISCORD_CLIENT_ID is not set — edit core/botConfig.js');
+if (!global && !DISCORD_GUILD_ID) throw new Error('DISCORD_GUILD_ID is not set — edit core/botConfig.js');
 
 const rest = new REST().setToken(DISCORD_TOKEN);
 
