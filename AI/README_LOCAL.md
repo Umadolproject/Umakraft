@@ -47,11 +47,11 @@ Any model on HuggingFace Hub that supports `text-generation` and a chat template
 | Component | RAM |
 |-----------|-----|
 | Node.js + Discord.js | ~150 MB |
-| SmolLM2-360M q4 | ~200 MB |
+| SmolLM2-135M q4 | ~100 MB |
 | Puppeteer (peak, image commands) | ~100 MB |
 | **Total** | **~450 MB** — safe margin |
 
-For tighter fit use `SmolLM2-135M-Instruct` (~100 MB).
+For a larger response model, set `AI_LOCAL_MODEL=HuggingFaceTB/SmolLM2-360M-Instruct`.
 
 ## Model cache (avoid re-downloading on redeploy)
 

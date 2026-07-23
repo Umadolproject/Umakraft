@@ -14,8 +14,9 @@
 // The transformers.js pipeline applies the model's own chat template.
 
 import log from '../core/log.js';
+import config from './Configuration.js';
 
-const DEFAULT_MODEL_ID = 'HuggingFaceTB/SmolLM2-360M-Instruct';
+const DEFAULT_MODEL_ID = 'HuggingFaceTB/SmolLM2-135M-Instruct';
 
 // ---------------------------------------------------------------------------
 // HuggingFaceModel — wraps transformers.js text-generation pipeline
@@ -116,7 +117,8 @@ let _model = null;
 /** @returns {HuggingFaceModel} */
 function getModel() {
   if (!_model) {
-    _model = new HuggingFaceModel(DEFAULT_MODEL_ID);
+    const modelId = process.env.AI_LOCAL_MODEL || config.localModelId || DEFAULT_MODEL_ID;
+    _model = new HuggingFaceModel(modelId);
   }
   return _model;
 }

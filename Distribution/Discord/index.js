@@ -13,6 +13,16 @@ process.on('unhandledRejection', (reason) => {
   console.error('[FATAL] Unhandled promise rejection:', reason);
   process.exit(1);
 });
+for (const signal of ['SIGTERM', 'SIGINT']) {
+  process.on(signal, () => {
+    const memory = process.memoryUsage();
+    console.warn(
+      `[shutdown] Received ${signal} — rss=${memory.rss} ` +
+      `heap=${memory.heapUsed}/${memory.heapTotal}`
+    );
+    process.exit(0);
+  });
+}
 
 import { Client, Collection, GatewayIntentBits } from 'discord.js';
 import { DISCORD_CLIENT_ID } from '../../core/botConfig.js';

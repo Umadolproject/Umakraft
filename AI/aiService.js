@@ -25,6 +25,7 @@ import { get as cacheGet, set as cacheSet } from './cache.js';
 import log from '../core/log.js';
 
 const DISCORD_MAX = 2000;
+let _initializationPromise = null;
 
 // ---------------------------------------------------------------------------
 // Startup
@@ -35,10 +36,16 @@ const DISCORD_MAX = 2000;
  * Called once from RepositoryEngine.js at bot startup when AI_PROVIDER=local.
  * Non-fatal — failures are logged, not thrown.
  */
-export async function initialize() {
-  await initDocs();   // fast — reads files from disk
-  loadModel();        // intentionally not awaited; runs in background
-  log.info('[AI/LocalService] Initializing — doc index ready, model loading in background.');
+export function initialize() {
+  if (_initializationPromise) return _initializationPromise;
+
+  _initializationPromise = (async () => {
+    await initDocs();   // fast — reads files from disk
+    void loadModel();    // intentionally not awaited; runs in background
+    log.info('[AI/LocalService] Initializing — doc index ready, model loading in background.');
+  })();
+
+  return _initializationPromise;
 }
 
 // ---------------------------------------------------------------------------

@@ -24,7 +24,9 @@ const config = {
   // 'local' — SmolLM2 running in-process via @huggingface/transformers
   // 'cloud' — OpenAI (complex) + Gemini (simple) via API keys
   aiProvider:   'local',
-  localModelId: 'HuggingFaceTB/SmolLM2-360M-Instruct',
+  // The 135M quantised model keeps Railway's bot process comfortably below
+  // constrained memory limits. Override with AI_LOCAL_MODEL when needed.
+  localModelId: process.env.AI_LOCAL_MODEL || 'HuggingFaceTB/SmolLM2-135M-Instruct',
 
   // ── API Provider — Model Routing (cloud mode only) ────────────────────────
   complexModel:     'gpt-4o-mini',

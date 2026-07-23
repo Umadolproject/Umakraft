@@ -21,4 +21,6 @@ Set `AI_PROVIDER=local` to bypass the entire cloud pipeline (OpenAI/Gemini/Qdran
 
 **Why:** Railway startup otherwise logs `EACCES: permission denied, mkdir '/app/node_modules/@huggingface/transformers/.cache'` and the local model never becomes ready.
 
-**Memory (SmolLM2-360M q4):** Node+Discord ~150MB + model ~200MB + Puppeteer peak ~100MB = ~450MB. Safe within 1GB.
+**Memory:** Railway defaults to SmolLM2-135M-Instruct q4 to reduce restart/OOM risk; use `AI_LOCAL_MODEL` to opt into a larger model when the deployment has enough memory.
+
+**Why:** The 360M model reached `Model ready` but Railway repeatedly restarted the container afterward, with no application exception in the logs.
