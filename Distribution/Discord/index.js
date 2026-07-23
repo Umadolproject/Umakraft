@@ -30,7 +30,37 @@ const PORT = parseInt(process.env.PORT ?? '3000', 10);
 let botReady = false;
 
 const healthServer = createServer((req, res) => {
-  if (req.url === '/health' || req.url === '/') {
+  if (req.url === '/') {
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    res.end(`<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>UmaKraft Bot</title>
+    <style>
+      :root { color-scheme: dark; font-family: system-ui, sans-serif; }
+      body { margin: 0; min-height: 100vh; display: grid; place-items: center;
+             background: #111827; color: #f9fafb; }
+      main { width: min(36rem, calc(100% - 3rem)); padding: 2.5rem;
+             border: 1px solid #374151; border-radius: 1rem;
+             background: #1f2937; box-shadow: 0 1rem 3rem #0005; }
+      h1 { margin-top: 0; }
+      .status { color: #86efac; font-weight: 700; }
+      p { color: #d1d5db; line-height: 1.6; }
+      code { color: #bfdbfe; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>UmaKraft Bot</h1>
+      <p class="status">Service online</p>
+      <p>Discord bot status: <strong>${botReady ? 'ready' : 'starting'}</strong></p>
+      <p>For machine-readable status, visit <code>/health</code>.</p>
+    </main>
+  </body>
+</html>`);
+  } else if (req.url === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ status: 'ok', botReady }));
   } else {

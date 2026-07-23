@@ -1,0 +1,32 @@
+2026-07-23T13:33:29.153271021Z [inf]  Starting Container
+2026-07-23T13:33:29.491614404Z [inf]  [startup] Checking required environment variables...
+2026-07-23T13:33:29.491625894Z [inf]  [startup] Environment OK — DISCORD_TOKEN and DISCORD_CLIENT_ID present
+2026-07-23T13:33:29.491631584Z [inf]  [startup] Creating Discord client...
+2026-07-23T13:33:29.491636784Z [inf]  [startup] Loading event handlers...
+2026-07-23T13:33:29.491642503Z [inf]  [startup] Health server listening on 0.0.0.0:8080
+2026-07-23T13:33:29.491648833Z [inf]  [startup] Registered event: guildMemberAdd
+2026-07-23T13:33:29.491652393Z [inf]  [startup] Registered event: guildMemberRemove
+2026-07-23T13:33:29.491656113Z [inf]  [startup] Registered event: interactionCreate
+2026-07-23T13:33:29.491660043Z [inf]  [startup] Registered event: clientReady
+2026-07-23T13:33:29.491664683Z [inf]  [startup] Loading command handlers...
+2026-07-23T13:33:29.491668133Z [inf]  [startup] Loaded 30 commands
+2026-07-23T13:33:29.491671893Z [inf]  [startup] Logging in to Discord...
+2026-07-23T13:33:29.491676113Z [inf]  [startup] Login call completed — waiting for ready event
+2026-07-23T13:33:29.491679673Z [inf]  [ready] Logged in as UmaKraftCircleBot#8905 (1526549146788429894)
+2026-07-23T13:33:29.491683843Z [inf]  [ready] Serving 1 guild(s)
+2026-07-23T13:33:29.491687413Z [inf]  [AI/RepositoryEngine] Initializing — root: /app
+2026-07-23T13:33:29.491690553Z [inf]  [startup] Bot is READY — UmaKraftCircleBot#8905
+2026-07-23T13:33:29.507207685Z [inf]  [AI/DocumentSearch] Indexed 35 doc file(s).
+2026-07-23T13:33:29.507212355Z [inf]  [AI/LocalModel] Loading "HuggingFaceTB/SmolLM2-360M-Instruct" (q4 quantised)…
+2026-07-23T13:33:29.507214985Z [inf]  [AI/LocalService] Initializing — doc index ready, model loading in background.
+2026-07-23T13:33:29.507217495Z [inf]  [AI/RepositoryEngine] Local AI provider active — VDB/indexer skipped.
+2026-07-23T13:33:29.507220535Z [inf]  [ready] AI Repository Engine initialized.
+2026-07-23T13:33:29.507223775Z [inf]  [tasks] registered "operation" (*/5 * * * *)
+2026-07-23T13:33:29.507226505Z [inf]  [tasks] starting "operation" — interval=300000ms
+2026-07-23T13:33:29.507229065Z [inf]  [tasks] tick — task="operation"
+2026-07-23T13:33:29.507232545Z [inf]  [Operation] Evaluation cycle started.
+2026-07-23T13:33:29.507236215Z [dbg]  [Operation/Logger] pipeline=core stage=operation status=unknown failures=0 duration=1ms
+2026-07-23T13:33:29.507238895Z [inf]  [Operation/Logger] pipeline=runtime stage=runtime status=ok failures=0 duration=n/ams
+2026-07-23T13:33:29.507241325Z [inf]  [Operation/Manager] decision=Healthy — All systems nominal
+2026-07-23T13:33:29.507243925Z [inf]  [Operation] Cycle complete. decision=Healthy subjects=[none]
+2026-07-23T13:33:29.584465740Z [inf]  [AI/LocalModel] Using model cache: /data/.cache/huggingface
