@@ -14,8 +14,8 @@ export async function execute(client) {
   console.log(`[ready] Serving ${client.guilds.cache.size} guild(s)`);
 
   // ── AI Knowledge Service — Repository Engine ────────────────────────────
-  // Initialize once at startup: connects to VDB and indexes the repository.
-  // /ask and /ai commands degrade gracefully if this fails.
+  // Initialize lightweight AI resources at startup. The local language model
+  // is lazy-loaded by the first /ask or /ai request to keep Railway memory low.
   try {
     await initAI();
     console.log('[ready] AI Repository Engine initialized.');

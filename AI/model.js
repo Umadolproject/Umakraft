@@ -6,7 +6,7 @@
 // any other file.
 //
 // Public API:
-//   loadModel()   — pre-warm; safe to call multiple times
+//   loadModel()   — lazy-load; safe to call multiple times
 //   generate(messages, options) → { text: string }
 //
 // The messages array follows the OpenAI chat format:
@@ -124,8 +124,8 @@ function getModel() {
 }
 
 /**
- * Pre-warm the model. Call once on startup so the first user query doesn't wait.
- * Errors are caught and logged — the bot keeps running even if the model fails.
+ * Optional explicit model load. Normal AI requests use generate(), which
+ * invokes the same idempotent loader on demand.
  */
 export async function loadModel() {
   try {

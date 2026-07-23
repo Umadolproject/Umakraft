@@ -18,7 +18,7 @@
 //   initialize()                        — pre-warm model + doc index on startup
 //   answer(payload) → Discord envelope  — handles one /ai or /ask interaction
 
-import { loadModel, isModelReady, generate } from './model.js';
+import { generate } from './model.js';
 import { initialize as initDocs, search, isOnTopic } from './documentSearch.js';
 import { build as buildPrompt } from './promptBuilder.js';
 import { get as cacheGet, set as cacheSet } from './cache.js';
@@ -41,8 +41,7 @@ export function initialize() {
 
   _initializationPromise = (async () => {
     await initDocs();   // fast — reads files from disk
-    void loadModel();    // intentionally not awaited; runs in background
-    log.info('[AI/LocalService] Initializing — doc index ready, model loading in background.');
+    log.info('[AI/LocalService] Document index ready; model will load on first AI request.');
   })();
 
   return _initializationPromise;
@@ -110,17 +109,7 @@ export async function answer({ query, subcommand, interaction, userId }) {
     };
   }
 
-  // ── 3. Model readiness ────────────────────────────────────────────────────
-  if (!isModelReady()) {
-    return {
-      success:   true,
-      content:   '⏳ The AI model is still loading. Please try again in a moment.',
-      ephemeral: true,
-      interaction,
-    };
-  }
-
-  // ── 4. Document search ────────────────────────────────────────────────────
+  // ── 3. Document search ────────────────────────────────────────────────────
   let docs = [];
   try {
     const result = await search(query);

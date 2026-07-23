@@ -10,7 +10,8 @@ Set one environment variable in Railway (or `.env`):
 AI_PROVIDER=local
 ```
 
-That's it. The bot will use **SmolLM2-360M-Instruct** by default.
+That's it. The bot will use **SmolLM2-135M-Instruct** by default and load it
+only when the first AI command is used.
 
 ## How it works
 
@@ -30,6 +31,10 @@ That's it. The bot will use **SmolLM2-360M-Instruct** by default.
            └─ AI_PROVIDER=cloud  ──►  existing cloud pipeline (OpenAI / Gemini)
 ```
 
+The document index loads at bot startup. The language model is loaded lazily
+on the first `/ask` or `/ai` request and reused for subsequent requests.
+Normal Discord commands never initialize the model.
+
 ## Swapping the model
 
 Change the model without touching any other file:
@@ -47,7 +52,7 @@ Any model on HuggingFace Hub that supports `text-generation` and a chat template
 | Component | RAM |
 |-----------|-----|
 | Node.js + Discord.js | ~150 MB |
-| SmolLM2-135M q4 | ~100 MB |
+| SmolLM2-135M q4 | ~100 MB (only after first AI request) |
 | Puppeteer (peak, image commands) | ~100 MB |
 | **Total** | **~450 MB** — safe margin |
 
