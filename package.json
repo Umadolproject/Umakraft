@@ -16,6 +16,7 @@
     "test": "node umamoe/test/pipeline.test.js && node Refinery/test/pipeline.test.js && node Workshop/test/pipeline.test.js"
   },
   "dependencies": {
+    "@huggingface/transformers": "^4.2.0",
     "@qdrant/js-client-rest": "^1.18.0",
     "discord.js": "^14.27.0",
     "puppeteer": "^22.15.0"

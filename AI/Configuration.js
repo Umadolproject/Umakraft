@@ -15,6 +15,12 @@ import log from '../core/log.js';
 // ---------------------------------------------------------------------------
 
 const config = {
+  // ── AI Provider selection ─────────────────────────────────────────────────
+  // 'cloud' (default) — OpenAI + Gemini via API keys
+  // 'local'           — SmolLM2 (or AI_LOCAL_MODEL) running in-process
+  aiProvider:     process.env.AI_PROVIDER       ?? 'cloud',
+  localModelId:   process.env.AI_LOCAL_MODEL    ?? 'HuggingFaceTB/SmolLM2-360M-Instruct',
+
   // ── API Provider — Model Routing ──────────────────────────────────────────
   complexModel:       process.env.AI_COMPLEX_MODEL        ?? 'gpt-4o-mini',
   simpleModel:        process.env.AI_SIMPLE_MODEL         ?? 'gemini-1.5-flash',

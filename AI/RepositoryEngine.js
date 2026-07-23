@@ -20,6 +20,7 @@ import config from './Configuration.js';
 import { initialize as initVDB, stats as vdbStats } from './VectorDatabase.js';
 import { fullIndex, incrementalIndex } from './RepositoryIndexer.js';
 import { retrieve } from './RAGEngine.js';
+import { initialize as initLocalService } from './aiService.js';
 
 // ---------------------------------------------------------------------------
 // State
@@ -49,6 +50,14 @@ export async function initialize(rootDir) {
   _rootDir = resolve(rootDir ?? process.cwd());
 
   log.info(`[AI/RepositoryEngine] Initializing — root: ${_rootDir}`);
+
+  // Local model path — skip VDB/indexer entirely, start local AI service instead
+  if (config.aiProvider === 'local') {
+    await initLocalService();
+    _initialized = true;
+    log.info('[AI/RepositoryEngine] Local AI provider active — VDB/indexer skipped.');
+    return;
+  }
 
   // 1. Connect to / create VDB collection
   await initVDB();
