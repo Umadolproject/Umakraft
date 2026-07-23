@@ -1,0 +1,285 @@
+Based on everything you've shown me so far, I **don't think Railway is the main problem anymore**.
+
+Your logs show:
+
+* ✅ Bot logged in successfully.
+* ✅ 30 commands loaded.
+* ✅ `interactionCreate` event registered.
+* ✅ AI model loaded.
+* ✅ Bot reached the READY state. 
+
+Yet Discord says:
+
+> **The application didn't respond.**
+
+That almost always means **Discord received the interaction, but your bot never replied within 3 seconds**.
+
+---
+
+# Issues I suspect in your repository
+
+## 1. Commands are never executed
+
+Example of a broken handler:
+
+```js
+client.on("interactionCreate", async (interaction) => {
+    if (!interaction.isChatInputCommand()) return;
+
+    const command = client.commands.get(interaction.commandName);
+
+    if (!command) return;
+
+    command.execute(interaction);
+});
+```
+
+Problems:
+
+* missing `await`
+* missing `try/catch`
+
+Better:
+
+```js
+client.on("interactionCreate", async (interaction) => {
+    if (!interaction.isChatInputCommand()) return;
+
+    const command = client.commands.get(interaction.commandName);
+
+    if (!command) {
+        return interaction.reply({
+            content: "Unknown command.",
+            ephemeral: true
+        });
+    }
+
+    try {
+        await command.execute(interaction);
+    } catch (err) {
+        console.error(err);
+
+        if (interaction.deferred || interaction.replied) {
+            await interaction.editReply("An error occurred.");
+        } else {
+            await interaction.reply({
+                content: "An error occurred.",
+                ephemeral: true
+            });
+        }
+    }
+});
+```
+
+---
+
+# 2. AI commands don't defer
+
+If your AI command does something like
+
+```js
+const answer = await localAI.generate(prompt);
+
+await interaction.reply(answer);
+```
+
+Discord waits only **3 seconds**.
+
+Instead:
+
+```js
+await interaction.deferReply();
+
+const answer = await localAI.generate(prompt);
+
+await interaction.editReply(answer);
+```
+
+---
+
+# 3. Missing return
+
+Sometimes I see this:
+
+```js
+if (!user)
+    interaction.reply("No user");
+
+doSomething();
+```
+
+It should be
+
+```js
+if (!user)
+    return interaction.reply("No user");
+```
+
+Otherwise the command keeps running.
+
+---
+
+# 4. Duplicate interaction listeners
+
+Your logs repeat startup several times:
+
+```
+Loading event handlers...
+Registered interactionCreate
+```
+
+If the event is registered multiple times, commands can behave unpredictably.
+
+Make sure only **one** listener handles slash commands.
+
+---
+
+# 5. Commands never registered
+
+Even though you load
+
+```
+Loaded 30 commands
+```
+
+that doesn't mean Discord has them.
+
+If your deploy script never runs, Discord still has old commands.
+
+A deploy script should look like
+
+```js
+const rest = new REST().setToken(process.env.DISCORD_TOKEN);
+
+await rest.put(
+    Routes.applicationCommands(CLIENT_ID),
+    {
+        body: commands
+    }
+);
+```
+
+---
+
+# 6. Command exports
+
+Every command should export something like
+
+```js
+export default {
+    data,
+    async execute(interaction) {
+
+    }
+}
+```
+
+Not
+
+```js
+run()
+```
+
+unless your loader expects `run()`.
+
+---
+
+# 7. Command loader
+
+Your loader should verify
+
+```js
+if (!command.data)
+    console.warn(file);
+
+if (!command.execute)
+    console.warn(file);
+```
+
+Otherwise broken commands get loaded silently.
+
+---
+
+# 8. No logging
+
+Instead of
+
+```js
+await command.execute(interaction);
+```
+
+add logs
+
+```js
+console.log(
+    "[COMMAND]",
+    interaction.commandName,
+    interaction.user.tag
+);
+
+await command.execute(interaction);
+
+console.log(
+    "[COMMAND]",
+    "Finished"
+);
+```
+
+This tells you exactly where it hangs.
+
+---
+
+# What I would change in your repo
+
+From everything we've worked on together, I'd refactor it like this:
+
+```
+Distribution/
+    Discord/
+        Events/
+            interactionCreate.js
+
+        Commands/
+            ping.js
+            help.js
+            ask.js
+
+        Loader/
+            loadCommands.js
+
+core/
+    CommandManager.js
+```
+
+Every command would have exactly this structure:
+
+```js
+export default {
+    data,
+
+    async execute(interaction) {
+        await interaction.deferReply();
+
+        // logic
+
+        await interaction.editReply(result);
+    }
+}
+```
+
+And **all errors** would be caught by one central handler.
+
+---
+
+## I think I found the root cause
+
+The biggest clue is this:
+
+* ✅ Bot starts successfully.
+* ✅ Bot logs into Discord.
+* ✅ Commands are loaded.
+* ❌ Every slash command times out.
+
+That pattern strongly suggests **your `interactionCreate` handler is either not calling `execute()`, or the commands never call `reply()`/`deferReply()`**.
+
+Since I still have your Umakraft project context, I can do a proper code review and point out the exact files and lines that need to change. I suspect we can fix this in just a few files rather than rewriting the whole bot.
