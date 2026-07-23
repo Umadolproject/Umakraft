@@ -9,8 +9,8 @@
 
 // ── Discord application identifiers ──────────────────────────────────────────
 // Found in Discord Developer Portal → Your Application → General Information.
-export const DISCORD_CLIENT_ID = '';   // Application (Client) ID
-export const DISCORD_GUILD_ID  = '';   // Your Discord server (Guild) ID
+export const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID || '';   // Application (Client) ID
+export const DISCORD_GUILD_ID  = process.env.DISCORD_GUILD_ID || '';   // Your Discord server (Guild) ID
 
 // ── Broadcast pipeline ────────────────────────────────────────────────────────
 // IDs of the circles the Broadcast pipeline should process.
