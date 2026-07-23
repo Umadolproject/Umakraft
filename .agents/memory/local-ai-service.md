@@ -1,6 +1,6 @@
 ---
 name: Local AI service
-description: SmolLM2-360M-Instruct local model integration — architecture, activation, and swap instructions.
+description: Local Transformers.js AI integration, model selection, cache behavior, and Railway memory constraints.
 ---
 
 ## Rule
@@ -11,7 +11,7 @@ Set `AI_PROVIDER=local` to bypass the entire cloud pipeline (OpenAI/Gemini/Qdran
 **How to apply:**
 - Wire-in point: `Distribution/Coordinator/actions/aiGateway.js` — early-exit before `classify()` when `process.env.AI_PROVIDER === 'local'`, calls `AI/aiService.js`'s `answer()`.
 - Model swap: change only `AI/model.js` or set `AI_LOCAL_MODEL=<HuggingFace model ID>`. Any chat-template instruct model works.
-- Pre-warm: `RepositoryEngine.initialize()` detects `config.aiProvider === 'local'` and calls `aiService.initialize()` instead of Qdrant/indexer. Model loads in background so bot comes online fast.
+- Startup: `RepositoryEngine.initialize()` detects `config.aiProvider === 'local'` and initializes the lightweight document index instead of Qdrant/indexer. The model loads lazily on the first `/ask` or `/ai` request, then is reused.
 - Doc search: lexical (no embeddings) over `docs/` tree. Only Umacraft/Umamusume topics pass the guard.
 - Cache: `AI/cache.js` (separate from cloud `AI/Cache.js`) — SHA-256 key, LRU 200 entries, 1hr TTL.
 
@@ -21,6 +21,6 @@ Set `AI_PROVIDER=local` to bypass the entire cloud pipeline (OpenAI/Gemini/Qdran
 
 **Why:** Railway startup otherwise logs `EACCES: permission denied, mkdir '/app/node_modules/@huggingface/transformers/.cache'` and the local model never becomes ready.
 
-**Memory:** Railway defaults to SmolLM2-135M-Instruct q4 to reduce restart/OOM risk; use `AI_LOCAL_MODEL` to opt into a larger model when the deployment has enough memory.
+**Memory:** Railway defaults to SmolLM2-135M-Instruct q4 to reduce restart/OOM risk. Startup does not allocate the model; the first AI request loads it. Use `AI_LOCAL_MODEL` to opt into a larger model when the deployment has enough memory.
 
 **Why:** The 360M model reached `Model ready` but Railway repeatedly restarted the container afterward, with no application exception in the logs.
