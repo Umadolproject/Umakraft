@@ -118,6 +118,17 @@ export const client = new Client({
 
 client.commands = new Collection();
 
+// Keep a gateway-level probe separate from command routing. This is
+// intentionally registered before dynamic event handlers so a missing
+// interactionCreate log cannot be mistaken for a handler failure.
+client.on('interactionCreate', (interaction) => {
+  const commandName = interaction.isChatInputCommand?.()
+    ? `/${interaction.commandName}`
+    : `type=${interaction.type}`;
+  console.log(`[discord/raw] interactionCreate received ${commandName} id=${interaction.id}`);
+});
+console.log('[startup] Raw interaction gateway probe enabled');
+
 // ─── Load events ──────────────────────────────────────────────────────────────
 console.log('[startup] Loading event handlers...');
 
