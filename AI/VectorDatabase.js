@@ -173,6 +173,26 @@ class QdrantBackend {
     } else {
       log.info(`[AI/VectorDatabase] Qdrant collection "${this._collection}" already exists.`);
     }
+
+    // Ensure payload indexes exist for every field used in filters.
+    // createPayloadIndex is idempotent — safe to call on existing collections.
+    const indexFields = [
+      { name: 'filePath',   schema_type: 'keyword' },
+      { name: 'department', schema_type: 'keyword' },
+      { name: 'fileType',   schema_type: 'keyword' },
+    ];
+    await Promise.all(indexFields.map(({ name, schema_type }) =>
+      client.createPayloadIndex(this._collection, {
+        field_name:   name,
+        field_schema: schema_type,
+        wait:         true,
+      }).catch(err => {
+        // "already exists" responses from some Qdrant versions come back as
+        // a 4xx; ignore them so startup always succeeds.
+        if (!err?.message?.includes('already exists')) throw err;
+      })
+    ));
+    log.info(`[AI/VectorDatabase] Payload indexes ensured: ${indexFields.map(f => f.name).join(', ')}.`);
   }
 
   async upsert(points) {
@@ -218,7 +238,7 @@ class QdrantBackend {
     const results = await client.scroll(this._collection, {
       filter:       { must: [{ key: 'filePath', match: { value: filePath } }] },
       limit:        1,
-      with_payload: ['checksum'],
+      with_payload: { include: ['checksum'] },
     });
     return results.points[0]?.payload?.checksum ?? null;
   }
