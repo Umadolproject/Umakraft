@@ -42,7 +42,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # ── Puppeteer — use system Chromium ───────────────────────────────────────────
 ENV PUPPETEER_SKIP_DOWNLOAD=true \
     PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
-    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \
+    HF_HOME=/data/.cache/huggingface
 
 # ── App ────────────────────────────────────────────────────────────────────────
 WORKDIR /app
@@ -58,6 +59,8 @@ RUN npm install --omit=dev --registry https://registry.npmjs.org
 COPY . .
 
 # Run as non-root for security (node user is built into the node base image)
+RUN mkdir -p /data/.cache/huggingface \
+    && chown -R node:node /data
 USER node
 
 CMD ["node", "Distribution/Discord/index.js"]

@@ -53,6 +53,15 @@ class HuggingFaceModel {
       log.info(`[AI/LocalModel] Loading "${this._modelId}" (q4 quantised)…`);
       const { pipeline, env } = await import('@huggingface/transformers');
 
+      // Transformers.js defaults to a cache directory inside its installed
+      // package. Railway runs the app as the non-root `node` user, so that
+      // location is read-only in production. Prefer the persistent Railway
+      // volume and keep local development self-contained and writable.
+      env.cacheDir = process.env.HF_HOME
+        || `${process.cwd()}/.cache/huggingface`;
+      env.useFSCache = true;
+      log.info(`[AI/LocalModel] Using model cache: ${env.cacheDir}`);
+
       this._pipeline = await pipeline('text-generation', this._modelId, {
         dtype:  'q4',
         device: 'cpu',

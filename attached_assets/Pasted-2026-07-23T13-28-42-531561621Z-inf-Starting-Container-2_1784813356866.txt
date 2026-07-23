@@ -1,0 +1,38 @@
+2026-07-23T13:28:42.531561621Z [inf]  Starting Container
+2026-07-23T13:28:43.070755203Z [inf]  [startup] Checking required environment variables...
+2026-07-23T13:28:43.070759992Z [inf]  [startup] Environment OK — DISCORD_TOKEN and DISCORD_CLIENT_ID present
+2026-07-23T13:28:43.070765592Z [inf]  [startup] Creating Discord client...
+2026-07-23T13:28:43.070770702Z [inf]  [startup] Loading event handlers...
+2026-07-23T13:28:43.070775242Z [inf]  [startup] Health server listening on 0.0.0.0:8080
+2026-07-23T13:28:43.070780062Z [inf]  [startup] Registered event: guildMemberAdd
+2026-07-23T13:28:43.070783972Z [inf]  [startup] Registered event: guildMemberRemove
+2026-07-23T13:28:43.070787532Z [inf]  [startup] Registered event: interactionCreate
+2026-07-23T13:28:43.070791042Z [inf]  [startup] Registered event: clientReady
+2026-07-23T13:28:43.070794702Z [inf]  [startup] Loading command handlers...
+2026-07-23T13:28:43.070798062Z [inf]  [startup] Loaded 30 commands
+2026-07-23T13:28:43.070801232Z [inf]  [startup] Logging in to Discord...
+2026-07-23T13:28:43.070804142Z [inf]  [startup] Login call completed — waiting for ready event
+2026-07-23T13:28:43.070807602Z [inf]  [ready] Logged in as UmaKraftCircleBot#8905 (1526549146788429894)
+2026-07-23T13:28:43.070811092Z [inf]  [ready] Serving 1 guild(s)
+2026-07-23T13:28:43.070814892Z [inf]  [AI/RepositoryEngine] Initializing — root: /app
+2026-07-23T13:28:43.070817772Z [inf]  [startup] Bot is READY — UmaKraftCircleBot#8905
+2026-07-23T13:28:43.070820872Z [inf]  [AI/DocumentSearch] Indexed 35 doc file(s).
+2026-07-23T13:28:43.070824212Z [inf]  [AI/LocalModel] Loading "HuggingFaceTB/SmolLM2-360M-Instruct" (q4 quantised)…
+2026-07-23T13:28:43.070827812Z [inf]  [AI/LocalService] Initializing — doc index ready, model loading in background.
+2026-07-23T13:28:43.071569265Z [inf]  [Operation/Manager] decision=Healthy — All systems nominal
+2026-07-23T13:28:43.071574115Z [inf]  [Operation] Cycle complete. decision=Healthy subjects=[none]
+2026-07-23T13:28:43.071577974Z [err]  Unable to add response to browser cache: Error: EACCES: permission denied, mkdir '/app/node_modules/@huggingface/transformers/.cache'.
+2026-07-23T13:28:43.071601574Z [inf]  [AI/RepositoryEngine] Local AI provider active — VDB/indexer skipped.
+2026-07-23T13:28:43.071613144Z [inf]  [ready] AI Repository Engine initialized.
+2026-07-23T13:28:43.071618784Z [inf]  [tasks] registered "operation" (*/5 * * * *)
+2026-07-23T13:28:43.071623384Z [inf]  [tasks] starting "operation" — interval=300000ms
+2026-07-23T13:28:43.071627774Z [inf]  [tasks] tick — task="operation"
+2026-07-23T13:28:43.071632124Z [inf]  [Operation] Evaluation cycle started.
+2026-07-23T13:28:43.071636734Z [dbg]  [Operation/Logger] pipeline=core stage=operation status=unknown failures=0 duration=0ms
+2026-07-23T13:28:43.071644374Z [inf]  [Operation/Logger] pipeline=runtime stage=runtime status=ok failures=0 duration=n/ams
+2026-07-23T13:28:43.142858331Z [err]  Unable to add response to browser cache: Error: EACCES: permission denied, mkdir '/app/node_modules/@huggingface/transformers/.cache'.
+2026-07-23T13:28:43.211977589Z [err]  Unable to add response to browser cache: Error: EACCES: permission denied, mkdir '/app/node_modules/@huggingface/transformers/.cache'.
+2026-07-23T13:28:43.326990282Z [err]  Unable to add response to browser cache: Error: EACCES: permission denied, mkdir '/app/node_modules/@huggingface/transformers/.cache'.
+2026-07-23T13:28:43.403809517Z [err]  Unable to add response to browser cache: Error: EACCES: permission denied, mkdir '/app/node_modules/@huggingface/transformers/.cache'.
+2026-07-23T13:28:43.628050130Z [err]  [AI/LocalModel] Failed to load model: EACCES: permission denied, mkdir '/app/node_modules/@huggingface/transformers/.cache'
+2026-07-23T13:28:43.628052660Z [err]  [AI/LocalModel] Pre-warm failed: EACCES: permission denied, mkdir '/app/node_modules/@huggingface/transformers/.cache'
