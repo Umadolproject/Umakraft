@@ -1,0 +1,33 @@
+2026-07-23T14:27:31.798986321Z [inf]  Starting Container
+2026-07-23T14:27:34.295620874Z [inf]  [startup] Registered event: interactionCreate
+2026-07-23T14:27:34.295636312Z [inf]  [startup] Registered event: clientReady
+2026-07-23T14:27:34.295773630Z [inf]  [startup] Loading event handlers...
+2026-07-23T14:27:34.295780877Z [inf]  [startup] Checking required environment variables...
+2026-07-23T14:27:34.295787461Z [inf]  [startup] Health server listening on 0.0.0.0:8080
+2026-07-23T14:27:34.295792178Z [inf]  [startup] Environment OK — DISCORD_TOKEN and DISCORD_CLIENT_ID present
+2026-07-23T14:27:34.295800020Z [inf]  [startup] Registered event: guildMemberAdd
+2026-07-23T14:27:34.295802839Z [inf]  [startup] Creating Discord client...
+2026-07-23T14:27:34.295809586Z [inf]  [startup] Registered event: guildMemberRemove
+2026-07-23T14:27:34.295922919Z [inf]  [startup] Loading command handlers...
+2026-07-23T14:27:34.295931656Z [inf]  [startup] Loaded 30 commands
+2026-07-23T14:27:34.295936557Z [inf]  [startup] Logging in to Discord...
+2026-07-23T14:27:34.295941428Z [inf]  [startup] Login call completed — waiting for ready event
+2026-07-23T14:27:34.295946315Z [inf]  [ready] Logged in as UmaKraftCircleBot#8905 (1526549146788429894)
+2026-07-23T14:27:34.295951110Z [inf]  [ready] Serving 1 guild(s)
+2026-07-23T14:27:34.295955505Z [inf]  [AI/RepositoryEngine] Initializing — root: /app
+2026-07-23T14:27:34.295960331Z [inf]  [startup] Bot is READY — UmaKraftCircleBot#8905
+2026-07-23T14:27:34.295965295Z [inf]  [AI/DocumentSearch] Indexed 35 doc file(s).
+2026-07-23T14:27:34.295973228Z [inf]  [AI/LocalModel] Loading "HuggingFaceTB/SmolLM2-135M-Instruct" (q4 quantised)…
+2026-07-23T14:27:34.295979747Z [inf]  [AI/LocalService] Initializing — doc index ready, model loading in background.
+2026-07-23T14:27:35.572415367Z [inf]  [Operation] Cycle complete. decision=Healthy subjects=[none]
+2026-07-23T14:27:35.572426922Z [inf]  [ready] AI Repository Engine initialized.
+2026-07-23T14:27:35.572427192Z [inf]  [AI/LocalModel] Using model cache: /data/.cache/huggingface
+2026-07-23T14:27:35.572438979Z [inf]  [tasks] registered "operation" (*/5 * * * *)
+2026-07-23T14:27:35.572447536Z [inf]  [tasks] starting "operation" — interval=300000ms
+2026-07-23T14:27:35.572453429Z [inf]  [tasks] tick — task="operation"
+2026-07-23T14:27:35.572459235Z [inf]  [Operation] Evaluation cycle started.
+2026-07-23T14:27:35.572464822Z [dbg]  [Operation/Logger] pipeline=core stage=operation status=unknown failures=0 duration=1ms
+2026-07-23T14:27:35.572470132Z [inf]  [Operation/Logger] pipeline=runtime stage=runtime status=ok failures=0 duration=n/ams
+2026-07-23T14:27:35.572475363Z [inf]  [Operation/Manager] decision=Healthy — All systems nominal
+2026-07-23T14:27:35.572707682Z [inf]  [AI/RepositoryEngine] Local AI provider active — VDB/indexer skipped.
+2026-07-23T14:28:05.828072520Z [inf]  [AI/LocalModel] Model ready: HuggingFaceTB/SmolLM2-135M-Instruct
