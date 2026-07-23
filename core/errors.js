@@ -48,6 +48,9 @@ export async function withRetry(fn, { maxAttempts = 3, delayMs = 1000, context =
       return await fn();
     } catch (err) {
       lastError = err;
+      // Non-retriable errors (e.g. billing quota exhausted) should not be
+      // retried — the outcome will be identical every time.
+      if (err.isQuotaExhausted || err.isNonRetriable) throw err;
       log.warn(
         `[core/errors] withRetry attempt ${attempt}/${maxAttempts} failed` +
         ` for "${context}": ${err.message}`

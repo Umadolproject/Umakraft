@@ -215,6 +215,8 @@ async function callOpenAIEmbed(text, apiKey) {
     const body = await response.text();
     const err = new Error(`[AI/APIProvider] OpenAI Embeddings 429 rate limit: ${body}`);
     err.isRateLimit = true;
+    // insufficient_quota is a billing error — retrying will never help.
+    if (body.includes('insufficient_quota')) err.isQuotaExhausted = true;
     throw err;
   }
   if (!response.ok) {

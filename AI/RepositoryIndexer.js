@@ -382,8 +382,10 @@ async function indexFile(absPath, rootDir, forceReindex = false) {
     try {
       vector = await embed(chunkContent);
     } catch (err) {
+      // Quota exhaustion is permanent — propagate so the caller aborts the run.
+      if (err.isQuotaExhausted) throw err;
       log.warn(`[AI/RepositoryIndexer] Embedding failed for "${relPath}" chunk ${i}: ${err.message}`);
-      continue; // Log and skip — do not abort the run
+      continue; // Transient error — log and skip this chunk, keep going.
     }
 
     points.push({
@@ -481,13 +483,27 @@ export async function incrementalIndex(rootDir) {
   }
 
   let indexedCount = 0, skippedCount = 0, errorCount = 0;
+  const abort = { triggered: false };
 
-  await withConcurrency(files, config.indexerEmbedConcurrency, async (absPath) => {
-    const result = await indexFile(absPath, rootDir, false); // checksum comparison enabled
-    if (result.status === 'indexed') indexedCount++;
-    else if (result.status === 'skipped' || result.status === 'empty') skippedCount++;
-    else errorCount++;
-  });
+  try {
+    await withConcurrency(files, config.indexerEmbedConcurrency, async (absPath) => {
+      if (abort.triggered) return;
+      const result = await indexFile(absPath, rootDir, false); // checksum comparison enabled
+      if (result.status === 'indexed') indexedCount++;
+      else if (result.status === 'skipped' || result.status === 'empty') skippedCount++;
+      else errorCount++;
+    }, abort);
+  } catch (err) {
+    if (err.isQuotaExhausted) {
+      abort.triggered = true;
+      log.warn(
+        '[AI/RepositoryIndexer] Indexing aborted — OpenAI quota exhausted. ' +
+        'Add billing credits to restore vector search at next startup.'
+      );
+      return { total: files.length, indexed: indexedCount, skipped: skippedCount, errors: -1, durationMs: Date.now() - start };
+    }
+    throw err;
+  }
 
   const durationMs = Date.now() - start;
   log.info(
@@ -511,10 +527,11 @@ export async function incrementalIndex(rootDir) {
  * @param {number} concurrency
  * @param {(item: T) => Promise<void>} fn
  */
-async function withConcurrency(items, concurrency, fn) {
+async function withConcurrency(items, concurrency, fn, abort = null) {
   const queue = [...items];
   const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
     while (queue.length > 0) {
+      if (abort?.triggered) return;
       const item = queue.shift();
       await fn(item);
     }
