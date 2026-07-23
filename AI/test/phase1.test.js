@@ -56,13 +56,9 @@ await test('validate() passes with default config', () => {
 });
 
 await test('requireApiKey throws when key is missing', () => {
-  // In test environment keys are not set — expect a clear error
-  if (!process.env.OPENAI_API_KEY) {
-    assert.throws(() => requireApiKey('openai'), /OPENAI_API_KEY/);
-  }
-  if (!process.env.GEMINI_API_KEY) {
-    assert.throws(() => requireApiKey('gemini'), /GEMINI_API_KEY/);
-  }
+  // Keys are hardcoded to null in local mode — always throws
+  assert.throws(() => requireApiKey('openai'), /openaiApiKey|OPENAI_API_KEY/);
+  assert.throws(() => requireApiKey('gemini'), /geminiApiKey|GEMINI_API_KEY/);
 });
 
 // ── Security ────────────────────────────────────────────────────────────────
@@ -243,21 +239,21 @@ await test('rateLimiterStats returns expected shape', () => {
 });
 
 await test('generate() throws a clear error when keys are missing', async () => {
-  if (!process.env.OPENAI_API_KEY && !process.env.GEMINI_API_KEY) {
-    await assert.rejects(
-      () => generate('test prompt', { complexity: 'complex' }),
-      (err) => {
-        // Should mention the key or unavailability — not a cryptic internal error
-        assert.ok(
-          err.message.includes('API_KEY') ||
-          err.message.includes('unavailable') ||
-          err.message.includes('temporarily'),
-          `Unexpected error message: ${err.message}`
-        );
-        return true;
-      }
-    );
-  }
+  // Keys are hardcoded to null in local mode — always throws
+  await assert.rejects(
+    () => generate('test prompt', { complexity: 'complex' }),
+    (err) => {
+      // Should mention the key or unavailability — not a cryptic internal error
+      assert.ok(
+        err.message.includes('ApiKey') ||
+        err.message.includes('API_KEY') ||
+        err.message.includes('unavailable') ||
+        err.message.includes('temporarily'),
+        `Unexpected error message: ${err.message}`
+      );
+      return true;
+    }
+  );
 });
 
 await test('embed() returns cached vector without calling API', async () => {

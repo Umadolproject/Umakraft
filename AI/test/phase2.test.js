@@ -24,7 +24,7 @@ async function test(name, fn) {
   } catch (err) {
     console.error(`  ✗ ${name}`);
     console.error(`    ${err.message}`);
-    if (process.env.DEBUG) console.error(err.stack);
+    console.error(err.stack);
     failed++;
   }
 }

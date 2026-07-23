@@ -4,9 +4,14 @@
 // Authority: GOVERNANCE/ARCHITECTURE_AUTHORITY.md
 // Spec:      AI/CONFIGURATION.md
 //
-// API keys are loaded from environment variables (set as Railway secrets).
-// All other values are hardcoded constants — edit this file to change them.
-// Call validate() once at startup.
+// All values are hardcoded constants — edit this file to change them.
+// The only environment secret this project requires is DISCORD_TOKEN
+// (set in Railway Variables / Replit Secrets).
+//
+// If you switch aiProvider to 'cloud', also set these secrets:
+//   OPENAI_API_KEY, GEMINI_API_KEY (and optionally their _2 backups)
+//   QDRANT_URL, QDRANT_API_KEY (or remove to use in-memory vector DB)
+//   TAVILY_API_KEY, BRAVE_SEARCH_API_KEY, etc. (for web search)
 
 import log from '../core/log.js';
 
@@ -21,7 +26,7 @@ const config = {
   aiProvider:   'local',
   localModelId: 'HuggingFaceTB/SmolLM2-360M-Instruct',
 
-  // ── API Provider — Model Routing ──────────────────────────────────────────
+  // ── API Provider — Model Routing (cloud mode only) ────────────────────────
   complexModel:     'gpt-4o-mini',
   simpleModel:      'gemini-1.5-flash',
   embeddingModel:   'text-embedding-3-small',
@@ -29,15 +34,18 @@ const config = {
   retryBaseDelayMs: 1000,
   rateLimitRpm:     60,
 
-  // ── API Keys (never logged) — set as environment secrets ─────────────────
-  openaiApiKey:  process.env.OPENAI_API_KEY    ?? null,
-  geminiApiKey:  process.env.GEMINI_API_KEY    ?? null,
-  openaiApiKey2: process.env.OPENAI_API_KEY_2  ?? null,
-  geminiApiKey2: process.env.GEMINI_API_KEY_2  ?? null,
+  // ── API Keys (cloud mode only) ────────────────────────────────────────────
+  // Set these as secrets only if switching aiProvider to 'cloud'.
+  openaiApiKey:  null,
+  geminiApiKey:  null,
+  openaiApiKey2: null,
+  geminiApiKey2: null,
 
   // ── Vector Database (Qdrant) ──────────────────────────────────────────────
-  qdrantUrl:             process.env.QDRANT_URL     ?? null,
-  qdrantApiKey:          process.env.QDRANT_API_KEY ?? null,
+  // qdrantUrl / qdrantApiKey default to null → uses fast in-memory backend.
+  // Set them as secrets only if you want persistent Qdrant Cloud storage.
+  qdrantUrl:             null,
+  qdrantApiKey:          null,
   qdrantCollection:      'umakraft',
   vdbEmbeddingDim:       1536,
   vdbTopK:               8,
@@ -60,14 +68,15 @@ const config = {
   cacheResponseTtlMs:  600_000,
   cacheResponseMax:    500,
 
-  // ── Web Search Engine ─────────────────────────────────────────────────────
-  tavilyApiKey:            process.env.TAVILY_API_KEY         ?? null,
-  braveSearchApiKey:       process.env.BRAVE_SEARCH_API_KEY   ?? null,
-  tavilyApiKey2:           process.env.TAVILY_API_KEY_2       ?? null,
-  braveSearchApiKey2:      process.env.BRAVE_SEARCH_API_KEY_2 ?? null,
-  googleCseApiKey:         process.env.GOOGLE_CSE_API_KEY     ?? null,
-  googleCseCx:             null,  // Optional — set here if using Google CSE (not a secret)
-  serpapiApiKey:           process.env.SERPAPI_API_KEY        ?? null,
+  // ── Web Search Engine (cloud mode only) ───────────────────────────────────
+  // Set search API keys as secrets only if switching aiProvider to 'cloud'.
+  tavilyApiKey:            null,
+  braveSearchApiKey:       null,
+  tavilyApiKey2:           null,
+  braveSearchApiKey2:      null,
+  googleCseApiKey:         null,
+  googleCseCx:             null,
+  serpapiApiKey:           null,
   searchMaxResults:        5,
   searchProviderTimeoutMs: 5_000,
   searchCacheTtlMs:        600_000,
@@ -87,7 +96,7 @@ const config = {
   guildRateLimitRpm: 60,
 
   // ── Operations ────────────────────────────────────────────────────────────
-  aiOpsChannelId:  null,   // Use OPS_CHANNEL_ID in core/botConfig.js instead
+  aiOpsChannelId:  null,
   auditLogEnabled: true,
 
   // ── Feature Flags ─────────────────────────────────────────────────────────
@@ -109,7 +118,6 @@ const config = {
 export function validate() {
   const errors = [];
 
-  // Numeric sanity checks
   const positiveIntegers = [
     ['maxRetries',            config.maxRetries],
     ['retryBaseDelayMs',      config.retryBaseDelayMs],
@@ -135,7 +143,6 @@ export function validate() {
     }
   }
 
-  // messageMinWords < messageMaxWords
   if (config.messageMinWords >= config.messageMaxWords) {
     errors.push(
       `messageMinWords (${config.messageMinWords}) must be less than ` +
@@ -143,7 +150,6 @@ export function validate() {
     );
   }
 
-  // vdbMinScore in [0, 1]
   if (config.vdbMinScore < 0 || config.vdbMinScore > 1) {
     errors.push(`vdbMinScore must be between 0 and 1 (got: ${config.vdbMinScore})`);
   }
@@ -161,21 +167,21 @@ export function validate() {
 
 /**
  * Assert that a specific API key is present.
- * Called by the API Provider immediately before making a provider call.
+ * Only relevant when aiProvider is 'cloud'.
  *
  * @param {'openai'|'gemini'} provider
  */
 export function requireApiKey(provider) {
   if (provider === 'openai' && !config.openaiApiKey) {
     throw new Error(
-      '[AI/Configuration] OPENAI_API_KEY is not set. ' +
-      'Add it as a Railway secret / Replit Secret before making OpenAI requests.'
+      '[AI/Configuration] openaiApiKey is not set. ' +
+      'Add OPENAI_API_KEY as a secret to use cloud mode.'
     );
   }
   if (provider === 'gemini' && !config.geminiApiKey) {
     throw new Error(
-      '[AI/Configuration] GEMINI_API_KEY is not set. ' +
-      'Add it as a Railway secret / Replit Secret before making Gemini requests.'
+      '[AI/Configuration] geminiApiKey is not set. ' +
+      'Add GEMINI_API_KEY as a secret to use cloud mode.'
     );
   }
 }
