@@ -19,6 +19,7 @@
  * Dependency: puppeteer — install with `npm install puppeteer`
  */
 
+import { existsSync } from 'node:fs';
 import blueprints from '../Draftsman/Blueprint/blueprint.js';
 
 const FABRICATOR_VERSION = 'v1.0';
@@ -710,6 +711,14 @@ const PUPPETEER_ARGS = [
   '--disable-gpu',
 ];
 
+// Use the Nix-managed system Chromium when available (resolves all shared-lib
+// dependencies automatically). Falls back to Puppeteer's own bundled Chrome.
+const CHROMIUM_CANDIDATES = [
+  '/nix/store/qa9cnw4v5xkxyip6mb9kxqfq1z4x2dx1-chromium-138.0.7204.100/bin/chromium',
+  process.env.PUPPETEER_EXECUTABLE_PATH,
+];
+const CHROMIUM_PATH = CHROMIUM_CANDIDATES.find(p => p && existsSync(p)) ?? undefined;
+
 /**
  * Render an HTML string to a PNG Buffer via headless Chromium.
  *
@@ -723,6 +732,7 @@ async function renderToPng(html, canvasWidth) {
   const browser = await puppeteer.launch({
     headless: 'new',
     args: PUPPETEER_ARGS,
+    ...(CHROMIUM_PATH ? { executablePath: CHROMIUM_PATH } : {}),
   });
 
   try {
