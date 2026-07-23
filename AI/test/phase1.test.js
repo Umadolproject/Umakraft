@@ -34,11 +34,11 @@ section('Configuration');
 const { default: config, validate, requireApiKey } = await import('../Configuration.js');
 
 await test('loads default complexModel', () => {
-  assert.equal(config.complexModel, process.env.AI_COMPLEX_MODEL ?? 'gpt-4o-mini');
+  assert.equal(config.complexModel, 'gpt-4o-mini');
 });
 
 await test('loads default simpleModel', () => {
-  assert.equal(config.simpleModel, process.env.AI_SIMPLE_MODEL ?? 'gemini-1.5-flash');
+  assert.equal(config.simpleModel, 'gemini-1.5-flash');
 });
 
 await test('cacheEnabled defaults to true', () => {
