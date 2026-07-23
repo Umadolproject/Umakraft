@@ -3,7 +3,7 @@
 # Docs: https://docs.railway.app/reference/config-as-code
 
 [build]
-builder      = "dockerfile"
+builder        = "dockerfile"
 dockerfilePath = "Dockerfile"
 
 [deploy]
@@ -12,93 +12,31 @@ restartPolicyType       = "on_failure"
 restartPolicyMaxRetries = 5
 
 # ---------------------------------------------------------------------------
-# Environment variables — these appear in the Railway dashboard automatically.
-# Fill in the API keys/tokens there; never commit real secrets to this file.
+# Environment variables
+# Only secrets belong here — set them in the Railway dashboard, never commit.
+# All other configuration is hardcoded in the source files listed below.
+#
+#   core/botConfig.js     — DISCORD_CLIENT_ID, DISCORD_GUILD_ID, OPS_CHANNEL_ID
+#   AI/Configuration.js   — models, cache, search, rate limits, feature flags
+#   umamoe/Miner/config.js — API timeouts and retry settings
 # ---------------------------------------------------------------------------
 
 [variables]
 
-# ── Discord (required) ──────────────────────────────────────────────────────
-# Set DISCORD_TOKEN, DISCORD_CLIENT_ID, DISCORD_GUILD_ID in the Railway dashboard.
+# ── Runtime (set by Railway automatically — do not override) ─────────────────
+NODE_ENV = "production"
 
-# ── OpenAI (required — embeddings + GPT-4o-mini) ────────────────────────────
-# Set OPENAI_API_KEY (and optional OPENAI_API_KEY_2 backup) in the Railway dashboard.
-
-# ── Gemini (simple-tier model fallback) ─────────────────────────────────────
-# Set GEMINI_API_KEY (and optional GEMINI_API_KEY_2 backup) in the Railway dashboard.
-
-# ── Qdrant vector database (required for AI knowledge search) ───────────────
-# Set QDRANT_URL and QDRANT_API_KEY in the Railway dashboard.
-QDRANT_COLLECTION = "umakraft"
-
-# ── Web search — /ai live command (optional) ────────────────────────────────
-# Set TAVILY_API_KEY, BRAVE_SEARCH_API_KEY, GOOGLE_CSE_API_KEY, GOOGLE_CSE_CX
-# in the Railway dashboard if you want web search. Leave unset to disable.
-
-# ── uma.moe API ──────────────────────────────────────────────────────────────
-UMA_MOE_API_BASE_URL = "https://uma.moe/api"
-API_TIMEOUT_MS       = "30000"
-API_MAX_RETRIES      = "3"
-API_RETRY_BACKOFF_MS = "1000"
-
-# ── App ───────────────────────────────────────────────────────────────────────
-NODE_ENV  = "production"
-PORT      = "3000"
-BASE_PATH = "/"
-
-# ── AI models ────────────────────────────────────────────────────────────────
-AI_COMPLEX_MODEL       = "gpt-4o-mini"
-AI_SIMPLE_MODEL        = "gemini-1.5-flash"
-AI_EMBEDDING_MODEL     = "text-embedding-3-small"
-AI_MAX_RETRIES         = "3"
-AI_RETRY_BASE_DELAY_MS = "1000"
-AI_RATE_LIMIT_RPM      = "60"
-AI_USER_RATE_LIMIT_RPM  = "10"
-AI_GUILD_RATE_LIMIT_RPM = "60"
-AI_AUDIT_LOG_ENABLED   = "true"
-AI_CITATION_MODE       = "true"
-AI_CONFIDENCE_SCORE    = "false"
-AI_CONVERSATION_MEMORY = "false"
-AI_REINDEX_ON_STARTUP  = "false"
-AI_OPS_CHANNEL_ID      = ""   # optional — Discord channel ID for AI ops alerts
-
-# ── Vector DB ────────────────────────────────────────────────────────────────
-VDB_EMBEDDING_DIM      = "1536"
-VDB_TOP_K              = "8"
-VDB_MIN_SCORE          = "0.60"
-VDB_INDEX_INTERVAL_HOURS = "6"
-VDB_QUERY_CACHE_TTL_MS = "600000"
-VDB_BACKUP_PATH        = "/data/vdb_backup"
-
-# ── Indexer ───────────────────────────────────────────────────────────────────
-INDEXER_EMBED_CONCURRENCY  = "5"
-INDEXER_CHUNK_MIN_CHARS    = "50"
-INDEXER_CHUNK_TARGET_CHARS = "800"
-INDEXER_CHUNK_MAX_CHARS    = "1200"
-INDEXER_CHUNK_OVERLAP_CHARS = "100"
-
-# ── Cache ─────────────────────────────────────────────────────────────────────
-CACHE_ENABLED         = "true"
-CACHE_EMBEDDING_TTL_MS = "3600000"
-CACHE_EMBEDDING_MAX   = "1000"
-CACHE_RESPONSE_TTL_MS = "600000"
-CACHE_RESPONSE_MAX    = "500"
-
-# ── Search ────────────────────────────────────────────────────────────────────
-SEARCH_MAX_RESULTS           = "5"
-SEARCH_PROVIDER_TIMEOUT_MS   = "5000"
-SEARCH_CACHE_TTL_MS          = "600000"
-SEARCH_CONFIDENCE_FALLBACK   = "0.65"
-
-# ── Topic filter ──────────────────────────────────────────────────────────────
-TOPIC_FILTER_CONFIDENCE_THRESHOLD = "0.70"
-TOPIC_FILTER_AUDIT_LOG            = "true"
-
-# ── Message ───────────────────────────────────────────────────────────────────
-MESSAGE_MIN_WORDS        = "100"
-MESSAGE_MAX_WORDS        = "150"
-MESSAGE_MAX_REGENERATIONS = "2"
-
-# ── RAG ───────────────────────────────────────────────────────────────────────
-RAG_MIN_CHUNKS       = "3"
-RAG_MAX_CONTEXT_TOKENS = "6000"
+# ── Secrets — set these in the Railway dashboard, not here ──────────────────
+# DISCORD_TOKEN      — required
+# OPENAI_API_KEY     — optional (embeddings)
+# OPENAI_API_KEY_2   — optional (backup)
+# GEMINI_API_KEY     — optional
+# GEMINI_API_KEY_2   — optional (backup)
+# QDRANT_URL         — optional (falls back to in-memory)
+# QDRANT_API_KEY     — optional
+# TAVILY_API_KEY     — optional (web search)
+# TAVILY_API_KEY_2   — optional (backup)
+# BRAVE_SEARCH_API_KEY   — optional (web search)
+# BRAVE_SEARCH_API_KEY_2 — optional (backup)
+# GOOGLE_CSE_API_KEY — optional (web search)
+# SERPAPI_API_KEY    — optional (web search)
