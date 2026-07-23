@@ -98,3 +98,6 @@ DISCORD_CLIENT_ID = "1526549146788429894"
 [[ports]]
 localPort = 3000
 externalPort = 80
+
+[deployment]
+deploymentTarget = "cloudrun"
