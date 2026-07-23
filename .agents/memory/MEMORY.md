@@ -2,3 +2,4 @@
 - [Chrome/Puppeteer on Replit NixOS](chrome-puppeteer-nixos.md) — use Nix system chromium as executablePath; bundled puppeteer chrome missing libgbm.so.1 which cannot be resolved via installSystemDependencies.
 - [Qdrant payload indexes required](qdrant-payload-indexes.md) — newer Qdrant rejects scroll/filter queries on unindexed fields; must createPayloadIndex for filePath, department, fileType on initialize.
 - [Local AI service](local-ai-service.md) — AI_PROVIDER=local bypasses cloud pipeline; SmolLM2-360M-Instruct via @huggingface/transformers; files in AI/model.js, aiService.js, documentSearch.js, promptBuilder.js, cache.js.
+- [Discord interaction lifecycle](discord-interaction-lifecycle.md) — acknowledge slash commands centrally before slow work; dispatch responses through the original interaction object.

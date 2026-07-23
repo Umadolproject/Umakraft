@@ -128,9 +128,17 @@ for (const file of eventFiles) {
   const event = await import(join(eventsPath, file));
   if (!event.name) continue;
   if (event.once) {
-    client.once(event.name, (...args) => event.execute(...args, client));
+    client.once(event.name, (...args) => {
+      Promise.resolve(event.execute(...args, client)).catch((err) => {
+        console.error(`[discord] Unhandled ${event.name} event error:`, err);
+      });
+    });
   } else {
-    client.on(event.name, (...args) => event.execute(...args, client));
+    client.on(event.name, (...args) => {
+      Promise.resolve(event.execute(...args, client)).catch((err) => {
+        console.error(`[discord] Unhandled ${event.name} event error:`, err);
+      });
+    });
   }
   console.log(`[startup] Registered event: ${event.name}`);
 }
