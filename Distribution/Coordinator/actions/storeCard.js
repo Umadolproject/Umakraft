@@ -4,6 +4,7 @@
 
 import { processTrainer } from '../../../umamoe/pipeline.js';
 import { retrieve }       from '../../../Refinery/Depot/depot.js';
+import { upsertCard }     from '../utils/trainerCards.js';
 
 export async function storeCard(payload) {
   const { interaction, options } = payload;
@@ -34,12 +35,18 @@ export async function storeCard(payload) {
     };
   }
 
-  // ── 2. Persist to trainer_cards table with 72-hour TTL ───────────────────
-  // TODO: INSERT INTO trainer_cards (trainer_id, name, skills, stored_at, expires_at, kept)
-  //       VALUES ($1, $2, $3, NOW(), NOW() + INTERVAL '72 hours', false)
-  //       ON CONFLICT (trainer_id) DO UPDATE SET ...;
-
   const cp = depotProduct.compiledProduct;
+  const skills = cp.skills ?? [];
+  const whiteSkills = skills.filter(s => (s.level ?? s.rarity) >= 5).length;
+
+  await upsertCard({
+    trainerId,
+    name: cp.name ?? trainerId,
+    fans: cp.fans ?? 0,
+    rank: cp.rank ?? null,
+    whiteSkills,
+    skills,
+  });
 
   return {
     success:  true,
@@ -50,7 +57,8 @@ export async function storeCard(payload) {
       description: `Trainer card saved. It will expire in **72 hours** unless you run \`/keep trainer_id:${trainerId}\` to make it permanent.`,
       fields: [
         { name: 'Trainer ID', value: trainerId,          inline: true },
-        { name: 'Total Fans', value: String(cp.fans ?? 0), inline: true },
+        { name: 'Total Fans', value: (cp.fans ?? 0).toLocaleString(), inline: true },
+        { name: 'White Skills', value: String(whiteSkills), inline: true },
       ],
     },
     interaction,

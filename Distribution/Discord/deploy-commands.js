@@ -18,14 +18,14 @@ const fanGain = new SlashCommandBuilder()
   .setName('fan_gain')
   .setDescription('Show daily, weekly, and monthly fan gain + current daily ranking')
   .addUserOption(o => o.setName('member').setDescription('Discord member to look up (defaults to yourself)'))
-  .addStringOption(o => o.setName('trainer').setDescription('Uma.moe trainer name — supports autocomplete'))
+  .addStringOption(o => o.setName('trainer').setDescription('Uma.moe trainer name — type to search').setAutocomplete(true))
   .addStringOption(o => o.setName('circle').setDescription('Which circle to check (defaults to primary)'));
 
 const profile = new SlashCommandBuilder()
   .setName('profile')
   .setDescription('Full profile dashboard — gains, personal records, milestone badges, monthly history')
   .addUserOption(o => o.setName('member').setDescription('Discord member to look up (defaults to yourself)'))
-  .addStringOption(o => o.setName('trainer').setDescription('Uma.moe trainer name — includes past members'))
+  .addStringOption(o => o.setName('trainer').setDescription('Uma.moe trainer name — type to search').setAutocomplete(true))
   .addStringOption(o => o.setName('circle').setDescription('Which circle to check (defaults to primary)'));
 
 const leaderboard = new SlashCommandBuilder()
@@ -47,7 +47,7 @@ const totalFan = new SlashCommandBuilder()
   .setName('total_fan')
   .setDescription('Show lifetime total fan count and circle rank')
   .addUserOption(o => o.setName('member').setDescription('Discord member to look up (defaults to yourself)'))
-  .addStringOption(o => o.setName('trainer').setDescription('Uma.moe trainer name — supports autocomplete'))
+  .addStringOption(o => o.setName('trainer').setDescription('Uma.moe trainer name — type to search').setAutocomplete(true))
   .addStringOption(o => o.setName('circle').setDescription('Which circle to check (defaults to primary)'));
 
 const totalCircleFanGain = new SlashCommandBuilder()
@@ -85,7 +85,7 @@ const joinDate = new SlashCommandBuilder()
   .setName('joindate')
   .setDescription('Show when you (or another member) joined the circle')
   .addUserOption(o => o.setName('member').setDescription('Discord member to look up (defaults to yourself)'))
-  .addStringOption(o => o.setName('trainer').setDescription('Uma.moe trainer name'));
+  .addStringOption(o => o.setName('trainer').setDescription('Uma.moe trainer name — type to search').setAutocomplete(true));
 
 const memberList = new SlashCommandBuilder()
   .setName('memberlist')
@@ -96,7 +96,7 @@ const memberList = new SlashCommandBuilder()
 const searchTrainer = new SlashCommandBuilder()
   .setName('search_trainer')
   .setDescription('Search the trainer card database by name, rank, or skill count')
-  .addStringOption(o => o.setName('trainer').setDescription('Trainer name to search for — supports partial match'))
+  .addStringOption(o => o.setName('trainer').setDescription('Trainer name to search for — type to search').setAutocomplete(true))
   .addIntegerOption(o => o.setName('rank').setDescription('Filter by trainer rank'))
   .addIntegerOption(o => o.setName('whiteskills').setDescription('Filter by number of white skills (0–5)').setMinValue(0).setMaxValue(5));
 
@@ -190,7 +190,7 @@ const adminSetJoinDate = new SlashCommandBuilder()
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
   .addStringOption(o => o.setName('date').setDescription('New join date — YYYY-MM-DD').setRequired(true))
   .addUserOption(o => o.setName('member').setDescription('Discord member to update'))
-  .addStringOption(o => o.setName('trainer').setDescription('Uma.moe trainer name'));
+  .addStringOption(o => o.setName('trainer').setDescription('Uma.moe trainer name — type to search').setAutocomplete(true));
 
 const testMilestone = new SlashCommandBuilder()
   .setName('test_milestone')
@@ -208,7 +208,7 @@ const testMilestone = new SlashCommandBuilder()
       { name: '100M fans', value: '100000000'  },
     ))
   .addUserOption(o => o.setName('member').setDescription('Discord member to preview for'))
-  .addStringOption(o => o.setName('trainer').setDescription('Uma.moe trainer name'));
+  .addStringOption(o => o.setName('trainer').setDescription('Uma.moe trainer name — type to search').setAutocomplete(true));
 
 const timelineSetup = new SlashCommandBuilder()
   .setName('timeline_setup')
@@ -325,7 +325,8 @@ const ai = new SlashCommandBuilder()
       ))
     .addStringOption(o => o
       .setName('trainer_name')
-      .setDescription('Trainer name — required for milestone, achievement, and warning messages'))
+      .setDescription('Trainer name — required for milestone, achievement, and warning messages')
+      .setAutocomplete(true))
     .addIntegerOption(o => o
       .setName('milestone_value')
       .setDescription('Fan count milestone (e.g. 1000000) — required for milestone messages')

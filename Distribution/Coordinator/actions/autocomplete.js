@@ -75,6 +75,23 @@ async function trainerSuggestions(query) {
     });
 }
 
+// ─── Commands + option names that use trainer autocomplete ───────────────────
+//
+// value returned: String(trainer.id) — numeric trainer ID.
+// Consumers detect a pure-numeric value and skip the name-search step.
+
+const TRAINER_AUTOCOMPLETE = new Map([
+  ['link',              new Set(['trainer'])],
+  ['fan_gain',          new Set(['trainer'])],
+  ['profile',           new Set(['trainer'])],
+  ['total_fan',         new Set(['trainer'])],
+  ['joindate',          new Set(['trainer'])],
+  ['search_trainer',    new Set(['trainer'])],
+  ['admin_setjoindate', new Set(['trainer'])],
+  ['test_milestone',    new Set(['trainer'])],
+  ['ai',                new Set(['trainer_name'])],
+]);
+
 // ─── Router ───────────────────────────────────────────────────────────────────
 
 /**
@@ -86,7 +103,7 @@ async function trainerSuggestions(query) {
 export async function autocomplete({ commandName, focusedOption }) {
   const { name: optionName, value } = focusedOption;
 
-  if (commandName === 'link' && optionName === 'trainer') {
+  if (TRAINER_AUTOCOMPLETE.get(commandName)?.has(optionName)) {
     return trainerSuggestions(value);
   }
 

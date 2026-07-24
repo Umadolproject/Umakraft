@@ -1,11 +1,39 @@
 // Distribution/Coordinator/actions/circleStatus.js
 // Returns live sync status for all circles configured in this guild.
 
-export async function circleStatus(payload) {
-  const { interaction, guildId } = payload;
+import { getConfiguredCircles } from '../../../Broadcast/Broker/broker.js';
+import { retrieve }             from '../../../Refinery/Depot/depot.js';
 
-  // TODO: Query guild_circles table for all circles registered to this guild,
-  // then read latest sync records from umamoe_sync_log for each circle.
+export async function circleStatus(payload) {
+  const { interaction } = payload;
+  const circles = getConfiguredCircles();
+
+  if (circles.length === 0) {
+    return {
+      success:  true,
+      type:     'embed',
+      ephemeral: true,
+      result: {
+        title:       '📡 Circle Status',
+        description: 'No circles are configured. Set the `CONFIGURED_CIRCLES` environment variable to register circle IDs.',
+      },
+      interaction,
+    };
+  }
+
+  const fields = await Promise.all(circles.map(async (circleId) => {
+    const { product } = await retrieve(circleId);
+    let value;
+    if (product) {
+      const ts = product.storedAt ?? product.provenance?.refinedAt ?? null;
+      value = ts
+        ? `✅ Last sync: \`${ts.slice(0, 16).replace('T', ' ')} UTC\``
+        : '✅ Data present (timestamp unavailable)';
+    } else {
+      value = '⏳ No data yet — run `/admin_sync` or wait for the scheduled miner cycle';
+    }
+    return { name: `Circle \`${circleId}\``, value, inline: false };
+  }));
 
   return {
     success:  true,
@@ -13,11 +41,8 @@ export async function circleStatus(payload) {
     ephemeral: true,
     result: {
       title:       '📡 Circle Status',
-      description: 'Circle sync status will appear here once the guild configuration layer is built.',
-      fields: [
-        { name: 'Guild ID', value: guildId, inline: false },
-        { name: 'Circles',  value: 'No circles configured yet.', inline: false },
-      ],
+      description: `Showing status for **${circles.length}** configured circle${circles.length !== 1 ? 's' : ''}.`,
+      fields,
     },
     interaction,
   };

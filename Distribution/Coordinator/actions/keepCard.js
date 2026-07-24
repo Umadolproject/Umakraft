@@ -1,14 +1,24 @@
 // Distribution/Coordinator/actions/keepCard.js
 // Sets the permanent flag on a stored trainer card, preventing 72-hour auto-expiry.
 
+import { markKept } from '../utils/trainerCards.js';
+
 export async function keepCard(payload) {
   const { interaction, options } = payload;
   const { trainerId } = options;
 
-  // TODO: UPDATE trainer_cards SET kept = true, expires_at = NULL
-  //       WHERE trainer_id = $1
-  //       RETURNING name;
-  // If 0 rows updated → card not found → return TRAINER_NOT_LINKED error.
+  const result = await markKept(trainerId);
+
+  if (!result.success) {
+    return {
+      success:   false,
+      failedAt:  'Coordinator',
+      error:     'TRAINER_NOT_FOUND',
+      message:   `Trainer ID \`${trainerId}\` is not in the card database. Run \`/store trainer_id:${trainerId}\` first.`,
+      retriable: false,
+      interaction,
+    };
+  }
 
   return {
     success:  true,
@@ -16,7 +26,7 @@ export async function keepCard(payload) {
     ephemeral: true,
     result: {
       title:       `✅ Card marked as permanent`,
-      description: `Trainer ID \`${trainerId}\` will no longer expire automatically.\n\n*(Database layer pending — this confirmation is a stub.)*`,
+      description: `**${result.name}** (\`${trainerId}\`) will no longer expire automatically.`,
     },
     interaction,
   };

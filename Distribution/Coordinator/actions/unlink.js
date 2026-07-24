@@ -1,6 +1,8 @@
 // Distribution/Coordinator/actions/unlink.js
 // Removes a Discord↔trainer link for the specified member.
 
+import { removeLink } from '../utils/memberLinks.js';
+
 export async function unlink(payload) {
   const { interaction, options, guildId } = payload;
   const targetMember = options.member;
@@ -16,10 +18,18 @@ export async function unlink(payload) {
     };
   }
 
-  // TODO: DELETE FROM member_links
-  //       WHERE discord_id = $1 AND guild_id = $2
-  //       RETURNING trainer_name;
-  // If 0 rows deleted → member was not linked → return appropriate message.
+  const result = await removeLink(targetMember.id, guildId);
+
+  if (!result.success) {
+    return {
+      success: false,
+      failedAt: 'Commands',
+      error: 'NOT_LINKED',
+      message: `<@${targetMember.id}> is not linked to any Uma.moe trainer.`,
+      retriable: false,
+      interaction,
+    };
+  }
 
   return {
     success:  true,
@@ -27,7 +37,7 @@ export async function unlink(payload) {
     ephemeral: true,
     result: {
       title:       `✅ Link removed`,
-      description: `<@${targetMember.id}>'s Uma.moe link has been removed.\n\n*(Database layer pending — unlink is not persisted yet.)*`,
+      description: `<@${targetMember.id}>'s link to **${result.trainerName}** has been removed.`,
     },
     interaction,
   };

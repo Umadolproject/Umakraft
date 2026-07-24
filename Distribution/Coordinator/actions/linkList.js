@@ -1,33 +1,57 @@
 // Distribution/Coordinator/actions/linkList.js
-// Returns a paginated image of all linked members in this guild.
+// Returns a paginated embed of all linked members in this guild.
 
-import { runRankingsPipeline } from '../utils/pipelineImage.js';
+import { listLinks } from '../utils/memberLinks.js';
+
+const PAGE_SIZE = 20;
 
 export async function linkList(payload) {
-  const { options, guildId } = payload;
+  const { interaction, options, guildId } = payload;
+  const page   = Math.max(1, options.page ?? 1);
+  const offset = (page - 1) * PAGE_SIZE;
 
-  // TODO: Query member_links WHERE guild_id = guildId ORDER BY linked_at DESC
-  //       LIMIT 20 OFFSET ($page - 1) * 20
-  // Then pass the result to runRankingsPipeline with blueprintKey 'linkList'.
+  const { links, total } = await listLinks(guildId, { limit: PAGE_SIZE, offset });
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-  return runRankingsPipeline({
-    payload,
-    rankingsParams: {
-      type:    'linkList',
-      guildId,
-      page:    options.page ?? 1,
-    },
-    blueprintKey: 'linkList',
-    mapToFabricator: (cp, opts) => ({
-      blueprintKey: 'linkList',
-      meta: {
-        guildId,
-        page:        opts.page ?? 1,
-        generatedAt: new Date().toISOString(),
+  if (total === 0) {
+    return {
+      success:  true,
+      type:     'embed',
+      ephemeral: true,
+      result: {
+        title:       '🔗 Linked Members',
+        description: 'No members are linked in this guild yet. Use `/link` to connect Discord members to Uma.moe trainers.',
       },
-      entries:    cp.entries    ?? [],
-      totalPages: cp.totalPages ?? 1,
-      presentationHints: cp.presentationHints ?? {},
-    }),
+      interaction,
+    };
+  }
+
+  if (page > totalPages) {
+    return {
+      success:   false,
+      failedAt:  'Commands',
+      error:     'PIPELINE_STAGE_ERROR',
+      message:   `Page ${page} does not exist. There are only **${totalPages}** page${totalPages !== 1 ? 's' : ''}.`,
+      retriable: false,
+      interaction,
+    };
+  }
+
+  const lines = links.map((l, i) => {
+    const num      = offset + i + 1;
+    const joinInfo = l.joinDate ? ` · joined ${l.joinDate}` : '';
+    return `**${num}.** ${l.trainerName} — <@${l.discordId}> · ID \`${l.trainerId}\`${joinInfo}`;
   });
+
+  return {
+    success:  true,
+    type:     'embed',
+    ephemeral: true,
+    result: {
+      title:       `🔗 Linked Members (${total} total)`,
+      description: lines.join('\n'),
+      footer:      `Page ${page} of ${totalPages}`,
+    },
+    interaction,
+  };
 }

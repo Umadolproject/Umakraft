@@ -10,6 +10,7 @@
 import { processTrainer } from '../../../umamoe/pipeline.js';
 import { retrieve }        from '../../../Refinery/Depot/depot.js';
 import { searchTrainers }  from '../../../umamoe/Miner/miner.js';
+import { upsertLink }      from '../utils/memberLinks.js';
 
 // ─── Trainer ID resolution ────────────────────────────────────────────────────
 
@@ -46,6 +47,12 @@ export async function link(payload) {
   let resolvedId = options.trainerId ?? null;
 
   if (!resolvedId && options.trainer) {
+    if (/^\d+$/.test(options.trainer.trim())) {
+      resolvedId = options.trainer.trim();
+    }
+  }
+
+  if (!resolvedId && options.trainer && !/^\d+$/.test(options.trainer.trim())) {
     // User typed a name manually without selecting from autocomplete.
     // Attempt an exact-match lookup as a best-effort fallback.
     resolvedId = await resolveTrainerIdByName(options.trainer);
@@ -92,10 +99,12 @@ export async function link(payload) {
   const trainerName = depotProduct?.compiledProduct?.name ?? resolvedId;
 
   // ── 4. Persist the link ───────────────────────────────────────────────────
-  // TODO: UPSERT INTO member_links (discord_id, guild_id, trainer_id, trainer_name, linked_at)
-  //       VALUES ($1, $2, $3, $4, NOW())
-  //       ON CONFLICT (discord_id, guild_id) DO UPDATE SET
-  //         trainer_id = $3, trainer_name = $4, linked_at = NOW();
+  await upsertLink({
+    discordId:   targetDiscordId,
+    guildId:     interaction.guildId,
+    trainerId:   resolvedId,
+    trainerName: String(trainerName),
+  });
 
   return {
     success:  true,
@@ -103,8 +112,7 @@ export async function link(payload) {
     ephemeral: true,
     result: {
       title:       '✅ Link created',
-      description: `<@${targetDiscordId}> has been linked to **${trainerName}** (ID: \`${resolvedId}\`).\n\n` +
-                   `*(Database layer pending — link is not persisted yet.)*`,
+      description: `<@${targetDiscordId}> has been linked to **${trainerName}** (ID: \`${resolvedId}\`).`,
     },
     interaction,
   };

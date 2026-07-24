@@ -9,8 +9,7 @@
 //
 // Returns: { success: boolean, value?: string, message?: string }
 
-// TODO: Replace stubs with real database lookups once the persistence layer
-// (member_links table) is built. The function signature and return shape are final.
+import { getLinkByDiscordId, getLinkByTrainerName } from './memberLinks.js';
 
 /**
  * @param {object} options   — parsed command options from the Commands handler
@@ -24,24 +23,32 @@ export async function resolveMember(options, guildId, userId) {
     return { success: true, value: options.trainerId };
   }
 
-  // 2. Trainer name — TODO: query member_links WHERE trainer_name = options.trainer AND guild_id = guildId
+  // 2. Trainer name (or autocomplete-selected ID)
   if (options.trainer) {
-    // STUB: return not-implemented until database layer is ready
+    if (/^\d+$/.test(options.trainer.trim())) {
+      return { success: true, value: options.trainer.trim() };
+    }
+    const link = await getLinkByTrainerName(options.trainer, guildId);
+    if (link) return { success: true, value: link.trainerId };
     return {
       success: false,
-      message: `Trainer name lookup not yet implemented. Provide \`trainer_id\` directly for now.`,
+      message: `No linked member found with trainer name **"${options.trainer}"**. Use \`/link\` to connect a Discord member to that trainer, or provide \`trainer_id\` directly.`,
     };
   }
 
-  // 3. Discord member — TODO: query member_links WHERE discord_id = options.member.id AND guild_id = guildId
+  // 3. Discord member
   if (options.member) {
+    const link = await getLinkByDiscordId(options.member.id, guildId);
+    if (link) return { success: true, value: link.trainerId };
     return {
       success: false,
-      message: `Member lookup not yet implemented. Provide \`trainer_id\` directly for now.`,
+      message: `<@${options.member.id}> has not been linked to an Uma.moe account yet. Ask an admin to use \`/link\`.`,
     };
   }
 
-  // 4. Self — TODO: query member_links WHERE discord_id = userId AND guild_id = guildId
+  // 4. Self
+  const link = await getLinkByDiscordId(userId, guildId);
+  if (link) return { success: true, value: link.trainerId };
   return {
     success: false,
     message: `You have not been linked to an Uma.moe account yet. Ask an admin to use \`/link\` for you.`,

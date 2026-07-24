@@ -1,7 +1,8 @@
 // Distribution/Coordinator/actions/setTimezone.js
 // Persists the user's IANA timezone preference for greeting messages.
 
-// Basic IANA zone validation via Intl — works without any external package.
+import { setTimezone as persistTimezone } from '../utils/userPreferences.js';
+
 function isValidTimezone(tz) {
   try {
     Intl.DateTimeFormat(undefined, { timeZone: tz });
@@ -20,15 +21,20 @@ export async function setTimezone(payload) {
       success:   false,
       failedAt:  'Commands',
       error:     'PIPELINE_STAGE_ERROR',
-      message:   `Invalid IANA timezone: ${timezone}`,
+      message:   `\`${timezone}\` is not a valid IANA timezone. Examples: \`Europe/Amsterdam\`, \`Asia/Tokyo\`, \`America/New_York\`.`,
       retriable: false,
       interaction,
     };
   }
 
-  // TODO: UPSERT INTO user_preferences (discord_id, guild_id, timezone)
-  //       VALUES ($1, $2, $3)
-  //       ON CONFLICT (discord_id, guild_id) DO UPDATE SET timezone = $3;
+  await persistTimezone(userId, guildId, timezone);
+
+  const sampleTime = new Intl.DateTimeFormat('en-GB', {
+    timeZone: timezone,
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZoneName: 'short',
+  }).format(new Date());
 
   return {
     success:  true,
@@ -36,7 +42,7 @@ export async function setTimezone(payload) {
     ephemeral: true,
     result: {
       title:       `✅ Timezone set`,
-      description: `Your timezone has been set to **${timezone}**. Greeting messages will now use your local time.\n\n*(Database layer pending — this confirmation is a stub.)*`,
+      description: `Your timezone has been set to **${timezone}**.\nCurrent local time: **${sampleTime}**\n\nGreeting messages will now use your local time.`,
     },
     interaction,
   };

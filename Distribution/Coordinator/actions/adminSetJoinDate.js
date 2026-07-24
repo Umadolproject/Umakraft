@@ -1,15 +1,56 @@
 // Distribution/Coordinator/actions/adminSetJoinDate.js
 // Manually overrides a member's circle join date in the database.
 
+import { getLinkByDiscordId, getLinkByTrainerId, getLinkByTrainerName, updateJoinDate } from '../utils/memberLinks.js';
+
 export async function adminSetJoinDate(payload) {
   const { interaction, options, guildId } = payload;
   const { date, member, trainer } = options;
 
-  const targetLabel = member ? `<@${member.id}>` : `**${trainer}**`;
+  if (!member && !trainer) {
+    return {
+      success:   false,
+      failedAt:  'Commands',
+      error:     'PIPELINE_STAGE_ERROR',
+      message:   'Please provide either a Discord member or a trainer name.',
+      retriable: false,
+      interaction,
+    };
+  }
 
-  // TODO: Resolve Discord member or trainer name → trainer_id via member_links.
-  // TODO: UPDATE member_links SET join_date = $1 WHERE guild_id = $2 AND (discord_id = $3 OR trainer_name = $4);
-  // If 0 rows updated → member not linked → return MEMBER_NOT_LINKED error.
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return {
+      success:   false,
+      failedAt:  'Commands',
+      error:     'PIPELINE_STAGE_ERROR',
+      message:   `Invalid date format: \`${date}\`. Use **YYYY-MM-DD**.`,
+      retriable: false,
+      interaction,
+    };
+  }
+
+  let link;
+  if (member) {
+    link = await getLinkByDiscordId(member.id, guildId);
+  } else if (/^\d+$/.test(trainer.trim())) {
+    link = await getLinkByTrainerId(trainer.trim(), guildId);
+  } else {
+    link = await getLinkByTrainerName(trainer, guildId);
+  }
+
+  if (!link) {
+    const label = member ? `<@${member.id}>` : `**${trainer}**`;
+    return {
+      success:   false,
+      failedAt:  'Coordinator',
+      error:     'MEMBER_NOT_LINKED',
+      message:   `${label} is not linked to any Uma.moe trainer in this guild. Use \`/link\` first.`,
+      retriable: false,
+      interaction,
+    };
+  }
+
+  await updateJoinDate(link.discordId, guildId, date);
 
   return {
     success:  true,
@@ -17,7 +58,7 @@ export async function adminSetJoinDate(payload) {
     ephemeral: true,
     result: {
       title:       `✅ Join date updated`,
-      description: `${targetLabel}'s join date has been set to **${date}**.\n\n*(Database layer pending — not persisted yet.)*`,
+      description: `**${link.trainerName}** (<@${link.discordId}>) join date set to **${date}**.`,
     },
     interaction,
   };
