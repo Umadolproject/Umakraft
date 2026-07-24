@@ -60,8 +60,14 @@ function failure(error, message, severity, retriable, context = {}) {
 async function fetchWithTimeout(url, options = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), API_CONFIG.timeoutMs);
+
+  const headers = { ...(options.headers ?? {}) };
+  if (API_CONFIG.apiKey) {
+    headers['Authorization'] = `Bearer ${API_CONFIG.apiKey}`;
+  }
+
   try {
-    const response = await fetch(url, { ...options, signal: controller.signal });
+    const response = await fetch(url, { ...options, headers, signal: controller.signal });
     return response;
   } finally {
     clearTimeout(timer);

@@ -9,7 +9,8 @@
  */
 
 export const API_CONFIG = {
-  baseUrl:          'https://uma.moe/api',
+  baseUrl:          process.env.UMA_MOE_API_BASE_URL ?? 'https://uma.moe/api',
+  apiKey:           process.env.UMA_MOE_API_KEY ?? '',
   timeoutMs:        30_000,
   maxRetries:       3,
   initialBackoffMs: 1_000,
