@@ -1,5 +1,5 @@
 // Distribution/Discord/deploy-commands.js
-// Registers all 28 slash commands with the Discord API.
+// Registers all 32 slash commands with the Discord API.
 //
 // Usage:
 //   node Distribution/Discord/deploy-commands.js          — guild commands (instant, dev)

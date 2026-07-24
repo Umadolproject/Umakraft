@@ -34,6 +34,14 @@ export async function send(interaction, payload, { ephemeral = false, followUp =
       return;
     }
 
+    if (err.code === 40060) {
+      // Interaction was already acknowledged — this can happen if a handler
+      // bypasses the proxy or if Discord.js fires a duplicate ack. Swallow
+      // it silently so the user still sees the first reply.
+      log.warn('[Dispatcher/send] Interaction already acknowledged (40060) — ignoring duplicate');
+      return;
+    }
+
     log.error(`[Dispatcher/send] Discord API error method=${method} code=${err.code ?? 'unknown'} message=${err.message}`);
     throw err;
   }

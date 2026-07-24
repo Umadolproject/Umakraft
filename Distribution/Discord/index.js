@@ -9,9 +9,12 @@ process.on('uncaughtException', (err) => {
   console.error('[FATAL] Uncaught exception:', err);
   process.exit(1);
 });
+// Log unhandled rejections but do NOT exit — Discord.js reconnection logic and
+// network interruptions can surface transient rejections that do not indicate
+// an unrecoverable state. Exiting here consumes Railway's restartPolicyMaxRetries
+// for every dropped packet or transient API error.
 process.on('unhandledRejection', (reason) => {
-  console.error('[FATAL] Unhandled promise rejection:', reason);
-  process.exit(1);
+  console.error('[WARN] Unhandled promise rejection (non-fatal):', reason);
 });
 for (const signal of ['SIGTERM', 'SIGINT']) {
   process.on(signal, () => {
@@ -72,8 +75,12 @@ const healthServer = createServer((req, res) => {
   </body>
 </html>`);
   } else if (req.url === '/health') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ status: 'ok', botReady, discordConfigured }));
+    // Return 503 when Discord is configured but the bot is not yet ready.
+    // This lets Railway's health check detect a broken gateway connection
+    // instead of always seeing 200 and assuming the bot is healthy.
+    const httpStatus = discordConfigured && !botReady ? 503 : 200;
+    res.writeHead(httpStatus, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ status: httpStatus === 200 ? 'ok' : 'starting', botReady, discordConfigured }));
   } else {
     res.writeHead(404);
     res.end('Not found');
@@ -165,18 +172,38 @@ if (discordConfigured) {
 
   console.log('[startup] Logging in to Discord...');
 
+  // Update the health-server flag when the bot becomes ready.
+  // ready.js (loaded above) handles task scheduling and logging;
+  // this listener's only job is to flip the local botReady flag.
   client.once('clientReady', () => {
     botReady = true;
-    console.log(`[startup] Bot is READY — ${client.user.tag}`);
   });
 
   client.on('error', (err) => {
     console.error('[discord] Client error:', err);
   });
 
-  client.on('disconnect', () => {
+  // Discord.js v14 does not emit a 'disconnect' event on the Client.
+  // Use shardDisconnect / shardResume to track gateway connection state.
+  client.on('shardDisconnect', (_event, shardId) => {
     botReady = false;
-    console.warn('[discord] Client disconnected');
+    console.warn(`[discord] Shard ${shardId} disconnected`);
+  });
+
+  client.on('shardResume', (shardId) => {
+    botReady = true;
+    console.log(`[discord] Shard ${shardId} resumed`);
+  });
+
+  // Raw gateway probe — emitted for every raw gateway event BEFORE Discord.js
+  // processes it. Used to confirm the process is receiving interactions from
+  // Discord at all, independent of handler registration or routing logic.
+  // Look for: [discord/raw] interactionCreate received /<command>
+  client.on('raw', (event) => {
+    if (event.t === 'INTERACTION_CREATE') {
+      const name = event.d?.data?.name ?? 'unknown';
+      console.log(`[discord/raw] interactionCreate received /${name} id=${event.d?.id}`);
+    }
   });
 
   await client.login(DISCORD_TOKEN);

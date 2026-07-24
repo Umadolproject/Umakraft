@@ -61,6 +61,12 @@ async function sendLastChanceFailure(interaction, message) {
   return interaction.editReply({ content: message });
 }
 
+// Maximum time (ms) a command handler is allowed to run before the deferred
+// interaction is forcibly closed with an error. Discord interaction tokens
+// expire after 15 minutes; this deadline is intentionally shorter so the user
+// always gets a visible response rather than a silent expiry.
+const COMMAND_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+
 // ─── Entry point ──────────────────────────────────────────────────────────────
 
 export async function execute(interaction, client) {
@@ -78,7 +84,8 @@ export async function execute(interaction, client) {
   const userId      = interaction.user?.id  ?? 'unknown-user-id';
   const startedAt   = Date.now();
 
-  console.log(`[COMMAND] /${commandName} by ${userTag} (${userId}) id=${interaction.id}`);
+  // Matches the search strings in slashcommandfailuresample.md so log greps work.
+  console.log(`[interactionCreate] Received /${commandName} from ${userTag} (${userId}) id=${interaction.id}`);
 
   // The boundary owns acknowledgement timing. Handler metadata may still
   // describe the desired visibility, but a handler must never be able to
@@ -88,11 +95,11 @@ export async function execute(interaction, client) {
   try {
     if (!interaction.deferred && !interaction.replied) {
       await interaction.deferReply({ ephemeral });
-      console.log(`[COMMAND] Deferred /${commandName} (${ephemeral ? 'ephemeral' : 'public'})`);
+      console.log(`[interactionCreate] Deferred /${commandName} (${ephemeral ? 'ephemeral' : 'public'})`);
     }
 
     if (!command) {
-      console.warn(`[COMMAND] Unknown command received: /${commandName}`);
+      console.warn(`[interactionCreate] Unknown command: /${commandName}`);
       await interaction.editReply({
         content: 'This command is not available in the current bot build. Please redeploy commands and try again.',
       });
@@ -101,10 +108,23 @@ export async function execute(interaction, client) {
 
     const executionInteraction = acknowledgedInteraction(interaction);
 
-    const result = await command.execute(executionInteraction, coordinator, client);
+    // Race the handler against a timeout so a hung coordinator action never
+    // leaves a deferred interaction waiting silently until the token expires.
+    let timeoutId;
+    const timeoutPromise = new Promise((_, reject) => {
+      timeoutId = setTimeout(
+        () => reject(new Error(`Command /${commandName} timed out after ${COMMAND_TIMEOUT_MS / 1000}s`)),
+        COMMAND_TIMEOUT_MS,
+      );
+    });
+
+    const result = await Promise.race([
+      command.execute(executionInteraction, coordinator, client),
+      timeoutPromise,
+    ]).finally(() => clearTimeout(timeoutId));
 
     if (result?.[INTERACTION_RESPONSE_HANDLED]) {
-      console.log(`[COMMAND] Replied inline for /${commandName} in ${Date.now() - startedAt}ms`);
+      console.log(`[interactionCreate] Replied inline for /${commandName} in ${Date.now() - startedAt}ms`);
       return;
     }
 
@@ -117,9 +137,9 @@ export async function execute(interaction, client) {
       : result;
 
     await dispatch(dispatchableResult);
-    console.log(`[COMMAND] Reply sent successfully for /${commandName} in ${Date.now() - startedAt}ms`);
+    console.log(`[interactionCreate] Completed /${commandName} in ${Date.now() - startedAt}ms`);
   } catch (err) {
-    console.error(`[COMMAND] Unhandled error in /${commandName}:`, err);
+    console.error(`[interactionCreate] Unhandled error in /${commandName}:`, err);
 
     try {
       await dispatch({
@@ -130,16 +150,16 @@ export async function execute(interaction, client) {
         retriable: false,
         interaction,
       });
-      console.log(`[COMMAND] Error response sent for /${commandName} in ${Date.now() - startedAt}ms`);
+      console.log(`[interactionCreate] Error response sent for /${commandName} in ${Date.now() - startedAt}ms`);
     } catch (dispatchErr) {
-      console.error(`[COMMAND] Dispatcher failed for /${commandName}:`, dispatchErr);
+      console.error(`[interactionCreate] Dispatch also failed for /${commandName}:`, dispatchErr);
       try {
         await sendLastChanceFailure(
           interaction,
           'Something went wrong while processing this command. Check the bot logs and try again.',
         );
       } catch (lastChanceErr) {
-        console.error(`[COMMAND] Last-chance response also failed for /${commandName}:`, lastChanceErr);
+        console.error(`[interactionCreate] Last-chance response also failed for /${commandName}:`, lastChanceErr);
       }
     }
   }
