@@ -9,6 +9,7 @@
 import { inspect } from '../Inspector/inspector.js';
 import { transport } from '../Courier/courier.js';
 import { receive, retrieve } from '../Vault/vault.js';
+import { mergeCircleMemberGains } from '../pipeline.js';
 
 let passed = 0;
 let failed = 0;
@@ -106,6 +107,56 @@ const retrieveResult = await retrieve({ id: 'trainer-999' });
 
 assert('full pipeline: Miner → Courier → Inspector → Vault stores data', vaultResult.success === true);
 assert('full pipeline: Vault retrieves correct trainer', retrieveResult.data?.data?.id === 'trainer-999');
+
+// ─── Circle fan-gain enrichment ───────────────────────────────────────────────
+
+console.log('\n── Circle Fan-Gain Enrichment ─────────────────────────');
+
+const circleTrainer = {
+  id: 'trainer-circle-001',
+  name: 'Circle Alice',
+  fans: 50000000,
+  rank: 99,
+};
+const enriched = mergeCircleMemberGains(circleTrainer, {
+  success: true,
+  data: {
+    members: [{
+      trainer_id: 'trainer-circle-001',
+      trainer_name: 'Circle Alice',
+      dailyFanGain: 125000,
+      weeklyFanGain: 875000,
+      monthlyFanGain: 3200000,
+      rank: 7,
+    }],
+  },
+}, 'trainer-circle-001');
+assert('circle member gains are merged by trainer id',     enriched.dailyFanGain === 125000);
+assert('circle weekly gain is merged',                     enriched.weeklyFanGain === 875000);
+assert('circle monthly gain is merged',                    enriched.monthlyFanGain === 3200000);
+assert('circle member placement replaces trainer rank',    enriched.rank === 7);
+assert('canonical API gains marker is attached',           enriched.apiGains?.dailyFanGain === 125000);
+
+const dailyValues = Array(31).fill(10);
+const todayIndex = new Date().getDate() - 1;
+dailyValues[todayIndex] = 250;
+const arrayEnriched = mergeCircleMemberGains(circleTrainer, {
+  success: true,
+  data: {
+    members: [{
+      trainer_id: 'trainer-circle-001',
+      daily_fans: dailyValues,
+    }],
+  },
+}, 'trainer-circle-001');
+assert('daily_fans array supplies API daily gain',          arrayEnriched.dailyFanGain === 250);
+assert('daily_fans array supplies API weekly gain',        arrayEnriched.weeklyFanGain === 310);
+
+const unmatched = mergeCircleMemberGains(circleTrainer, {
+  success: true,
+  data: { members: [{ trainer_id: 'different-trainer', dailyFanGain: 999999 }] },
+}, 'trainer-circle-001');
+assert('unmatched circle member does not contaminate trainer', unmatched.dailyFanGain === undefined);
 
 // ─── Summary ──────────────────────────────────────────────────────────────────
 

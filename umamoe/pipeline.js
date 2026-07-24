@@ -8,6 +8,7 @@ import { transport }  from './Courier/courier.js';
 import { receive, retrieve } from './Vault/vault.js';
 import { refine }  from '../Refinery/Refiner/refiner.js';
 import { compile } from '../Refinery/Compiler/compiler.js';
+import { CONFIGURED_CIRCLES } from '../core/botConfig.js';
 import { createLogger }                        from '../core/pipelineLogger.js';
 import { failureEnvelope, successEnvelope }    from '../core/pipelineEnvelope.js';
 import { stageTimeout }                        from '../core/pipelineRuntime.js';
@@ -53,19 +54,159 @@ async function runStage(stageName, fn, ...args) {
   }
 }
 
+function finiteNonNegative(value) {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
+}
+
+function firstNumber(...values) {
+  return values.find(finiteNonNegative);
+}
+
+function sumNumbers(values) {
+  if (!Array.isArray(values)) return undefined;
+  const numbers = values.filter(finiteNonNegative);
+  return numbers.length > 0 ? numbers.reduce((total, value) => total + value, 0) : undefined;
+}
+
+function memberIdentityValues(member) {
+  return [
+    member?.id,
+    member?.trainer_id,
+    member?.trainerId,
+    member?.user_id,
+    member?.userId,
+    member?.trainer?.id,
+    member?.profile?.id,
+  ].filter(value => value !== undefined && value !== null).map(String);
+}
+
+function getCircleMember(circleResult, trainerId, trainerData) {
+  const members = circleResult?.data?.members
+    ?? circleResult?.data?.circle?.members
+    ?? circleResult?.data?.data?.members
+    ?? [];
+  if (!Array.isArray(members)) return null;
+
+  const targetIds = new Set([String(trainerId), String(trainerData?.id)].filter(Boolean));
+  const byId = members.find(member => memberIdentityValues(member).some(id => targetIds.has(id)));
+  if (byId) return byId;
+
+  const targetName = String(trainerData?.name ?? '').trim().toLowerCase();
+  if (!targetName) return null;
+  return members.find(member => [
+    member?.name,
+    member?.trainer_name,
+    member?.trainerName,
+    member?.trainer?.name,
+  ].some(name => String(name ?? '').trim().toLowerCase() === targetName)) ?? null;
+}
+
+function circleMemberGains(member) {
+  if (!member || typeof member !== 'object') return null;
+
+  const direct = {
+    dailyFanGain: firstNumber(
+      member.dailyFanGain,
+      member.daily_gain,
+      member.daily_fan_gain,
+      member.dailyGain,
+      member.fan_gain?.daily,
+      member.fanGain?.daily,
+    ),
+    weeklyFanGain: firstNumber(
+      member.weeklyFanGain,
+      member.weekly_gain,
+      member.weekly_fan_gain,
+      member.weeklyGain,
+      member.fan_gain?.weekly,
+      member.fanGain?.weekly,
+    ),
+    monthlyFanGain: firstNumber(
+      member.monthlyFanGain,
+      member.monthly_gain,
+      member.monthly_fan_gain,
+      member.monthlyGain,
+      member.fan_gain?.monthly,
+      member.fanGain?.monthly,
+    ),
+  };
+
+  const dailyFans = member.daily_fans ?? member.dailyFans;
+  if (Array.isArray(dailyFans) && dailyFans.length > 0) {
+    const todayIndex = Math.min(new Date().getDate() - 1, dailyFans.length - 1);
+    direct.dailyFanGain ??= firstNumber(dailyFans[todayIndex], dailyFans[dailyFans.length - 1]);
+    direct.weeklyFanGain ??= sumNumbers(dailyFans.slice(Math.max(0, todayIndex - 6), todayIndex + 1));
+    direct.monthlyFanGain ??= sumNumbers(dailyFans.slice(0, todayIndex + 1));
+  }
+
+  const gains = Object.fromEntries(Object.entries(direct).filter(([, value]) => value !== undefined));
+  return Object.keys(gains).length > 0 ? gains : null;
+}
+
+/**
+ * Merge the matching circle member's API gains into a trainer response.
+ * This is intentionally a pure pipeline-wire helper: acquisition remains in
+ * Miner and business prioritisation remains in Refiner.
+ */
+export function mergeCircleMemberGains(trainerData, circleResult, trainerId) {
+  if (!trainerData || typeof trainerData !== 'object') return trainerData;
+  const member = getCircleMember(circleResult, trainerId, trainerData);
+  const gains = circleMemberGains(member);
+  if (!gains) return trainerData;
+
+  const memberRank = firstNumber(
+    member.rank,
+    member.placement,
+    member.ranking,
+    member.daily_rank,
+    member.dailyRank,
+  );
+
+  return {
+    ...trainerData,
+    ...gains,
+    apiGains: { ...gains },
+    ...(memberRank !== undefined ? { rank: memberRank } : {}),
+  };
+}
+
 // ─── processTrainer ───────────────────────────────────────────────────────────
 
 export async function processTrainer(trainerId, options = {}) {
   logger.info('pipeline start', { trainerId });
 
-  const minerResult = await runStage('Miner', Miner.fetchTrainer, trainerId);
+  const circleId = options.circleId
+    ?? options.circle
+    ?? CONFIGURED_CIRCLES[0]
+    ?? null;
+  const [minerResult, circleResult] = await Promise.all([
+    runStage('Miner', Miner.fetchTrainer, trainerId),
+    circleId
+      ? runStage('Miner.circle', Miner.fetchCircle, circleId)
+      : Promise.resolve(null),
+  ]);
   if (minerResult.success === false && minerResult.failedAt) return minerResult;
   if (!minerResult.success) {
     logger.warn('Miner failed', { trainerId, error: minerResult.error });
     return failureEnvelope('Miner', minerResult.error, minerResult.message, { trainerId });
   }
 
-  const inspectorResult = await runStage('Courier', transport, minerResult);
+  if (circleResult && !circleResult.success) {
+    logger.warn('Circle enrichment unavailable; continuing with trainer data', {
+      trainerId,
+      circleId,
+      error: circleResult.error,
+    });
+  }
+
+  const enrichedMinerResult = circleResult?.success
+    ? {
+        ...minerResult,
+        data: mergeCircleMemberGains(minerResult.data, circleResult, trainerId),
+      }
+    : minerResult;
+
+  const inspectorResult = await runStage('Courier', transport, enrichedMinerResult);
   if (inspectorResult.failedAt) return inspectorResult;
   if (!inspectorResult.success || !inspectorResult.accepted) {
     logger.warn('Inspector rejected data', { trainerId, error: inspectorResult.error });

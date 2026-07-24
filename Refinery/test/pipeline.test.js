@@ -65,6 +65,23 @@ const r2 = refine(validVaultRecord, { previousRecord });
 assert('delta gains used when previous record provided',  r2.refinedResult?.gainsSource === 'delta');
 assert('delta fanDelta is positive',                      r2.refinedResult?.fanDelta > 0);
 
+const apiRecord = {
+  ...validVaultRecord,
+  data: {
+    ...validVaultRecord.data,
+    apiGains: {
+      dailyFanGain: 321000,
+      weeklyFanGain: 2100000,
+      monthlyFanGain: 8400000,
+    },
+  },
+};
+const rApi = refine(apiRecord, { previousRecord });
+assert('API gains take priority over historical delta',    rApi.refinedResult?.gainsSource === 'api');
+assert('API daily gain is preserved',                      rApi.refinedResult?.dailyFanGain === 321000);
+assert('API weekly gain is preserved',                     rApi.refinedResult?.weeklyFanGain === 2100000);
+assert('API monthly gain is preserved',                    rApi.refinedResult?.monthlyFanGain === 8400000);
+
 // Untrusted input
 const r3 = refine({ data: { id: 'x' } }); // missing metadata.inspectedAt
 assert('untrusted record rejected',                       r3.success === false && r3.error === 'REFINER_UNTRUSTED_INPUT');

@@ -13,6 +13,7 @@ import { processTrainer, processRankings } from '../../../umamoe/pipeline.js';
 import { retrieve }         from '../../../Refinery/Depot/depot.js';
 import { produce, claimDeliverable } from '../../../Workshop/pipeline.js';
 import { resolveMember }    from './resolveMember.js';
+import { parseCircleId }    from './parseCircle.js';
 
 /**
  * runImagePipeline — full pipeline for a single-trainer image command.
@@ -41,7 +42,9 @@ export async function runImagePipeline({ payload, blueprintKey, mapToFabricator 
   const trainerId = resolved.value;
 
   // ── 2. Umamoe + Refinery pipeline ─────────────────────────────────────────
-  const pipelineResult = await processTrainer(trainerId);
+  const pipelineResult = await processTrainer(trainerId, {
+    circleId: parseCircleId(options.circle),
+  });
   if (!pipelineResult.success) {
     return {
       success:   false,

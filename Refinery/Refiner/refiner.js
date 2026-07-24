@@ -89,6 +89,47 @@ function estimateGains(fans, rank) {
 }
 
 /**
+ * Read fan gains that were supplied by an upstream API response.
+ *
+ * The Miner/pipeline wire normalises circle-member responses to `apiGains`,
+ * while this helper also accepts the common direct/nested API spellings so
+ * Refiner remains compatible with already-trusted records.
+ *
+ * @param {object} data — trusted trainer data
+ * @returns {{dailyFanGain?: number, weeklyFanGain?: number, monthlyFanGain?: number}|null}
+ */
+export function extractApiGains(data = {}) {
+  const sources = [
+    data.apiGains,
+    data.fanGains,
+    data.fanGain,
+    data.fan_gain,
+    data,
+  ].filter(source => source && typeof source === 'object');
+
+  const aliases = {
+    dailyFanGain: ['dailyFanGain', 'daily_gain', 'daily_fan_gain', 'dailyGain', 'daily'],
+    weeklyFanGain: ['weeklyFanGain', 'weekly_gain', 'weekly_fan_gain', 'weeklyGain', 'weekly'],
+    monthlyFanGain: ['monthlyFanGain', 'monthly_gain', 'monthly_fan_gain', 'monthlyGain', 'monthly'],
+  };
+
+  const gains = {};
+  for (const [field, keys] of Object.entries(aliases)) {
+    for (const source of sources) {
+      const value = keys.map(key => source[key]).find(
+        candidate => typeof candidate === 'number' && Number.isFinite(candidate) && candidate >= 0,
+      );
+      if (value !== undefined) {
+        gains[field] = value;
+        break;
+      }
+    }
+  }
+
+  return Object.keys(gains).length > 0 ? gains : null;
+}
+
+/**
  * Compute delta gains between two fan snapshots (current vs previous).
  * Returns null if previous is not provided.
  */
@@ -134,7 +175,8 @@ export function refine(vaultRecord, options = {}) {
   log('info', `refining trainer id=${data.id}`);
 
   try {
-    // Delta gains (real) vs projected gains (estimated)
+    // API gains are authoritative. Historical deltas are the next-best
+    // source, and rank-based projections are only used when neither exists.
     const previousData = previousRecord?.data;
     const deltas = computeDeltaGains(
       data.fans,
@@ -142,7 +184,19 @@ export function refine(vaultRecord, options = {}) {
       previousRecord?.metadata?.storedAt ?? previousRecord?.metadata?.inspectedAt
     );
 
-    const gains = deltas ?? estimateGains(data.fans, data.rank);
+    const apiGains = extractApiGains(data);
+    const estimated = estimateGains(data.fans, data.rank);
+    const gains = {
+      dailyFanGain:   apiGains?.dailyFanGain   ?? deltas?.dailyFanGain   ?? estimated.dailyFanGain,
+      weeklyFanGain:  apiGains?.weeklyFanGain  ?? deltas?.weeklyFanGain  ?? estimated.weeklyFanGain,
+      monthlyFanGain: apiGains?.monthlyFanGain ?? deltas?.monthlyFanGain ?? estimated.monthlyFanGain,
+      ...(deltas && !apiGains?.dailyFanGain ? { fanDelta: deltas.fanDelta } : {}),
+    };
+    const gainsSource = apiGains
+      ? 'api'
+      : deltas
+        ? 'delta'
+        : 'projected';
     const trend = deriveTrend(data.fans, data.rank);
 
     const refinedResult = {
@@ -157,7 +211,7 @@ export function refine(vaultRecord, options = {}) {
       // Derived fields
       trend,
       ...gains,
-      gainsSource: deltas ? 'delta' : 'projected',
+      gainsSource,
     };
 
     log('info', `refined successfully — id=${data.id} trend=${trend}`);

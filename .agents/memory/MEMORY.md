@@ -8,3 +8,4 @@
 - [Discord deployment](discord-deployment.md) — publish the bot as an always-on VM; autoscale/cloudrun cannot reliably maintain its gateway connection.
 - [Railway Discord log bridge](railway-discord-log-bridge.md) — separate authenticated deployment webhook and runtime log-drain endpoints; redact and batch logs before Discord delivery.
 - [Workspace ZIP updates](workspace-zip-updates.md) — imported ZIPs may contain Replit state; merge application files only and exclude `.local`, agent state, and workspace metadata.
+- [Fan gain source priority](fan-gain-source-priority.md) — `/fan_gain` must use matched circle-member API gains before historical deltas or estimates.
