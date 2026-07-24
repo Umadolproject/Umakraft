@@ -2,7 +2,8 @@
 // Bot entry point — initialises the Discord.js client, loads all event
 // handlers and slash command definitions, then connects to the Discord gateway.
 //
-// Required secrets: DISCORD_TOKEN, DISCORD_CLIENT_ID
+// Discord login requires DISCORD_TOKEN. Without it, the health/preview server
+// remains available in preview mode so Replit can still run the artifact.
 
 process.on('uncaughtException', (err) => {
   console.error('[FATAL] Uncaught exception:', err);
@@ -37,7 +38,10 @@ const PORT = parseInt(process.env.PORT ?? '3000', 10);
 let botReady = false;
 
 const healthServer = createServer((req, res) => {
-  if (req.url === '/') {
+  if (req.url === '/favicon.ico') {
+    res.writeHead(204);
+    res.end();
+  } else if (req.url === '/') {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     res.end(`<!doctype html>
 <html lang="en">
@@ -62,14 +66,14 @@ const healthServer = createServer((req, res) => {
     <main>
       <h1>UmaKraft Bot</h1>
       <p class="status">Service online</p>
-      <p>Discord bot status: <strong>${botReady ? 'ready' : 'starting'}</strong></p>
+      <p>Discord bot status: <strong>${botReady ? 'ready' : (discordConfigured ? 'starting' : 'not configured')}</strong></p>
       <p>For machine-readable status, visit <code>/health</code>.</p>
     </main>
   </body>
 </html>`);
   } else if (req.url === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ status: 'ok', botReady }));
+    res.end(JSON.stringify({ status: 'ok', botReady, discordConfigured }));
   } else {
     res.writeHead(404);
     res.end('Not found');
@@ -82,99 +86,101 @@ healthServer.listen(PORT, '0.0.0.0', () => {
 
 console.log('[startup] Checking required environment variables...');
 
-const { DISCORD_TOKEN } = process.env;
+const DISCORD_TOKEN = process.env.DISCORD_TOKEN?.trim() || '';
+const discordConfigured = Boolean(DISCORD_TOKEN);
 
 if (!DISCORD_TOKEN) {
-  console.error('[startup] FATAL: DISCORD_TOKEN is not set — add it to Railway Variables');
-  setTimeout(() => process.exit(1), 2000);
-  throw new Error('Missing DISCORD_TOKEN');
-}
-if (!DISCORD_CLIENT_ID) {
+  console.warn('[startup] DISCORD_TOKEN is not set — running health/preview server without Discord');
+} else if (!DISCORD_CLIENT_ID) {
   console.error('[startup] FATAL: DISCORD_CLIENT_ID is not set — configure it in Railway Variables');
   setTimeout(() => process.exit(1), 2000);
   throw new Error('Missing DISCORD_CLIENT_ID');
-}
-if (!DISCORD_GUILD_ID) {
+} else if (!DISCORD_GUILD_ID) {
   console.warn('[startup] DISCORD_GUILD_ID is not set. Guild command deployment will not work until it is configured.');
 }
 
-console.log('[startup] Environment OK — DISCORD_TOKEN and DISCORD_CLIENT_ID present');
+export let client = null;
 
-console.log('[startup] Creating Discord client...');
+if (discordConfigured) {
+  console.log('[startup] Environment OK — DISCORD_TOKEN and DISCORD_CLIENT_ID present');
+  console.log('[startup] Creating Discord client...');
 
-export const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMembers,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
-  ],
-});
+  client = new Client({
+    intents: [
+      GatewayIntentBits.Guilds,
+      GatewayIntentBits.GuildMembers,
+      GatewayIntentBits.GuildMessages,
+      GatewayIntentBits.MessageContent,
+    ],
+  });
 
-client.commands = new Collection();
+  client.commands = new Collection();
 
-console.log('[startup] Loading command handlers...');
-const { commands, skipped } = await loadCommands(console);
-for (const [name, handler] of commands) {
-  client.commands.set(name, handler);
-}
-console.log(`[startup] Loaded ${client.commands.size} command handler(s)`);
-if (skipped.length > 0) {
-  console.warn(`[startup] ${skipped.length} command handler(s) were skipped during startup.`);
-}
-
-console.log('[startup] Loading event handlers...');
-const eventsPath = join(__dirname, 'events');
-const eventFiles = readdirSync(eventsPath)
-  .filter(file => file.endsWith('.js'))
-  .sort((a, b) => a.localeCompare(b));
-
-for (const file of eventFiles) {
-  const event = await import(join(eventsPath, file));
-  if (!event?.name || typeof event.execute !== 'function') {
-    console.warn(`[startup] Skipping invalid event module: ${file}`);
-    continue;
+  console.log('[startup] Loading command handlers...');
+  const { commands, skipped } = await loadCommands(console);
+  for (const [name, handler] of commands) {
+    client.commands.set(name, handler);
+  }
+  console.log(`[startup] Loaded ${client.commands.size} command handler(s)`);
+  if (skipped.length > 0) {
+    console.warn(`[startup] ${skipped.length} command handler(s) were skipped during startup.`);
   }
 
-  if (event.once) {
-    client.once(event.name, (...args) => {
-      Promise.resolve(event.execute(...args, client)).catch((err) => {
-        console.error(`[discord] Unhandled ${event.name} event error:`, err);
+  console.log('[startup] Loading event handlers...');
+  const eventsPath = join(__dirname, 'events');
+  const eventFiles = readdirSync(eventsPath)
+    .filter(file => file.endsWith('.js'))
+    .sort((a, b) => a.localeCompare(b));
+
+  for (const file of eventFiles) {
+    const event = await import(join(eventsPath, file));
+    if (!event?.name || typeof event.execute !== 'function') {
+      console.warn(`[startup] Skipping invalid event module: ${file}`);
+      continue;
+    }
+
+    if (event.once) {
+      client.once(event.name, (...args) => {
+        Promise.resolve(event.execute(...args, client)).catch((err) => {
+          console.error(`[discord] Unhandled ${event.name} event error:`, err);
+        });
       });
-    });
+    } else {
+      client.on(event.name, (...args) => {
+        Promise.resolve(event.execute(...args, client)).catch((err) => {
+          console.error(`[discord] Unhandled ${event.name} event error:`, err);
+        });
+      });
+    }
+
+    console.log(`[startup] Registered event: ${event.name} (${file})`);
+  }
+
+  const interactionListenerCount = client.listeners('interactionCreate').length;
+  if (interactionListenerCount !== 1) {
+    console.warn(`[startup] Expected exactly 1 interactionCreate listener, found ${interactionListenerCount}`);
   } else {
-    client.on(event.name, (...args) => {
-      Promise.resolve(event.execute(...args, client)).catch((err) => {
-        console.error(`[discord] Unhandled ${event.name} event error:`, err);
-      });
-    });
+    console.log('[startup] Verified exactly 1 interactionCreate listener');
   }
 
-  console.log(`[startup] Registered event: ${event.name} (${file})`);
-}
+  console.log('[startup] Logging in to Discord...');
 
-const interactionListenerCount = client.listeners('interactionCreate').length;
-if (interactionListenerCount !== 1) {
-  console.warn(`[startup] Expected exactly 1 interactionCreate listener, found ${interactionListenerCount}`);
+  client.once('clientReady', () => {
+    botReady = true;
+    console.log(`[startup] Bot is READY — ${client.user.tag}`);
+  });
+
+  client.on('error', (err) => {
+    console.error('[discord] Client error:', err);
+  });
+
+  client.on('disconnect', () => {
+    botReady = false;
+    console.warn('[discord] Client disconnected');
+  });
+
+  await client.login(DISCORD_TOKEN);
+  console.log('[startup] Login call completed — waiting for ready event');
 } else {
-  console.log('[startup] Verified exactly 1 interactionCreate listener');
+  console.log('[startup] Preview mode active — Discord gateway login skipped');
 }
-
-console.log('[startup] Logging in to Discord...');
-
-client.once('clientReady', () => {
-  botReady = true;
-  console.log(`[startup] Bot is READY — ${client.user.tag}`);
-});
-
-client.on('error', (err) => {
-  console.error('[discord] Client error:', err);
-});
-
-client.on('disconnect', () => {
-  botReady = false;
-  console.warn('[discord] Client disconnected');
-});
-
-await client.login(DISCORD_TOKEN);
-console.log('[startup] Login call completed — waiting for ready event');
