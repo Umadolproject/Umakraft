@@ -6,6 +6,7 @@ import { Events } from 'discord.js';
 import { schedule, scheduleDailyAt, start } from '../../../tasks/index.js';
 import { runOperationCycle } from '../../../Operation/operation.js';
 import { runMinerCycle } from '../../../tasks/minerTask.js';
+import { seedTrainerDbFromCircles } from '../../Coordinator/utils/seedTrainerDb.js';
 
 export const name = Events.ClientReady;
 export const once = true;
@@ -16,6 +17,12 @@ export async function execute(client) {
   console.log(`[ready] Logged in as ${client.user.tag} (${client.user.id})`);
   console.log(`[ready] Serving ${client.guilds.cache.size} guild(s)`);
   console.log('[ready] AI initialization is deferred until the first AI command.');
+
+  // Seed the local trainer DB from circle members so autocomplete works immediately.
+  // Fire-and-forget — a failure here must never prevent the bot from starting.
+  seedTrainerDbFromCircles().catch(err =>
+    console.warn('[ready] Trainer DB seed failed (non-fatal):', err?.message ?? err),
+  );
 
   // Health / ops check every 5 minutes
   schedule('operation', '*/5 * * * *', runOperationCycle);
