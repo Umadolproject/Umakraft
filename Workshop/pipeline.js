@@ -24,12 +24,12 @@ async function runStage(stageName, fn, ...args) {
     if (limitMs > 0) {
       result = await Promise.race([
         fn(...args),
-        new Promise((_, reject) =>
+        new Promise((_, reject) => {
           setTimeout(
             () => reject(new Error(`STAGE_TIMEOUT: ${stageName} exceeded ${limitMs}ms`)),
             limitMs,
-          ),
-        ),
+          );
+        }),
       ]);
     } else {
       result = await fn(...args);

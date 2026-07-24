@@ -97,9 +97,13 @@ export function start(client = null) {
     };
 
     // Fire immediately so the first health check happens at startup,
-    // then repeat on the configured interval.
-    run();
-    task.intervalId = setInterval(run, intervalMs);
+    // then repeat on the configured interval. run() is async — attach a catch
+    // so a synchronous throw or unhandled rejection doesn't leak.
+    run().catch((err) => log.error(`[tasks] first-run of "${name}" failed`, err));
+    task.intervalId = setInterval(
+      () => { run().catch((err) => log.error(`[tasks] scheduled run of "${name}" failed`, err)); },
+      intervalMs
+    );
   }
 }
 

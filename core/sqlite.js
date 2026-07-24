@@ -114,7 +114,10 @@ export async function withWrite(dbPath, fn) {
     return result;
   };
 
-  const next = previous.then(op, op);
+  // Chain onto the previous write, but do NOT let a prior rejection masquerade
+  // as success for this caller. Swallow the prior error for chaining only; the
+  // caller of this op still sees its own op's result via `next`.
+  const next = previous.catch(() => {}).then(op);
   _writeQueues.set(dbPath, next.catch(() => {}));
   return next;
 }

@@ -222,7 +222,7 @@ function setFlags(notificationKey, patch) {
 }
 
 function hydrate(row) {
-  let parsed = {};
+  let parsed;
   try { parsed = JSON.parse(row.payloadJson ?? '{}'); } catch { parsed = {}; }
   return {
     notificationKey: row.notificationKey,

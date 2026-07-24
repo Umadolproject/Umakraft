@@ -119,7 +119,7 @@ export async function aiCommand(payload) {
     return localAnswer({ query, subcommand, interaction, userId: payload.userId });
   }
 
-  let chunks = [];
+  let chunks;
   try {
     if (classification.topic === 'live') {
       chunks = await webSearch(query);

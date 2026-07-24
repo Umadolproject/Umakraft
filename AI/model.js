@@ -120,7 +120,7 @@ class HuggingFaceModel {
       return;
     }
 
-    await new Promise(resolve => this._waiters.push(resolve));
+    await new Promise(resolve => { this._waiters.push(resolve); });
     this._activeGenerations += 1;
   }
 

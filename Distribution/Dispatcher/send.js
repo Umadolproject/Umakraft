@@ -25,7 +25,7 @@ export async function send(interaction, payload, { ephemeral = false, followUp =
     if (err.code === 429) {
       const retryAfter = (err.retryAfter ?? 1) * 1000;
       log.warn(`[Dispatcher/send] Rate limited — retrying method=${method} after ${retryAfter}ms`);
-      await new Promise(resolve => setTimeout(resolve, retryAfter));
+      await new Promise(resolve => { setTimeout(resolve, retryAfter); });
       return interaction[method](replyPayload);
     }
 

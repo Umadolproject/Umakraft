@@ -334,7 +334,8 @@ export async function generate(prompt, options = {}) {
       );
       throw new Error(
         'The AI Knowledge Service is temporarily unavailable. ' +
-        'Both model tiers failed to respond. Please try again shortly.'
+        'Both model tiers failed to respond. Please try again shortly.',
+        { cause: fallbackErr }
       );
     }
   }

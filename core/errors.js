@@ -56,7 +56,7 @@ export async function withRetry(fn, { maxAttempts = 3, delayMs = 1000, context =
         ` for "${context}": ${err.message}`
       );
       if (attempt < maxAttempts) {
-        await new Promise(resolve => setTimeout(resolve, delayMs * attempt));
+        await new Promise(resolve => { setTimeout(resolve, delayMs * attempt); });
       }
     }
   }

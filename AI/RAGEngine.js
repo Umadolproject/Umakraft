@@ -77,7 +77,7 @@ export async function retrieve(query, options = {}) {
         `[AI/RAGEngine] Scope "${scope}" returned only ${scoped.length} chunk(s) — ` +
         `relaxing scope restriction (got ${results.length} total).`
       );
-      results = results; // use unscoped results
+      // keep `results` as-is (unscoped) — scoped set was too small
     } else {
       results = scoped;
     }

@@ -28,7 +28,7 @@ function log(level, message, context = {}) {
 async function withTimeout(ms, fn) {
   return Promise.race([
     fn().catch(() => null),
-    new Promise(resolve => setTimeout(() => resolve(null), ms)),
+    new Promise(resolve => { setTimeout(() => resolve(null), ms); }),
   ]);
 }
 

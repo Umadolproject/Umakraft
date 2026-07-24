@@ -151,11 +151,14 @@ export async function _sendMemberDms(record, cardBuffer, client) {
     return { success: true };
   }
 
-  const messageOpts = { content: payload?.message ?? undefined };
-  if (cardBuffer) messageOpts.files = [_toAttachment(cardBuffer, _buildFilename(type))];
-
+  // NOTE: rebuild messageOpts (and re-wrap the buffer as an attachment) inside
+  // the loop so each DM gets a fresh stream — discord.js consumes the underlying
+  // buffer on send and re-using the same options object can produce empty
+  // attachments for the 2nd+ recipient.
   const errors = [];
   for (const userId of memberDms) {
+    const messageOpts = { content: payload?.message ?? undefined };
+    if (cardBuffer) messageOpts.files = [_toAttachment(cardBuffer, _buildFilename(type))];
     try {
       await _dmUser(client, userId, messageOpts);
       logger.info('member DM sent', { notificationKey, userId });

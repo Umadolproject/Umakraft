@@ -39,6 +39,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const PORT = parseInt(process.env.PORT ?? '3000', 10);
 let botReady = false;
+const DISCORD_TOKEN = process.env.DISCORD_TOKEN?.trim() || '';
+const discordConfigured = Boolean(DISCORD_TOKEN);
 
 const healthServer = createServer((req, res) => {
   if (req.url === '/favicon.ico') {
@@ -93,15 +95,12 @@ healthServer.listen(PORT, '0.0.0.0', () => {
 
 console.log('[startup] Checking required environment variables...');
 
-const DISCORD_TOKEN = process.env.DISCORD_TOKEN?.trim() || '';
-const discordConfigured = Boolean(DISCORD_TOKEN);
-
 if (!DISCORD_TOKEN) {
   console.warn('[startup] DISCORD_TOKEN is not set — running health/preview server without Discord');
 } else if (!DISCORD_CLIENT_ID) {
   console.error('[startup] FATAL: DISCORD_CLIENT_ID is not set — configure it in Railway Variables');
-  setTimeout(() => process.exit(1), 2000);
-  throw new Error('Missing DISCORD_CLIENT_ID');
+  // Give the health server a moment to serve the failure status before exiting.
+  setTimeout(() => process.exit(1), 2000).unref();
 } else if (!DISCORD_GUILD_ID) {
   console.warn('[startup] DISCORD_GUILD_ID is not set. Guild command deployment will not work until it is configured.');
 }

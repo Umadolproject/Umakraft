@@ -4,7 +4,7 @@ import { queryAll, queryOne, withRead, withWrite } from '../../../core/sqlite.js
 const dbPath = resolveSqlitePath('archive');
 let _initPromise = null;
 
-async function init() {
+async function initSchema() {
   if (_initPromise) return _initPromise;
   _initPromise = withWrite(dbPath, async (db) => {
     db.run(`
@@ -51,7 +51,7 @@ async function init() {
 
 function hydrate(row) {
   if (!row) return null;
-  let parsed = {};
+  let parsed;
   try { parsed = JSON.parse(row.payload_json ?? '{}'); } catch { parsed = {}; }
   return {
     notificationKey: row.notification_key,
@@ -73,11 +73,11 @@ function hydrate(row) {
 }
 
 export async function initAdapter() {
-  return init();
+  return initSchema();
 }
 
 export async function insert(record) {
-  await init();
+  await initSchema();
   try {
     return withWrite(dbPath, async (db) => {
       const payloadJson = JSON.stringify({ recipients: record.recipients, payload: record.payload });
@@ -97,7 +97,7 @@ export async function insert(record) {
 }
 
 export async function get(notificationKey) {
-  await init();
+  await initSchema();
   try {
     return withRead(dbPath, async (db) => {
       const row = queryOne(db, `SELECT * FROM archive_claims WHERE notification_key = ?`, [notificationKey]);
@@ -109,7 +109,7 @@ export async function get(notificationKey) {
 }
 
 export async function getIncomplete(circleId = null) {
-  await init();
+  await initSchema();
   try {
     return withRead(dbPath, async (db) => {
       const rows = circleId == null
@@ -134,7 +134,7 @@ export async function getIncomplete(circleId = null) {
 }
 
 async function setFlags(notificationKey, patch = {}) {
-  await init();
+  await initSchema();
   try {
     return withWrite(dbPath, async (db) => {
       const existing = queryOne(db, `SELECT notification_key FROM archive_claims WHERE notification_key = ?`, [notificationKey]);
@@ -174,7 +174,7 @@ export async function markDmLeaderSent(notificationKey) {
 }
 
 export async function markDeadLetter(notificationKey, { reason, step, attemptCount } = {}) {
-  await init();
+  await initSchema();
   try {
     return withWrite(dbPath, async (db) => {
       const existing = queryOne(db, `SELECT notification_key FROM archive_claims WHERE notification_key = ?`, [notificationKey]);
@@ -201,7 +201,7 @@ export async function markDeadLetter(notificationKey, { reason, step, attemptCou
 }
 
 export async function replayDeadLetter(notificationKey) {
-  await init();
+  await initSchema();
   try {
     return withWrite(dbPath, async (db) => {
       const existing = queryOne(db, `SELECT notification_key FROM archive_claims WHERE notification_key = ?`, [notificationKey]);
@@ -228,7 +228,7 @@ export async function replayDeadLetter(notificationKey) {
 }
 
 export async function listDeadLetters({ circleId = null, limit = 10 } = {}) {
-  await init();
+  await initSchema();
   try {
     return withRead(dbPath, async (db) => {
       const rows = circleId == null
@@ -256,7 +256,7 @@ export async function listDeadLetters({ circleId = null, limit = 10 } = {}) {
 }
 
 export async function recordHistory(notificationKey, { step, outcome, discordCode, detail } = {}) {
-  await init();
+  await initSchema();
   try {
     return withWrite(dbPath, async (db) => {
       db.run(
@@ -272,7 +272,7 @@ export async function recordHistory(notificationKey, { step, outcome, discordCod
 }
 
 export async function getHistory(notificationKey) {
-  await init();
+  await initSchema();
   try {
     return withRead(dbPath, async (db) => ({
       history: queryAll(
@@ -297,7 +297,7 @@ export async function getAttemptSummary(notificationKey) {
 }
 
 export async function getStats() {
-  await init();
+  await initSchema();
   try {
     return withRead(dbPath, async (db) => {
       const counts = queryOne(
@@ -325,7 +325,7 @@ export async function getStats() {
 }
 
 export async function prune({ olderThanDays } = {}) {
-  await init();
+  await initSchema();
   try {
     return withWrite(dbPath, async (db) => {
       const cutoff = new Date(Date.now() - olderThanDays * 86_400_000).toISOString();
@@ -342,4 +342,4 @@ export async function prune({ olderThanDays } = {}) {
   }
 }
 
-export const init = initAdapter;
+export { initAdapter as init };
