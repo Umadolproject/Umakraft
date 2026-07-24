@@ -3,26 +3,36 @@
 //
 // Trainer resolution priority:
 //   1. options.trainerId — explicit numeric ID (always wins)
-//   2. options.trainer   — free-text name entered without autocomplete
-//      → currently requires autocomplete selection; raw name lookup is not
-//        implemented because the search API does not guarantee a unique match.
+//   2. options.trainer   — value from the trainer autocomplete field
+//      a. Pure numeric string → treat as trainer ID (autocomplete selection)
+//      b. Text name → look up in local trainer DB, then Uma.moe search API
 
 import { processTrainer } from '../../../umamoe/pipeline.js';
 import { retrieve }        from '../../../Refinery/Depot/depot.js';
 import { searchTrainers }  from '../../../umamoe/Miner/miner.js';
 import { upsertLink }      from '../utils/memberLinks.js';
+import { upsertTrainer, getByName } from '../utils/trainerDb.js';
 
 // ─── Trainer ID resolution ────────────────────────────────────────────────────
 
 /**
- * Resolve a free-text trainer name to a numeric ID via Uma.moe search.
- * Returns null when no unambiguous match is found.
+ * Resolve a free-text trainer name to a numeric ID.
+ *
+ * Checks the local trainer DB first (instant, no network), then falls back to
+ * the Uma.moe search API with an exact-match filter.
  *
  * @param {string} name
  * @returns {Promise<string|null>}
  */
 async function resolveTrainerIdByName(name) {
-  const result = await searchTrainers({ q: name.trim(), limit: 5 });
+  const trimmed = name.trim();
+
+  // ── 1. Local trainer DB ───────────────────────────────────────────────────
+  const local = await getByName(trimmed);
+  if (local?.trainer_id) return String(local.trainer_id);
+
+  // ── 2. Uma.moe search API ─────────────────────────────────────────────────
+  const result = await searchTrainers({ q: trimmed, limit: 5 });
   if (!result?.success) return null;
 
   const raw = Array.isArray(result.data)
@@ -31,7 +41,7 @@ async function resolveTrainerIdByName(name) {
 
   // Only accept an exact (case-insensitive) name match to avoid wrong links.
   const exact = raw.find(
-    t => t?.name?.toLowerCase() === name.trim().toLowerCase(),
+    t => t?.name?.toLowerCase() === trimmed.toLowerCase(),
   );
   return exact?.id != null ? String(exact.id) : null;
 }
@@ -47,14 +57,16 @@ export async function link(payload) {
   let resolvedId = options.trainerId ?? null;
 
   if (!resolvedId && options.trainer) {
-    if (/^\d+$/.test(options.trainer.trim())) {
-      resolvedId = options.trainer.trim();
+    const trainerVal = options.trainer.trim();
+    if (/^\d+$/.test(trainerVal)) {
+      // Autocomplete selection — value is the numeric trainer ID.
+      resolvedId = trainerVal;
     }
   }
 
   if (!resolvedId && options.trainer && !/^\d+$/.test(options.trainer.trim())) {
     // User typed a name manually without selecting from autocomplete.
-    // Attempt an exact-match lookup as a best-effort fallback.
+    // Try local DB first, then Uma.moe search.
     resolvedId = await resolveTrainerIdByName(options.trainer);
 
     if (!resolvedId) {
@@ -62,8 +74,10 @@ export async function link(payload) {
         success:   false,
         failedAt:  'Coordinator',
         error:     'TRAINER_NOT_FOUND',
-        message:   `No exact match found for trainer name **"${options.trainer}"**.\n` +
-                   `Use the autocomplete dropdown when typing the trainer name, or provide the numeric \`trainer_id\` directly.`,
+        message:
+          `No trainer found matching **"${options.trainer}"**.\n` +
+          `• Use the autocomplete dropdown when typing the trainer name, or\n` +
+          `• Provide the numeric \`trainer_id\` directly.`,
         retriable: false,
         interaction,
       };
@@ -75,7 +89,7 @@ export async function link(payload) {
       success:   false,
       failedAt:  'Coordinator',
       error:     'TRAINER_NOT_FOUND',
-      message:   'Please provide a trainer name (autocomplete) or a `trainer_id`.',
+      message:   'Please provide a trainer name (use autocomplete) or a `trainer_id`.',
       retriable: false,
       interaction,
     };
@@ -105,6 +119,9 @@ export async function link(payload) {
     trainerId:   resolvedId,
     trainerName: String(trainerName),
   });
+
+  // ── 5. Cache the trainer in the local DB for future autocomplete / lookups ─
+  upsertTrainer(resolvedId, String(trainerName)).catch(() => {});
 
   return {
     success:  true,

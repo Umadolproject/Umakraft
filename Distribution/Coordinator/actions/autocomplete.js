@@ -2,13 +2,23 @@
 // Routes autocomplete interactions to the appropriate suggestion provider.
 // Discord requires a response within 3 seconds — all providers use a hard
 // 2 500 ms timeout and fall back to an empty list on any failure.
+//
+// Trainer autocomplete strategy (local-first):
+//   1. Query the local trainer DB (instant, no network).
+//   2. If fewer than LOCAL_MIN_RESULTS found, also query the Uma.moe API and
+//      upsert the results into the local DB for future queries.
+//   3. Merge and deduplicate by trainer ID, return up to 25.
 
-import { searchTrainers } from '../../../umamoe/Miner/miner.js';
+import { searchTrainers }   from '../../../umamoe/Miner/miner.js';
+import { searchByName, upsertTrainers } from '../utils/trainerDb.js';
 
 const AUTOCOMPLETE_TIMEOUT_MS = Number.parseInt(
   process.env.AUTOCOMPLETE_TIMEOUT_MS ?? '2500',
   10,
 );
+
+// Minimum local results before we bother hitting the live API.
+const LOCAL_MIN_RESULTS = 8;
 
 function log(level, message, context = {}) {
   const entry = {
@@ -32,11 +42,14 @@ async function withTimeout(ms, fn) {
   ]);
 }
 
-// ─── Trainer search ───────────────────────────────────────────────────────────
+// ─── Trainer search (returns ID as value) ────────────────────────────────────
+//
+// Used by all trainer options EXCEPT ai.trainer_name.
+// value = String(trainer.id)  — numeric trainer ID.
+// Consumers detect a pure-numeric value and skip the name-search step.
 
 /**
- * Search Uma.moe for trainer names matching `query`.
- * Returns up to 25 ApplicationCommandOptionChoiceData objects.
+ * Search for trainer suggestions, local DB first, falling back to live API.
  *
  * @param {string} query
  * @returns {Promise<Array<{ name: string, value: string }>>}
@@ -45,42 +58,81 @@ async function trainerSuggestions(query) {
   const q = (query ?? '').trim();
 
   // Discord sends an empty string on first focus — show nothing until
-  // the user has typed at least 2 characters to avoid meaningless results.
+  // the user has typed at least 2 characters.
   if (q.length < 2) return [];
 
-  const result = await withTimeout(AUTOCOMPLETE_TIMEOUT_MS, () =>
-    searchTrainers({ q, limit: 25 }),
+  // ── 1. Query local DB ────────────────────────────────────────────────────
+  const localRows = await withTimeout(
+    AUTOCOMPLETE_TIMEOUT_MS,
+    () => searchByName(q, 25),
+  ) ?? [];
+
+  // Build a Map keyed by trainer_id to make deduplication easy.
+  const byId = new Map(
+    localRows.map(r => [r.trainer_id, r.trainer_name]),
   );
 
-  if (!result?.success) {
-    log('error', `trainer search failed for query="${q}"`, { error: result?.error });
-    return [];
+  // ── 2. Supplement with live API when local results are thin ──────────────
+  if (byId.size < LOCAL_MIN_RESULTS) {
+    const apiResult = await withTimeout(AUTOCOMPLETE_TIMEOUT_MS, () =>
+      searchTrainers({ q, limit: 25 }),
+    );
+
+    if (apiResult?.success) {
+      const raw = Array.isArray(apiResult.data)
+        ? apiResult.data
+        : (apiResult.data?.trainers ?? apiResult.data?.results ?? []);
+
+      const validRaw = raw.filter(t => t?.id != null && t?.name);
+
+      // Upsert API results into local DB (fire-and-forget; don't block response).
+      upsertTrainers(validRaw.map(t => ({ id: t.id, name: t.name }))).catch(() => {});
+
+      for (const t of validRaw) {
+        if (!byId.has(String(t.id))) {
+          byId.set(String(t.id), String(t.name));
+        }
+      }
+    } else {
+      log('error', `trainer API search failed for query="${q}"`, {
+        error: apiResult?.error,
+      });
+    }
   }
 
-  // The search endpoint may return a plain array or { trainers: [...] }
-  const raw = Array.isArray(result.data)
-    ? result.data
-    : (result.data?.trainers ?? result.data?.results ?? []);
-
-  return raw
-    .filter(t => t?.id != null && t?.name)
+  // ── 3. Format and return up to 25 results ────────────────────────────────
+  return [...byId.entries()]
     .slice(0, 25)
-    .map(t => {
-      const label = String(t.name);
+    .map(([id, name]) => {
+      const label = String(name);
       return {
-        // Discord enforces a 100-character limit on choice labels
         name:  label.length > 100 ? `${label.slice(0, 97)}…` : label,
-        value: String(t.id),
+        value: id,
       };
     });
 }
 
-// ─── Commands + option names that use trainer autocomplete ───────────────────
+// ─── Trainer name search (returns display name as value) ─────────────────────
 //
-// value returned: String(trainer.id) — numeric trainer ID.
-// Consumers detect a pure-numeric value and skip the name-search step.
+// Used only by ai.trainer_name, where the AI message generator needs the
+// human-readable name, not the numeric ID.
 
-const TRAINER_AUTOCOMPLETE = new Map([
+/**
+ * Like trainerSuggestions but returns the trainer's name as the value.
+ *
+ * @param {string} query
+ * @returns {Promise<Array<{ name: string, value: string }>>}
+ */
+async function trainerNameSuggestions(query) {
+  const suggestions = await trainerSuggestions(query);
+  // Swap value from ID to display name (name field already holds the display name).
+  return suggestions.map(s => ({ name: s.name, value: s.name }));
+}
+
+// ─── Commands + option names that use trainer autocomplete ───────────────────
+
+// value = String(trainer.id)
+const TRAINER_ID_AUTOCOMPLETE = new Map([
   ['link',              new Set(['trainer'])],
   ['fan_gain',          new Set(['trainer'])],
   ['profile',           new Set(['trainer'])],
@@ -89,7 +141,11 @@ const TRAINER_AUTOCOMPLETE = new Map([
   ['search_trainer',    new Set(['trainer'])],
   ['admin_setjoindate', new Set(['trainer'])],
   ['test_milestone',    new Set(['trainer'])],
-  ['ai',                new Set(['trainer_name'])],
+]);
+
+// value = trainer display name (string)
+const TRAINER_NAME_AUTOCOMPLETE = new Map([
+  ['ai', new Set(['trainer_name'])],
 ]);
 
 // ─── Router ───────────────────────────────────────────────────────────────────
@@ -103,12 +159,13 @@ const TRAINER_AUTOCOMPLETE = new Map([
 export async function autocomplete({ commandName, focusedOption }) {
   const { name: optionName, value } = focusedOption;
 
-  if (TRAINER_AUTOCOMPLETE.get(commandName)?.has(optionName)) {
+  if (TRAINER_ID_AUTOCOMPLETE.get(commandName)?.has(optionName)) {
     return trainerSuggestions(value);
   }
 
-  // Extend here for other commands that need autocomplete:
-  // if (commandName === 'fan_gain' && optionName === 'trainer') ...
+  if (TRAINER_NAME_AUTOCOMPLETE.get(commandName)?.has(optionName)) {
+    return trainerNameSuggestions(value);
+  }
 
   return [];
 }
