@@ -202,15 +202,42 @@ if (discordConfigured) {
     console.log(`[discord] Shard ${shardId} resumed`);
   });
 
-  // Raw gateway probe — emitted for every raw gateway event BEFORE Discord.js
-  // processes it. Used to confirm the process is receiving interactions from
-  // Discord at all, independent of handler registration or routing logic.
-  // Look for: [discord/raw] interactionCreate received /<command>
+  // Raw gateway probe — logs every dispatch event so we can confirm the gateway
+  // is alive and delivering events. INTERACTION_CREATE gets a detailed line;
+  // other dispatch events get a one-liner so the log stays readable.
+  // Heartbeat ACKs (op 11) are silent to avoid noise.
+  let _lastDispatchAt = null;
   client.on('raw', (event) => {
-    if (event.t === 'INTERACTION_CREATE') {
-      const name = event.d?.data?.name ?? 'unknown';
-      console.log(`[discord/raw] interactionCreate received /${name} id=${event.d?.id}`);
+    if (event.op === 0 && event.t) {
+      _lastDispatchAt = Date.now();
+      if (event.t === 'INTERACTION_CREATE') {
+        const name = event.d?.data?.name ?? 'unknown';
+        console.log(`[discord/raw] interactionCreate received /${name} id=${event.d?.id}`);
+      } else {
+        // Skip extremely noisy events that fire constantly
+        const silent = new Set(['PRESENCE_UPDATE', 'TYPING_START', 'MESSAGE_UPDATE']);
+        if (!silent.has(event.t)) {
+          console.log(`[discord/raw] ${event.t}`);
+        }
+      }
     }
+  });
+
+  // Gateway watchdog — if no dispatch events arrive for 8 minutes after the bot
+  // is ready, the session is a zombie (connected but receiving nothing). Exit so
+  // Railway's restart policy establishes a fresh gateway session.
+  client.once(Events.ClientReady, () => {
+    _lastDispatchAt = Date.now();
+    const WATCHDOG_INTERVAL_MS = 60_000;
+    const WATCHDOG_DEAD_MS     = 8 * 60_000;
+    const watchdog = setInterval(() => {
+      const elapsed = Date.now() - (_lastDispatchAt ?? 0);
+      if (elapsed > WATCHDOG_DEAD_MS) {
+        console.error(`[discord] Watchdog: no gateway dispatch events for ${Math.round(elapsed / 1000)}s — zombie session detected. Exiting for Railway restart.`);
+        process.exit(1);
+      }
+    }, WATCHDOG_INTERVAL_MS);
+    watchdog.unref();
   });
 
   await client.login(DISCORD_TOKEN);
