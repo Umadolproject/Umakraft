@@ -1,5 +1,6 @@
 // Distribution/Coordinator/actions/memberList.js
 import { runRankingsPipeline } from '../utils/pipelineImage.js';
+import { parseCircleId } from '../utils/parseCircle.js';
 
 export async function memberList(payload) {
   const { options, guildId } = payload;
@@ -7,14 +8,14 @@ export async function memberList(payload) {
     payload,
     rankingsParams: {
       type:          'memberList',
-      circle:        options.circle        ?? guildId,
+      circle:        parseCircleId(options.circle) ?? guildId,
       includeFormer: options.includeFormer ?? false,
     },
     blueprintKey: 'memberList',
     mapToFabricator: (cp, opts) => ({
       blueprintKey: 'memberList',
       meta: {
-        circle:        opts.circle        ?? null,
+        circle:        parseCircleId(opts.circle) ?? null,
         includeFormer: opts.includeFormer ?? false,
         generatedAt:   new Date().toISOString(),
       },

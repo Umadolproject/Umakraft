@@ -19,14 +19,14 @@ const fanGain = new SlashCommandBuilder()
   .setDescription('Show daily, weekly, and monthly fan gain + current daily ranking')
   .addUserOption(o => o.setName('member').setDescription('Discord member to look up (defaults to yourself)'))
   .addStringOption(o => o.setName('trainer').setDescription('Uma.moe trainer name — type to search').setAutocomplete(true))
-  .addStringOption(o => o.setName('circle').setDescription('Which circle to check (defaults to primary)'));
+  .addStringOption(o => o.setName('circle').setDescription('Which circle to check (defaults to primary)').setAutocomplete(true));
 
 const profile = new SlashCommandBuilder()
   .setName('profile')
   .setDescription('Full profile dashboard — gains, personal records, milestone badges, monthly history')
   .addUserOption(o => o.setName('member').setDescription('Discord member to look up (defaults to yourself)'))
   .addStringOption(o => o.setName('trainer').setDescription('Uma.moe trainer name — type to search').setAutocomplete(true))
-  .addStringOption(o => o.setName('circle').setDescription('Which circle to check (defaults to primary)'));
+  .addStringOption(o => o.setName('circle').setDescription('Which circle to check (defaults to primary)').setAutocomplete(true));
 
 const leaderboard = new SlashCommandBuilder()
   .setName('leaderboard')
@@ -40,7 +40,7 @@ const leaderboard = new SlashCommandBuilder()
       { name: 'Monthly', value: 'monthly' },
     ))
   .addIntegerOption(o => o.setName('top').setDescription('Number of members to show (10–30)').setMinValue(10).setMaxValue(30))
-  .addStringOption(o => o.setName('circle').setDescription('Which circle to check (defaults to primary)'))
+  .addStringOption(o => o.setName('circle').setDescription('Which circle to check (defaults to primary)').setAutocomplete(true))
   .addStringOption(o => o.setName('date').setDescription('Historical date — YYYY-MM-DD'));
 
 const totalFan = new SlashCommandBuilder()
@@ -48,18 +48,18 @@ const totalFan = new SlashCommandBuilder()
   .setDescription('Show lifetime total fan count and circle rank')
   .addUserOption(o => o.setName('member').setDescription('Discord member to look up (defaults to yourself)'))
   .addStringOption(o => o.setName('trainer').setDescription('Uma.moe trainer name — type to search').setAutocomplete(true))
-  .addStringOption(o => o.setName('circle').setDescription('Which circle to check (defaults to primary)'));
+  .addStringOption(o => o.setName('circle').setDescription('Which circle to check (defaults to primary)').setAutocomplete(true));
 
 const totalCircleFanGain = new SlashCommandBuilder()
   .setName('total_circlefan_gain')
   .setDescription('Total accumulated fan gain for the entire circle this month')
-  .addStringOption(o => o.setName('circle').setDescription('Which circle to check (defaults to primary)'));
+  .addStringOption(o => o.setName('circle').setDescription('Which circle to check (defaults to primary)').setAutocomplete(true));
 
 const circleMaster = new SlashCommandBuilder()
   .setName('circle_master')
   .setDescription('Day-by-day Top 3 fan-gain contributors for the current month')
   .addIntegerOption(o => o.setName('day').setDescription('Specific day to view (1–31, defaults to today)').setMinValue(1).setMaxValue(31))
-  .addStringOption(o => o.setName('circle').setDescription('Which circle to check (defaults to primary)'))
+  .addStringOption(o => o.setName('circle').setDescription('Which circle to check (defaults to primary)').setAutocomplete(true))
   .addBooleanOption(o => o.setName('trigger_milestones').setDescription('Trigger milestone checks (requires Manage Guild)'));
 
 const interCircleLeaderboard = new SlashCommandBuilder()
@@ -91,7 +91,7 @@ const memberList = new SlashCommandBuilder()
   .setName('memberlist')
   .setDescription('Full circle roster — active members and former members')
   .addBooleanOption(o => o.setName('include_former').setDescription('Include former members in the list (defaults to false)'))
-  .addStringOption(o => o.setName('circle').setDescription('Which circle to check (defaults to primary)'));
+  .addStringOption(o => o.setName('circle').setDescription('Which circle to check (defaults to primary)').setAutocomplete(true));
 
 const searchTrainer = new SlashCommandBuilder()
   .setName('search_trainer')
@@ -136,7 +136,7 @@ const link = new SlashCommandBuilder()
   .addStringOption(o => o.setName('trainer').setDescription('Uma.moe trainer name — type to search').setAutocomplete(true))
   .addStringOption(o => o.setName('trainer_id').setDescription('Uma.moe trainer ID (overrides trainer name if both given)'))
   .addUserOption(o => o.setName('member').setDescription('Discord member to link (defaults to yourself)'))
-  .addStringOption(o => o.setName('circle').setDescription('Which circle to link in (defaults to primary)'));
+  .addStringOption(o => o.setName('circle').setDescription('Which circle to link in (defaults to primary)').setAutocomplete(true));
 
 const unlink = new SlashCommandBuilder()
   .setName('unlink')
@@ -155,7 +155,7 @@ const setFans = new SlashCommandBuilder()
   .setDescription('View or set fan gain quota targets — daily, weekly, or monthly')
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
   .addBooleanOption(o => o.setName('status').setDescription('Show current quota settings'))
-  .addStringOption(o => o.setName('circle').setDescription('Which circle to configure (defaults to primary)'))
+  .addStringOption(o => o.setName('circle').setDescription('Which circle to configure (defaults to primary)').setAutocomplete(true))
   .addStringOption(o => o
     .setName('scope')
     .setDescription('Quota period to set')

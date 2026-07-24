@@ -9,8 +9,10 @@
 //      upsert the results into the local DB for future queries.
 //   3. Merge and deduplicate by trainer ID, return up to 25.
 
-import { searchTrainers }   from '../../../umamoe/Miner/miner.js';
+import { searchTrainers, fetchCircle } from '../../../umamoe/Miner/miner.js';
 import { searchByName, upsertTrainers } from '../utils/trainerDb.js';
+import { CONFIGURED_CIRCLES } from '../../../core/botConfig.js';
+import { parseCircleId } from '../utils/parseCircle.js';
 
 const AUTOCOMPLETE_TIMEOUT_MS = Number.parseInt(
   process.env.AUTOCOMPLETE_TIMEOUT_MS ?? '2500',
@@ -130,6 +132,87 @@ async function trainerNameSuggestions(query) {
   return suggestions.map(s => ({ name: s.name, value: s.name }));
 }
 
+// ─── Circle autocomplete ──────────────────────────────────────────────────────
+//
+// Strategy:
+//   1. Maintain a module-level cache of configured circle info (id → name).
+//   2. On first call, fetch all configured circles from the API (fire-and-forget
+//      subsequent refreshes keep the cache warm).
+//   3. If the user typed a uma.moe/circles/{id} URL, parse the ID and suggest it.
+//   4. Otherwise filter the cached list by partial ID or name match.
+
+/** @type {Map<string, string>} circleId → display name */
+const circleCache = new Map();
+let circleCacheReady = false;
+let circleCachePending = false;
+
+async function warmCircleCache() {
+  if (circleCacheReady || circleCachePending) return;
+  circleCachePending = true;
+  try {
+    for (const id of CONFIGURED_CIRCLES) {
+      const result = await withTimeout(AUTOCOMPLETE_TIMEOUT_MS, () => fetchCircle(id));
+      if (!result?.success) continue;
+      const d = result.data ?? {};
+      const name =
+        d.circle_name ?? d.name ?? d.title ?? d.circle?.name ?? d.circle?.circle_name ?? null;
+      circleCache.set(String(id), name ? String(name) : `Circle ${id}`);
+    }
+    circleCacheReady = true;
+  } catch {
+    // Leave circleCache with whatever partial data we managed to fetch.
+  } finally {
+    circleCachePending = false;
+  }
+}
+
+// Kick off cache warm immediately so the first interaction is fast.
+warmCircleCache().catch(() => {});
+
+/**
+ * Suggest circles for the `circle` option.
+ * value is always the plain numeric circle ID string.
+ *
+ * @param {string} query
+ * @returns {Array<{ name: string, value: string }>}
+ */
+function circleSuggestions(query) {
+  const q = (query ?? '').trim();
+
+  // If the user pasted a URL, extract the ID and suggest it immediately.
+  const parsed = parseCircleId(q);
+  if (parsed && parsed !== q) {
+    // URL was transformed — the extracted ID is the suggestion.
+    const label = circleCache.get(parsed) ?? `Circle ${parsed}`;
+    return [{ name: `${label} (${parsed})`, value: parsed }];
+  }
+
+  // Build candidates from the cache.
+  const candidates = [];
+  for (const [id, name] of circleCache) {
+    candidates.push({ id, name });
+  }
+
+  // If nothing is cached yet, fall back to configured IDs.
+  if (candidates.length === 0) {
+    for (const id of CONFIGURED_CIRCLES) {
+      candidates.push({ id: String(id), name: `Circle ${id}` });
+    }
+  }
+
+  // Filter: empty / short query → return all; otherwise match by ID or name.
+  const filtered = q.length < 2
+    ? candidates
+    : candidates.filter(c =>
+        c.id.includes(q) || c.name.toLowerCase().includes(q.toLowerCase()),
+      );
+
+  return filtered.slice(0, 25).map(c => ({
+    name:  c.name.length > 100 ? `${c.name.slice(0, 97)}…` : c.name,
+    value: c.id,
+  }));
+}
+
 // ─── Commands + option names that use trainer autocomplete ───────────────────
 
 // value = String(trainer.id)
@@ -149,6 +232,20 @@ const TRAINER_NAME_AUTOCOMPLETE = new Map([
   ['ai', new Set(['trainer_name'])],
 ]);
 
+// ─── Commands + option names that use circle autocomplete ────────────────────
+
+const CIRCLE_AUTOCOMPLETE = new Map([
+  ['fan_gain',             new Set(['circle'])],
+  ['profile',              new Set(['circle'])],
+  ['leaderboard',          new Set(['circle'])],
+  ['total_fan',            new Set(['circle'])],
+  ['total_circlefan_gain', new Set(['circle'])],
+  ['circle_master',        new Set(['circle'])],
+  ['memberlist',           new Set(['circle'])],
+  ['link',                 new Set(['circle'])],
+  ['set_fans',             new Set(['circle'])],
+]);
+
 // ─── Router ───────────────────────────────────────────────────────────────────
 
 /**
@@ -166,6 +263,12 @@ export async function autocomplete({ commandName, focusedOption }) {
 
   if (TRAINER_NAME_AUTOCOMPLETE.get(commandName)?.has(optionName)) {
     return trainerNameSuggestions(value);
+  }
+
+  if (CIRCLE_AUTOCOMPLETE.get(commandName)?.has(optionName)) {
+    // Refresh the cache in the background if it has gone stale.
+    if (!circleCacheReady) warmCircleCache().catch(() => {});
+    return circleSuggestions(value);
   }
 
   return [];

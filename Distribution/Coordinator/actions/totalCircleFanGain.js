@@ -1,19 +1,20 @@
 // Distribution/Coordinator/actions/totalCircleFanGain.js
 import { runRankingsPipeline } from '../utils/pipelineImage.js';
+import { parseCircleId } from '../utils/parseCircle.js';
 
 export async function totalCircleFanGain(payload) {
   const { options, guildId } = payload;
   return runRankingsPipeline({
     payload,
     rankingsParams: {
-      circle: options.circle ?? guildId,
+      circle: parseCircleId(options.circle) ?? guildId,
       type:   'totalCircleFanGain',
     },
     blueprintKey: 'totalCircleFanGain',
     mapToFabricator: (cp, opts) => ({
       blueprintKey: 'totalCircleFanGain',
       meta: {
-        circle:      opts.circle ?? null,
+        circle:      parseCircleId(opts.circle) ?? null,
         generatedAt: new Date().toISOString(),
       },
       totalFanGain: cp.totalFanGain ?? 0,

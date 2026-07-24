@@ -1,6 +1,7 @@
 // Distribution/Coordinator/actions/circleMaster.js
 import { PermissionFlagsBits } from 'discord.js';
 import { runRankingsPipeline } from '../utils/pipelineImage.js';
+import { parseCircleId } from '../utils/parseCircle.js';
 
 export async function circleMaster(payload) {
   const { options, guildId, interaction } = payload;
@@ -22,7 +23,7 @@ export async function circleMaster(payload) {
   return runRankingsPipeline({
     payload,
     rankingsParams: {
-      circle: options.circle ?? guildId,
+      circle: parseCircleId(options.circle) ?? guildId,
       day:    options.day    ?? today,
       type:   'circleMaster',
     },
@@ -30,7 +31,7 @@ export async function circleMaster(payload) {
     mapToFabricator: (cp, opts) => ({
       blueprintKey: 'circleMaster',
       meta: {
-        circle:      opts.circle ?? null,
+        circle:      parseCircleId(opts.circle) ?? null,
         day:         opts.day    ?? today,
         generatedAt: new Date().toISOString(),
       },
