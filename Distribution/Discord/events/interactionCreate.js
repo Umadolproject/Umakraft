@@ -80,31 +80,26 @@ export async function execute(interaction, client) {
 
   console.log(`[COMMAND] /${commandName} by ${userTag} (${userId}) id=${interaction.id}`);
 
-  if (!command) {
-    console.warn(`[COMMAND] Unknown command received: /${commandName}`);
-    try {
-      await interaction.reply({
-        content: 'This command is not available in the current bot build. Please redeploy commands and try again.',
-        ephemeral: true,
-      });
-    } catch (err) {
-      console.error(`[COMMAND] Failed to report unknown command /${commandName}:`, err);
-    }
-    return;
-  }
-
-  const shouldDefer = command.defer !== false;
-  const ephemeral   = command.ephemeral ?? false;
+  // The boundary owns acknowledgement timing. Handler metadata may still
+  // describe the desired visibility, but a handler must never be able to
+  // opt out of the initial acknowledgement and risk an expired interaction.
+  const ephemeral = command?.ephemeral ?? true;
 
   try {
-    if (shouldDefer && !interaction.deferred && !interaction.replied) {
+    if (!interaction.deferred && !interaction.replied) {
       await interaction.deferReply({ ephemeral });
       console.log(`[COMMAND] Deferred /${commandName} (${ephemeral ? 'ephemeral' : 'public'})`);
     }
 
-    const executionInteraction = shouldDefer
-      ? acknowledgedInteraction(interaction)
-      : interaction;
+    if (!command) {
+      console.warn(`[COMMAND] Unknown command received: /${commandName}`);
+      await interaction.editReply({
+        content: 'This command is not available in the current bot build. Please redeploy commands and try again.',
+      });
+      return;
+    }
+
+    const executionInteraction = acknowledgedInteraction(interaction);
 
     const result = await command.execute(executionInteraction, coordinator, client);
 

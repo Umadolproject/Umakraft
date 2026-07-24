@@ -4,7 +4,8 @@
 //
 // Each handler module must export:
 //   name      {string}   — the slash command name (e.g. 'fan_gain')
-//   defer     {boolean}  — whether the interaction boundary should defer first
+//   defer     {boolean}  — legacy metadata; the boundary always acknowledges
+//                         slash commands before invoking handlers
 //   ephemeral {boolean}  — whether the deferred reply should be ephemeral
 //   execute   {function} — async (interaction, coordinator, client) => envelope
 
