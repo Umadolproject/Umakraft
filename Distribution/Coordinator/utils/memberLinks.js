@@ -7,7 +7,7 @@
 // Uses the shared sql.js SQLite runtime (core/sqlite.js).
 
 import { resolveSqlitePath } from '../../../core/storageBackend.js';
-import { queryAll, queryOne, withRead, withWrite } from '../../../core/sqlite.js';
+import { queryAll, queryOne, withRead, withWrite, persistDatabase } from '../../../core/sqlite.js';
 
 const dbPath = resolveSqlitePath('member_links');
 let _initPromise = null;
@@ -50,7 +50,7 @@ async function init() {
 export async function upsertLink({ discordId, guildId, trainerId, trainerName }) {
   await init();
   const linkedAt = new Date().toISOString();
-  return withWrite(dbPath, (db) => {
+  const result = await withWrite(dbPath, (db) => {
     db.run(
       `INSERT INTO member_links (discord_id, guild_id, trainer_id, trainer_name, linked_at)
        VALUES (?, ?, ?, ?, ?)
@@ -62,6 +62,11 @@ export async function upsertLink({ discordId, guildId, trainerId, trainerName })
     );
     return { success: true, linkedAt };
   });
+  // Flush immediately — links are a user-initiated action, not a hot path.
+  // Deferring to the 5 s timer risks losing the write on a rapid restart or
+  // SIGKILL (e.g. Railway deploy → replace cycle).
+  await persistDatabase(dbPath);
+  return result;
 }
 
 /**
@@ -90,7 +95,7 @@ export async function updateJoinDate(discordId, guildId, joinDate) {
  */
 export async function removeLink(discordId, guildId) {
   await init();
-  return withWrite(dbPath, (db) => {
+  const result = await withWrite(dbPath, (db) => {
     const existing = queryOne(
       db,
       `SELECT trainer_name FROM member_links WHERE discord_id = ? AND guild_id = ?`,
@@ -103,6 +108,8 @@ export async function removeLink(discordId, guildId) {
     );
     return { success: true, trainerName: existing.trainer_name };
   });
+  if (result.success) await persistDatabase(dbPath);
+  return result;
 }
 
 // ─── Read operations ──────────────────────────────────────────────────────────

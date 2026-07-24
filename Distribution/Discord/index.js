@@ -23,7 +23,14 @@ for (const signal of ['SIGTERM', 'SIGINT']) {
       `[shutdown] Received ${signal} — rss=${memory.rss} ` +
       `heap=${memory.heapUsed}/${memory.heapTotal}`
     );
-    process.exit(0);
+    // Await an async flush before exiting so in-flight writes (links, pipeline
+    // results) reach disk even when the restart window is shorter than the
+    // 5 s deferred-flush timer. Fall through to process.exit regardless so
+    // the process never hangs on a flush error.
+    import('../../core/sqlite.js')
+      .then(({ flushAll }) => flushAll())
+      .catch(() => {})
+      .finally(() => process.exit(0));
   });
 }
 
