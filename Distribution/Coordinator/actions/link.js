@@ -11,7 +11,7 @@ import { processTrainer } from '../../../umamoe/pipeline.js';
 import { retrieve }        from '../../../Refinery/Depot/depot.js';
 import { searchTrainers }  from '../../../umamoe/Miner/miner.js';
 import { upsertLink }      from '../utils/memberLinks.js';
-import { upsertTrainer, getByName } from '../utils/trainerDb.js';
+import { upsertTrainer, getByName, getById } from '../utils/trainerDb.js';
 
 // ─── Trainer ID resolution ────────────────────────────────────────────────────
 
@@ -95,22 +95,45 @@ export async function link(payload) {
     };
   }
 
-  // ── 2. Verify trainer exists on Uma.moe (runs the full pipeline) ──────────
-  const pipelineResult = await processTrainer(resolvedId);
-  if (!pipelineResult.success) {
-    return {
-      success:   false,
-      failedAt:  'Umamoe',
-      error:     'TRAINER_NOT_FOUND',
-      message:   `Trainer ID \`${resolvedId}\` was not found on Uma.moe.`,
-      retriable: false,
-      interaction,
-    };
-  }
+  // ── 2. Resolve trainer name; verify existence if not already cached ──────────
+  //
+  // If the trainer is in the local DB they appeared in autocomplete, which means
+  // uma.moe's search API already confirmed they exist. Trust that and link
+  // immediately, then run the pipeline in the background so the Depot is warm
+  // for subsequent /fan_gain, /profile, etc. calls.
+  //
+  // Only block on the full pipeline when the trainer is completely unknown
+  // (not in local DB), e.g. the user typed a raw ID with trainer_id:.
+  let trainerName;
+  const cachedTrainer = await getById(resolvedId);
 
-  // ── 3. Retrieve compiled name from Depot ──────────────────────────────────
-  const { product: depotProduct } = await retrieve(resolvedId);
-  const trainerName = depotProduct?.compiledProduct?.name ?? resolvedId;
+  if (cachedTrainer?.trainer_name) {
+    // Known from autocomplete — link without waiting for the pipeline.
+    trainerName = cachedTrainer.trainer_name;
+    // Warm the Depot in the background; ignore failures (non-critical here).
+    processTrainer(resolvedId).catch(() => {});
+  } else {
+    // Unknown trainer — run the pipeline to verify existence and get the name.
+    const pipelineResult = await processTrainer(resolvedId);
+    if (!pipelineResult.success) {
+      // Distinguish a genuine "not found" (permanent API error) from transient
+      // failures (network, rate-limit, timeout) so we don't mislead the user.
+      const isPermFailure = pipelineResult.error === 'API_PERMANENT_ERROR'
+        || pipelineResult.error === 'MINER_INVALID_PARAMS';
+      return {
+        success:   false,
+        failedAt:  'Umamoe',
+        error:     isPermFailure ? 'TRAINER_NOT_FOUND' : (pipelineResult.error ?? 'PIPELINE_STAGE_ERROR'),
+        message:   isPermFailure
+          ? `Trainer ID \`${resolvedId}\` was not found on Uma.moe. Check the ID and try again.`
+          : `Could not reach Uma.moe right now — please try again in a moment.`,
+        retriable: !isPermFailure,
+        interaction,
+      };
+    }
+    const { product: depotProduct } = await retrieve(resolvedId);
+    trainerName = depotProduct?.compiledProduct?.name ?? resolvedId;
+  }
 
   // ── 4. Persist the link ───────────────────────────────────────────────────
   await upsertLink({
