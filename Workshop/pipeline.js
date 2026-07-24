@@ -1,137 +1,105 @@
 /**
  * Workshop Pipeline Wire
- *
- * Authority: GOVERNANCE/ARCHITECTURE_AUTHORITY.md
- * Registry:  GOVERNANCE/PIPELINE_REGISTRY.md
- *
- * Connects Stage 3 (Workshop) internally:
- *
- *   Fabricator → Validator → Terminal
- *
- * This module is the handoff surface the Distribution Coordinator calls to
- * produce and stage a deliverable. It owns no business logic — only
- * sequencing, error propagation, and Terminal pickup.
+ * Phase 4: stage-level timeouts + throughput metrics.
  */
 
-import { fabricate }                    from './Fabricator/fabricator.js';
-import { validate }                     from './Validator/Validator.js';
+import { fabricate }                        from './Fabricator/fabricator.js';
+import { validate }                         from './Validator/Validator.js';
 import { receive, pickup, listReady, getReleaseMetadata } from './Terminal/terminal.js';
+import { createLogger }                     from '../core/pipelineLogger.js';
+import { failureEnvelope, successEnvelope } from '../core/pipelineEnvelope.js';
+import { stageTimeout }                     from '../core/pipelineRuntime.js';
+import { recordStageRun }                   from '../core/pipelineMetrics.js';
 
-// ─── Logging ──────────────────────────────────────────────────────────────────
+const logger = createLogger('workshop-pipeline');
 
-function log(level, message, context = {}) {
-  const entry = {
-    timestamp: new Date().toISOString(),
-    level,
-    component: 'workshop-pipeline',
-    message,
-    ...context,
-  };
-  if (level === 'error') console.error(JSON.stringify(entry));
-  else if (level === 'warn')  console.warn(JSON.stringify(entry));
-  else console.log(JSON.stringify(entry));
-}
-
-function pipelineError(stage, error, message, context = {}) {
-  return {
-    success:   false,
-    failedAt:  stage,
-    error,
-    message,
-    timestamp: new Date().toISOString(),
-    context,
-  };
-}
+// ─── Timeout-aware stage runner ───────────────────────────────────────────────
 
 async function runStage(stageName, fn, ...args) {
+  const start   = Date.now();
+  const limitMs = stageTimeout(stageName);
+
   try {
-    return await fn(...args);
+    let result;
+    if (limitMs > 0) {
+      result = await Promise.race([
+        fn(...args),
+        new Promise((_, reject) =>
+          setTimeout(
+            () => reject(new Error(`STAGE_TIMEOUT: ${stageName} exceeded ${limitMs}ms`)),
+            limitMs,
+          ),
+        ),
+      ]);
+    } else {
+      result = await fn(...args);
+    }
+    recordStageRun(stageName, Date.now() - start, false);
+    return result;
   } catch (err) {
-    log('error', `unhandled error in stage ${stageName}: ${err.message}`);
-    return pipelineError(stageName, 'PIPELINE_STAGE_ERROR', err.message);
+    recordStageRun(stageName, Date.now() - start, true);
+    const isTimeout = err.message?.startsWith('STAGE_TIMEOUT');
+    logger.error(
+      `${isTimeout ? 'timeout' : 'unhandled error'} in stage ${stageName}: ${err.message}`,
+      { stageName },
+    );
+    return failureEnvelope(
+      stageName,
+      isTimeout ? 'PIPELINE_STAGE_TIMEOUT' : 'PIPELINE_STAGE_ERROR',
+      err.message,
+    );
   }
 }
 
-// ─── Full Workshop chain: Fabricator → Validator → Terminal ──────────────────
+// ─── produce ─────────────────────────────────────────────────────────────────
 
-/**
- * Fabricate a deliverable from a compiled product, validate it, and stage it
- * in the Terminal for Distribution pickup.
- *
- * @param {object} compiledProduct — from Refinery/Depot
- * @returns {Promise<{ success: boolean, terminalId?: string, failedAt?: string, error?: string }>}
- *
- * @example
- * const result = await produce(compiledProduct);
- * if (result.success) {
- *   const delivery = await claimDeliverable(result.terminalId);
- * }
- */
 export async function produce(compiledProduct) {
   const blueprintKey = compiledProduct?.blueprintKey ?? '(unknown)';
-  log('info', `workshop pipeline start — blueprintKey=${blueprintKey}`);
+  logger.info('workshop pipeline start', { blueprintKey });
 
-  // ── Fabricator ─────────────────────────────────────────────────────────────
   const fabricatorResult = await runStage('Fabricator', fabricate, compiledProduct);
   if (fabricatorResult.failedAt) return fabricatorResult;
   if (!fabricatorResult.success) {
-    log('warn', `Fabricator failed — ${fabricatorResult.error}`, { blueprintKey });
-    return pipelineError('Fabricator', fabricatorResult.error, fabricatorResult.message, { blueprintKey });
+    logger.warn('Fabricator failed', { blueprintKey, error: fabricatorResult.error });
+    return failureEnvelope('Fabricator', fabricatorResult.error, fabricatorResult.message, { blueprintKey });
   }
 
-  // ── Validator ──────────────────────────────────────────────────────────────
   const validatorResult = await runStage('Validator', validate, fabricatorResult);
   if (validatorResult.failedAt) return validatorResult;
   if (!validatorResult.success || !validatorResult.approved) {
-    log('warn', `Validator rejected deliverable — ${validatorResult.error}`, { blueprintKey });
-    return pipelineError('Validator', validatorResult.error, validatorResult.message, { blueprintKey });
+    logger.warn('Validator rejected deliverable', { blueprintKey, error: validatorResult.error });
+    return failureEnvelope('Validator', validatorResult.error, validatorResult.message, { blueprintKey });
   }
 
-  // ── Terminal ───────────────────────────────────────────────────────────────
   const terminalResult = await runStage('Terminal', receive, validatorResult);
   if (terminalResult.failedAt) return terminalResult;
   if (!terminalResult.success) {
-    log('warn', `Terminal intake failed — ${terminalResult.error}`, { blueprintKey });
-    return pipelineError('Terminal', terminalResult.error, terminalResult.message, { blueprintKey });
+    logger.warn('Terminal intake failed', { blueprintKey, error: terminalResult.error });
+    return failureEnvelope('Terminal', terminalResult.error, terminalResult.message, { blueprintKey });
   }
 
-  log('info', `workshop pipeline complete — terminalId=${terminalResult.terminalId} blueprintKey=${blueprintKey}`);
-  return {
-    success:    true,
+  logger.info('workshop pipeline complete', {
     terminalId: terminalResult.terminalId,
     blueprintKey,
-    receivedAt: terminalResult.receivedAt,
-  };
+  });
+
+  return successEnvelope('WorkshopPipeline', {
+    terminalId:  terminalResult.terminalId,
+    blueprintKey,
+    receivedAt:  terminalResult.receivedAt,
+  }, { blueprintKey });
 }
 
-/**
- * Claim a staged deliverable from the Terminal for Distribution.
- *
- * Called by the Distribution Coordinator after produce() returns a terminalId.
- *
- * @param {string} terminalId
- * @returns {Promise<TerminalPickupResult>}
- */
+// ─── Convenience wrappers ─────────────────────────────────────────────────────
+
 export async function claimDeliverable(terminalId) {
   return pickup(terminalId);
 }
 
-/**
- * List all deliverables in the Terminal waiting for Distribution pickup.
- *
- * @param {{ blueprintKey?: string, type?: string }} [filter]
- * @returns {Promise<{ results: TerminalRecord[] }>}
- */
 export async function listPending(filter) {
   return listReady(filter);
 }
 
-/**
- * Get release metadata for a staged deliverable without the PNG buffer.
- *
- * @param {string} terminalId
- * @returns {Promise<TerminalMetadataResult>}
- */
 export async function getDeliverableMetadata(terminalId) {
   return getReleaseMetadata(terminalId);
 }

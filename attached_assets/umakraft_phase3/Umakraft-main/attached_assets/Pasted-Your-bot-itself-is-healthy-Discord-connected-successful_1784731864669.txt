@@ -1,0 +1,317 @@
+Your bot itself is **healthy**. Discord connected successfully, commands loaded, scheduled tasks are running. The only subsystem that failed is the **AI Repository Engine**.
+
+Here's the timeline:
+
+✅ Discord login succeeded
+
+```text
+Logged in as UmaKraftCircleBot#8905
+Serving 1 guild(s)
+Bot is READY
+```
+
+✅ Commands loaded
+
+```text
+Loaded 30 commands
+```
+
+✅ Health server started
+
+```text
+Health server listening on 0.0.0.0:8080
+```
+
+✅ Qdrant connected
+
+```text
+Qdrant collection "umakraft" already exists.
+VDB backend: qdrant
+```
+
+Then the failure occurs.
+
+```text
+[AI/RepositoryEngine] Running incremental index on startup.
+[AI/RepositoryIndexer] Incremental index started.
+...
+[ready] AI Repository Engine init failed (AI commands degraded): Bad Request
+```
+
+Notice something important:
+
+* Qdrant is working.
+* The indexer starts.
+* Then **something sends an HTTP request that returns 400 Bad Request**.
+
+That means the AI engine is trying to communicate with another service (likely an embedding model or AI API), and **that request is malformed**.
+
+---
+
+## What "Bad Request" means
+
+A **400 Bad Request** is almost never a network issue.
+
+It usually means:
+
+* invalid JSON
+* missing required field
+* wrong endpoint
+* wrong model name
+* empty input
+* invalid API key format
+* unsupported parameter
+
+---
+
+## The likely flow
+
+Your startup probably looks like:
+
+```
+RepositoryEngine
+      │
+      ▼
+RepositoryIndexer
+      │
+      ▼
+Read markdown files
+      │
+      ▼
+Generate embeddings
+      │
+      ▼
+POST request
+      │
+      ▼
+400 Bad Request
+```
+
+So the crash is probably during **embedding generation**, not Discord.
+
+---
+
+## Things to inspect
+
+Search for code like:
+
+```js
+new OpenAI(...)
+```
+
+or
+
+```js
+fetch(...)
+```
+
+or
+
+```js
+axios.post(...)
+```
+
+or
+
+```js
+client.embeddings.create(...)
+```
+
+or
+
+```js
+openai.responses.create(...)
+```
+
+or
+
+```js
+embed()
+```
+
+---
+
+## Common causes
+
+### 1. Wrong model
+
+Example:
+
+```js
+model: "text-embedding-ada-002"
+```
+
+or
+
+```js
+model: "embedding"
+```
+
+If your provider doesn't support that model you'll get 400.
+
+---
+
+### 2. Empty text
+
+If you're indexing files:
+
+```js
+content = ""
+```
+
+and then
+
+```js
+embeddings.create({
+    input: content
+})
+```
+
+Some providers reject empty strings.
+
+---
+
+### 3. Wrong endpoint
+
+For OpenAI-compatible APIs:
+
+```
+POST /v1/embeddings
+```
+
+If you're sending embeddings to
+
+```
+/chat/completions
+```
+
+you'll get 400.
+
+---
+
+### 4. Missing required field
+
+For example:
+
+```js
+{
+    model: "...",
+}
+```
+
+without
+
+```js
+input
+```
+
+returns 400.
+
+---
+
+### 5. Invalid provider
+
+If you're using OpenRouter, Together AI, Groq, Gemini, Voyage, etc., each has slightly different supported models and endpoints.
+
+---
+
+## The biggest problem with your logs
+
+This line:
+
+```text
+AI Repository Engine init failed (AI commands degraded): Bad Request
+```
+
+is **throwing away the real error**.
+
+Instead of logging only:
+
+```
+Bad Request
+```
+
+you should log:
+
+```js
+console.error(error.response?.status);
+console.error(error.response?.data);
+console.error(error.stack);
+```
+
+or
+
+```js
+console.error(JSON.stringify(error.response.data, null, 2));
+```
+
+If you're using `fetch`:
+
+```js
+const res = await fetch(...);
+
+if (!res.ok) {
+    console.error(await res.text());
+}
+```
+
+That usually prints something like:
+
+```json
+{
+  "error": {
+    "message": "Model not found"
+  }
+}
+```
+
+or
+
+```json
+{
+  "error": {
+    "message": "Missing required parameter: input"
+  }
+}
+```
+
+which immediately identifies the issue.
+
+---
+
+## The Discord warning
+
+This is unrelated:
+
+```text
+DeprecationWarning:
+The ready event has been renamed to clientReady
+```
+
+Simply change:
+
+```js
+client.on("ready", ...)
+```
+
+to
+
+```js
+client.on("clientReady", ...)
+```
+
+This won't fix the AI issue, but it will remove the warning and keep your bot compatible with Discord.js v15.
+
+---
+
+## What I need to identify the exact cause
+
+Please share one of these files:
+
+* `AI/RepositoryEngine.js`
+* `AI/RepositoryIndexer.js`
+* `AI/EmbeddingProvider.js`
+* `AI/VectorDatabase.js`
+* or wherever you call the AI API (OpenAI, Gemini, OpenRouter, Voyage, etc.).
+
+Also include the **full stack trace** or the HTTP response body for the "Bad Request" error if possible. Right now the logs only show the HTTP status, but the response body should explain exactly why the AI provider rejected the request.

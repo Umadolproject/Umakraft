@@ -1,0 +1,6 @@
+- [AI Phases 3-5 implementation](ai-phases-3-5.md) — KnowledgeEngine, PromptSystem, ResponseValidator, ContentGenerator, MessageSystem, TopicFilter, WebSearchEngine — all built and tested; 214 tests pass across phases 1-5.
+- [Chrome/Puppeteer on Replit NixOS](chrome-puppeteer-nixos.md) — use Nix system chromium as executablePath; bundled puppeteer chrome missing libgbm.so.1 which cannot be resolved via installSystemDependencies.
+- [Qdrant payload indexes required](qdrant-payload-indexes.md) — newer Qdrant rejects scroll/filter queries on unindexed fields; must createPayloadIndex for filePath, department, fileType on initialize.
+- [Local AI service](local-ai-service.md) — AI_PROVIDER=local bypasses cloud pipeline; SmolLM2-360M-Instruct via @huggingface/transformers; files in AI/model.js, aiService.js, documentSearch.js, promptBuilder.js, cache.js.
+- [Discord interaction lifecycle](discord-interaction-lifecycle.md) — acknowledge slash commands centrally before slow work; dispatch responses through the original interaction object.
+- [Discord deployment](discord-deployment.md) — publish the bot as an always-on VM; autoscale/cloudrun cannot reliably maintain its gateway connection.

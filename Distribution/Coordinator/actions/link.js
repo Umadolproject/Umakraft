@@ -1,45 +1,97 @@
 // Distribution/Coordinator/actions/link.js
 // Verifies the trainer exists on Uma.moe, then persists a Discord↔trainer link.
+//
+// Trainer resolution priority:
+//   1. options.trainerId — explicit numeric ID (always wins)
+//   2. options.trainer   — free-text name entered without autocomplete
+//      → currently requires autocomplete selection; raw name lookup is not
+//        implemented because the search API does not guarantee a unique match.
 
 import { processTrainer } from '../../../umamoe/pipeline.js';
-import { retrieve }       from '../../../Refinery/Depot/depot.js';
+import { retrieve }        from '../../../Refinery/Depot/depot.js';
+import { searchTrainers }  from '../../../umamoe/Miner/miner.js';
+
+// ─── Trainer ID resolution ────────────────────────────────────────────────────
+
+/**
+ * Resolve a free-text trainer name to a numeric ID via Uma.moe search.
+ * Returns null when no unambiguous match is found.
+ *
+ * @param {string} name
+ * @returns {Promise<string|null>}
+ */
+async function resolveTrainerIdByName(name) {
+  const result = await searchTrainers({ q: name.trim(), limit: 5 });
+  if (!result?.success) return null;
+
+  const raw = Array.isArray(result.data)
+    ? result.data
+    : (result.data?.trainers ?? result.data?.results ?? []);
+
+  // Only accept an exact (case-insensitive) name match to avoid wrong links.
+  const exact = raw.find(
+    t => t?.name?.toLowerCase() === name.trim().toLowerCase(),
+  );
+  return exact?.id != null ? String(exact.id) : null;
+}
+
+// ─── Coordinator action ───────────────────────────────────────────────────────
 
 export async function link(payload) {
-  const { interaction, options, guildId } = payload;
+  const { interaction, options } = payload;
 
-  // Resolve trainer ID — trainer_id takes priority over trainer name
-  const trainerId = options.trainerId ?? null;
   const targetDiscordId = options.member?.id ?? interaction.user.id;
 
-  if (!trainerId) {
-    // TODO: Resolve trainer name → ID via Uma.moe name lookup.
+  // ── 1. Resolve trainer ID ─────────────────────────────────────────────────
+  let resolvedId = options.trainerId ?? null;
+
+  if (!resolvedId && options.trainer) {
+    // User typed a name manually without selecting from autocomplete.
+    // Attempt an exact-match lookup as a best-effort fallback.
+    resolvedId = await resolveTrainerIdByName(options.trainer);
+
+    if (!resolvedId) {
+      return {
+        success:   false,
+        failedAt:  'Coordinator',
+        error:     'TRAINER_NOT_FOUND',
+        message:   `No exact match found for trainer name **"${options.trainer}"**.\n` +
+                   `Use the autocomplete dropdown when typing the trainer name, or provide the numeric \`trainer_id\` directly.`,
+        retriable: false,
+        interaction,
+      };
+    }
+  }
+
+  if (!resolvedId) {
     return {
       success:   false,
       failedAt:  'Coordinator',
       error:     'TRAINER_NOT_FOUND',
-      message:   'Trainer name resolution not yet implemented. Provide `trainer_id` instead.',
+      message:   'Please provide a trainer name (autocomplete) or a `trainer_id`.',
       retriable: false,
       interaction,
     };
   }
 
-  // ── 1. Verify trainer exists on Uma.moe ──────────────────────────────────
-  const pipelineResult = await processTrainer(trainerId);
+  // ── 2. Verify trainer exists on Uma.moe (runs the full pipeline) ──────────
+  const pipelineResult = await processTrainer(resolvedId);
   if (!pipelineResult.success) {
     return {
       success:   false,
       failedAt:  'Umamoe',
       error:     'TRAINER_NOT_FOUND',
-      message:   `Trainer ID ${trainerId} not found on Uma.moe.`,
+      message:   `Trainer ID \`${resolvedId}\` was not found on Uma.moe.`,
       retriable: false,
       interaction,
     };
   }
 
-  const { product: depotProduct } = await retrieve(trainerId);
-  const trainerName = depotProduct?.compiledProduct?.name ?? trainerId;
+  // ── 3. Retrieve compiled name from Depot ──────────────────────────────────
+  const { product: depotProduct } = await retrieve(resolvedId);
+  const trainerName = depotProduct?.compiledProduct?.name ?? resolvedId;
 
-  // ── 2. Persist the link ───────────────────────────────────────────────────
+  // ── 4. Persist the link ───────────────────────────────────────────────────
   // TODO: UPSERT INTO member_links (discord_id, guild_id, trainer_id, trainer_name, linked_at)
   //       VALUES ($1, $2, $3, $4, NOW())
   //       ON CONFLICT (discord_id, guild_id) DO UPDATE SET
@@ -50,8 +102,9 @@ export async function link(payload) {
     type:     'embed',
     ephemeral: true,
     result: {
-      title:       `✅ Link created`,
-      description: `<@${targetDiscordId}> has been linked to **${trainerName}** (ID: \`${trainerId}\`).\n\n*(Database layer pending — link is not persisted yet.)*`,
+      title:       '✅ Link created',
+      description: `<@${targetDiscordId}> has been linked to **${trainerName}** (ID: \`${resolvedId}\`).\n\n` +
+                   `*(Database layer pending — link is not persisted yet.)*`,
     },
     interaction,
   };

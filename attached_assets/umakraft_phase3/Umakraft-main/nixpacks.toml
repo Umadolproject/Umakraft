@@ -1,0 +1,9 @@
+# nixpacks.toml — SUPERSEDED
+#
+# This project uses a Dockerfile instead of Nixpacks because Puppeteer +
+# Chromium requires system-level packages (apt) and CJK fonts that Nixpacks
+# cannot reliably provide.
+#
+# Railway reads railway.toml (builder = "dockerfile") and ignores this file.
+# Kept here only for reference. Do not restore Nixpacks unless Puppeteer is
+# removed from the project.

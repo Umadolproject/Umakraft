@@ -1,0 +1,37 @@
+# .dockerignore — files excluded from the Docker build context
+
+node_modules
+npm-debug.log*
+
+# Replit's package-lock.json has internal mirror URLs (package-firewall.replit.local)
+# that Railway cannot reach. Exclude it so Railway does a clean install from
+# the public npm registry instead of trying to fetch from Replit-internal URLs.
+package-lock.json
+
+.git
+.gitignore
+
+# Local dev / editor files
+.env
+.env.*
+.vscode
+.idea
+*.swp
+*.swo
+
+# Test output / coverage
+coverage
+.nyc_output
+
+# OS noise
+.DS_Store
+Thumbs.db
+
+# Railway / Nix config (not needed inside the image)
+nixpacks.toml
+railway.toml
+railway/
+
+# Agent memory
+.agents/
+.local/

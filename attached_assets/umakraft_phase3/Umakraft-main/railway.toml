@@ -1,0 +1,42 @@
+# railway.toml
+# Railway deployment configuration.
+# Docs: https://docs.railway.app/reference/config-as-code
+
+[build]
+builder        = "dockerfile"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+startCommand            = "node Distribution/Discord/index.js"
+restartPolicyType       = "on_failure"
+restartPolicyMaxRetries = 5
+
+# ---------------------------------------------------------------------------
+# Environment variables
+# Only secrets belong here — set them in the Railway dashboard, never commit.
+# All other configuration is hardcoded in the source files listed below.
+#
+#   core/botConfig.js     — DISCORD_CLIENT_ID, DISCORD_GUILD_ID, OPS_CHANNEL_ID
+#   AI/Configuration.js   — models, cache, search, rate limits, feature flags
+#   umamoe/Miner/config.js — API timeouts and retry settings
+# ---------------------------------------------------------------------------
+
+[variables]
+
+# ── Runtime (set by Railway automatically — do not override) ─────────────────
+NODE_ENV = "production"
+
+# ── Secrets — set these in the Railway dashboard, not here ──────────────────
+# DISCORD_TOKEN      — required
+# OPENAI_API_KEY     — optional (embeddings)
+# OPENAI_API_KEY_2   — optional (backup)
+# GEMINI_API_KEY     — optional
+# GEMINI_API_KEY_2   — optional (backup)
+# QDRANT_URL         — optional (falls back to in-memory)
+# QDRANT_API_KEY     — optional
+# TAVILY_API_KEY     — optional (web search)
+# TAVILY_API_KEY_2   — optional (backup)
+# BRAVE_SEARCH_API_KEY   — optional (web search)
+# BRAVE_SEARCH_API_KEY_2 — optional (backup)
+# GOOGLE_CSE_API_KEY — optional (web search)
+# SERPAPI_API_KEY    — optional (web search)

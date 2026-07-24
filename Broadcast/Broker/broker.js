@@ -4,7 +4,7 @@
  * Authority: GOVERNANCE/ARCHITECTURE_AUTHORITY.md
  * Registry:  GOVERNANCE/PIPELINE_REGISTRY.md
  * Department: Broker — Stage 5, Broadcast
- * Version:   v2.0.0
+ * Version:   v3.0.0  (Phase 4: per-circle concurrency control)
  *
  * The entry point and data courier of the Broadcast pipeline.
  *
@@ -16,21 +16,17 @@
  *   5. On restart: read Archive for incomplete records and route them to
  *      Archive-Transporter (bypassing Archive-Inspector — already approved)
  *   6. Manage the per-circle queue so one failing circle never blocks another
+ *      and up to brokerConcurrency circles are processed in parallel (Phase 4)
  *
  * Broker does NOT decide whether a notification should fire — that is
  * Archive-Inspector's sole responsibility.
- *
- * Usage (called by tasks/index.js on cron tick):
- *   await broker.run('dailyWarning', client)
- *
- * On startup:
- *   await broker.recoverIncomplete(circleIds, client)
  */
 
 import * as archiveInspector   from '../archive-inspector/archiveInspector.js';
 import * as archiveTransporter from '../archive_transporter/archiveTransporter.js';
 import * as archive             from '../Archive/archive.js';
 import { CONFIGURED_CIRCLES as DEFAULT_CIRCLES } from '../../core/botConfig.js';
+import { pipelineRuntime }      from '../../core/pipelineRuntime.js';
 
 // ─── Logging ──────────────────────────────────────────────────────────────────
 
@@ -47,32 +43,49 @@ function log(level, message, context = {}) {
   else console.log(JSON.stringify(entry));
 }
 
-// ─── Configured circles ───────────────────────────────────────────────────────
+// ─── Concurrency semaphore (Phase 4) ─────────────────────────────────────────
 
-// The set of configured circles is resolved by getConfiguredCircles().
-// In production this is loaded from the database or environment config.
-// Override with setConfiguredCircles() for testing or startup injection.
+/**
+ * Creates a simple counting semaphore.
+ * Returns an `acquire()` function; each call resolves to a `release()` fn.
+ *
+ * @param {number} max
+ * @returns {() => Promise<() => void>}
+ */
+function createSemaphore(max) {
+  let active = 0;
+  const queue = [];
+
+  return function acquire() {
+    if (active < max) {
+      active++;
+      return Promise.resolve(() => {
+        active--;
+        if (queue.length > 0) queue.shift()();
+      });
+    }
+    return new Promise(resolve => {
+      queue.push(() => {
+        active++;
+        resolve(() => {
+          active--;
+          if (queue.length > 0) queue.shift()();
+        });
+      });
+    });
+  };
+}
+
+// ─── Configured circles ───────────────────────────────────────────────────────
 
 let _configuredCircles = null;
 
-/**
- * Override the configured circles list.
- * Call this during bot startup before the first cron tick.
- *
- * @param {string[]} circleIds
- */
 export function setConfiguredCircles(circleIds) {
   if (!Array.isArray(circleIds)) throw new Error('setConfiguredCircles: circleIds must be an array');
   _configuredCircles = circleIds;
   log('info', `configured circles set: [${circleIds.join(', ')}]`);
 }
 
-/**
- * Return the list of configured circle IDs.
- * Falls back to the CONFIGURED_CIRCLES environment variable (comma-separated).
- *
- * @returns {string[]}
- */
 export function getConfiguredCircles() {
   if (_configuredCircles) return _configuredCircles;
   return [...DEFAULT_CIRCLES];
@@ -80,26 +93,8 @@ export function getConfiguredCircles() {
 
 // ─── Fetch registry ───────────────────────────────────────────────────────────
 
-/**
- * Registry of data fetch functions per notification type.
- * Each function receives (circleId) and returns the raw data for that circle.
- *
- * Register via registerFetch(type, fn).
- * @type {Map<string, (circleId: string) => Promise<object>>}
- */
 const _fetchRegistry = new Map();
 
-/**
- * Register a data fetch function for a notification type.
- *
- * The function must:
- *   - Accept a circleId string
- *   - Return the raw data object that Archive-Inspector expects
- *   - Throw or return null on failure
- *
- * @param {string} type
- * @param {(circleId: string) => Promise<object>} fetchFn
- */
 export function registerFetch(type, fetchFn) {
   if (!type || typeof fetchFn !== 'function') {
     throw new Error('registerFetch: type (string) and fetchFn (function) are required');
@@ -108,15 +103,6 @@ export function registerFetch(type, fetchFn) {
   log('info', `registered fetch handler for type="${type}"`);
 }
 
-// ─── Internal fetch ───────────────────────────────────────────────────────────
-
-/**
- * Fetch raw data for a notification type and circle from Refinery/Depot.
- *
- * @param {string} type
- * @param {string} circleId
- * @returns {Promise<object|null>}
- */
 export async function _fetch(type, circleId) {
   const fetchFn = _fetchRegistry.get(type);
   if (!fetchFn) {
@@ -134,13 +120,6 @@ export async function _fetch(type, circleId) {
 
 // ─── Restart recovery ─────────────────────────────────────────────────────────
 
-/**
- * Read incomplete Archive records for a circle and route their notificationKeys
- * to Archive-Transporter. Bypasses Archive-Inspector (already approved).
- *
- * @param {string} circleId
- * @param {object|null} client  — Discord client
- */
 export async function _recoverIncomplete(circleId, client) {
   let result;
   try {
@@ -157,22 +136,13 @@ export async function _recoverIncomplete(circleId, client) {
 
   for (const record of records) {
     try {
-      // Route to Archive-Transporter — it fetches the full record and calls Announcer
       await archiveTransporter.fetch(record.notificationKey, client);
     } catch (err) {
       log('error', `recovery routing failed for key=${record.notificationKey}: ${err.message}`);
-      // Continue to the next record — one failing recovery never blocks others
     }
   }
 }
 
-/**
- * Run restart recovery for all configured circles.
- * Call this once during bot startup before the first cron tick.
- *
- * @param {string[]|null} circleIds  — defaults to getConfiguredCircles()
- * @param {object|null} client
- */
 export async function recoverIncomplete(circleIds, client) {
   const ids = circleIds ?? getConfiguredCircles();
   if (ids.length === 0) {
@@ -186,10 +156,36 @@ export async function recoverIncomplete(circleIds, client) {
       await _recoverIncomplete(circleId, client);
     } catch (err) {
       log('error', `recovery failed for circleId="${circleId}": ${err.message}`);
-      // Isolation: one failing circle never blocks others
     }
   }
   log('info', 'restart recovery complete');
+}
+
+// ─── Per-circle processing (extracted for concurrency) ────────────────────────
+
+async function _processCircle(type, circleId, client) {
+  await _recoverIncomplete(circleId, client);
+
+  const data = await _fetch(type, circleId);
+  if (data == null) {
+    log('warn', `no data fetched for type="${type}" circleId="${circleId}" — skipping`);
+    return;
+  }
+
+  const envelope = {
+    type,
+    circleId,
+    fetchedAt: new Date().toISOString(),
+    data,
+  };
+
+  const result = await archiveInspector.evaluate(envelope, { client });
+
+  if (result.accepted) {
+    log('info', `Inspector approved key=${result.notificationKey} circleId="${circleId}"`);
+  } else {
+    log('info', `Inspector rejected type="${type}" circleId="${circleId}" reason=${result.reason}`);
+  }
 }
 
 // ─── Main run ─────────────────────────────────────────────────────────────────
@@ -197,19 +193,13 @@ export async function recoverIncomplete(circleIds, client) {
 /**
  * Execute one Broker run for a notification type across all configured circles.
  *
- * Called by tasks/index.js on a cron tick (or on a data threshold event).
+ * Phase 4: circles are processed in parallel up to `brokerConcurrency` at a time
+ * (default 3, controlled by the BROKER_CONCURRENCY env var).
+ * One failing circle still never blocks the others.
  *
- * For each configured circle:
- *   1. Run restart recovery (surface incomplete records from Archive)
- *   2. Fetch raw data from Refinery/Depot
- *   3. Build the raw input envelope
- *   4. Pass the envelope to Archive-Inspector for evaluation
- *
- * One failing circle never blocks the others.
- *
- * @param {string} type    — notification type registered with Archive-Inspector
- * @param {object|null} client — Discord.js Client
- * @param {string[]|null} circleIds — defaults to getConfiguredCircles()
+ * @param {string} type
+ * @param {object|null} client
+ * @param {string[]|null} circleIds
  */
 export async function run(type, client, circleIds) {
   const ids = circleIds ?? getConfiguredCircles();
@@ -224,40 +214,21 @@ export async function run(type, client, circleIds) {
     return;
   }
 
-  log('info', `Broker.run type="${type}" circles=[${ids.join(', ')}]`);
+  const concurrency = Math.max(1, pipelineRuntime.brokerConcurrency);
+  log('info', `Broker.run type="${type}" circles=[${ids.join(', ')}] concurrency=${concurrency}`);
 
-  for (const circleId of ids) {
+  const acquire = createSemaphore(concurrency);
+
+  await Promise.all(ids.map(async (circleId) => {
+    const release = await acquire();
     try {
-      // ── Restart recovery first ───────────────────────────────────────────
-      await _recoverIncomplete(circleId, client);
-
-      // ── Fetch raw data ───────────────────────────────────────────────────
-      const data = await _fetch(type, circleId);
-      if (data == null) {
-        log('warn', `no data fetched for type="${type}" circleId="${circleId}" — skipping`);
-        continue;
-      }
-
-      // ── Build envelope and hand to Archive-Inspector ─────────────────────
-      const envelope = {
-        type,
-        circleId,
-        fetchedAt: new Date().toISOString(),
-        data,
-      };
-
-      const result = await archiveInspector.evaluate(envelope, { client });
-
-      if (result.accepted) {
-        log('info', `Inspector approved key=${result.notificationKey} circleId="${circleId}"`);
-      } else {
-        log('info', `Inspector rejected type="${type}" circleId="${circleId}" reason=${result.reason}`);
-      }
+      await _processCircle(type, circleId, client);
     } catch (err) {
       log('error', `Broker.run failed for type="${type}" circleId="${circleId}": ${err.message}`);
-      // Isolation: continue to the next circle
+    } finally {
+      release();
     }
-  }
+  }));
 
   log('info', `Broker.run complete type="${type}"`);
 }

@@ -1,0 +1,46 @@
+# Umamoe
+
+**Authority:** `GOVERNANCE/ARCHITECTURE_AUTHORITY.md`
+**Registry:** `GOVERNANCE/PIPELINE_REGISTRY.md`
+**Version:** v2.0.0
+**Stage:** 1 — Umamoe (Extract, Transport, Validate & Store)
+**Last Updated:** 2026-07-21
+
+---
+
+**STAGE 1: Extract, Transport, Validate & Store**
+
+## Purpose
+
+Acquire raw data from external sources, validate integrity, and store in trusted persistence layer.
+
+## Departments
+
+| Department | Purpose |
+|------------|----------|
+| **Miner** | Extract raw data from uma.moe API |
+| **Courier** | Transport data without modification |
+| **Inspector** | Validate data structure and integrity |
+| **Vault** | Trusted persistence layer |
+
+## Pipeline Flow
+
+```
+API → Miner → Courier → Inspector → Vault → Refinery
+```
+
+## Status
+
+**DOCUMENTED** (v1.0.0)
+
+## Specifications
+
+- `DATA_FORMAT.md` — Trusted data structure
+- `ERROR_HANDLING.md` — Error classification
+- `INTEGRATION_EXAMPLE.md` — End-to-end examples
+- `MINER_ENDPOINTS.md` — Approved API endpoints
+
+## See Also
+
+- `GOVERNANCE/PIPELINE_REGISTRY.md` — Umamoe stage specification
+- `GOVERNANCE/PIPELINE_EVOLUTION.md` — Evolution policy

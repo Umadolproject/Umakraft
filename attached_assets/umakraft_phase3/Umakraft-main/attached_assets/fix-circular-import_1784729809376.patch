@@ -1,0 +1,84 @@
+From c416f5463cecf93b9e6df8359f5516ba0d0e5e0f Mon Sep 17 00:00:00 2001
+From: Replit Agent <agent@replit.com>
+Date: Wed, 22 Jul 2026 13:20:07 +0000
+Subject: [PATCH] fix: break circular import in Coordinator/actions/status.js
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Remove direct import of client from Discord/index.js which created a
+circular dependency chain:
+  Discord/index.js → Commands/index.js → Coordinator/index.js
+  → Coordinator/actions/status.js → Discord/index.js
+
+Fix: pass client via dependency injection through the call chain:
+  interactionCreate.js: command.execute(interaction, coordinator, client)
+  Commands/handlers/status.js: execute(interaction, coordinator, client)
+    → includes client in coordinator payload
+  Coordinator/actions/status.js: reads client from payload instead of
+    importing it directly
+---
+ Distribution/Commands/handlers/status.js         | 3 ++-
+ Distribution/Coordinator/actions/status.js       | 8 ++++----
+ Distribution/Discord/events/interactionCreate.js | 4 +++-
+ 3 files changed, 9 insertions(+), 6 deletions(-)
+
+diff --git a/Distribution/Commands/handlers/status.js b/Distribution/Commands/handlers/status.js
+index 0ad0f09..2e5a192 100644
+--- a/Distribution/Commands/handlers/status.js
++++ b/Distribution/Commands/handlers/status.js
+@@ -3,11 +3,12 @@ export const name = 'status';
+ export const defer = true;
+ export const ephemeral = true;
+ 
+-export async function execute(interaction, coordinator) {
++export async function execute(interaction, coordinator, client) {
+   await interaction.deferReply({ ephemeral: true });
+   return coordinator.status({
+     commandName: name,
+     interaction,
++    client,
+     options: {},
+     guildId:   interaction.guildId,
+     userId:    interaction.user.id,
+diff --git a/Distribution/Coordinator/actions/status.js b/Distribution/Coordinator/actions/status.js
+index 5ef8767..642751e 100644
+--- a/Distribution/Coordinator/actions/status.js
++++ b/Distribution/Coordinator/actions/status.js
+@@ -1,14 +1,14 @@
+ // Distribution/Coordinator/actions/status.js
+ // Returns live bot health — uptime, last sync time, active circle count.
+-
+-import { client } from '../../Discord/index.js';
++// client is received via payload (dependency injection) to avoid a circular
++// import back to Discord/index.js.
+ 
+ export async function status(payload) {
+-  const { interaction } = payload;
++  const { interaction, client } = payload;
+ 
+   const uptimeMs   = process.uptime() * 1000;
+   const uptimeStr  = formatUptime(uptimeMs);
+-  const guildCount = client.guilds.cache.size;
++  const guildCount = client?.guilds.cache.size ?? 0;
+   const memoryMb   = (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(1);
+ 
+   // TODO: Pull last sync time and next sync time from Umamoe scheduler state.
+diff --git a/Distribution/Discord/events/interactionCreate.js b/Distribution/Discord/events/interactionCreate.js
+index 740242e..abe721e 100644
+--- a/Distribution/Discord/events/interactionCreate.js
++++ b/Distribution/Discord/events/interactionCreate.js
+@@ -21,7 +21,9 @@ export async function execute(interaction, client) {
+ 
+   try {
+     // command.execute defers the reply and returns the result envelope
+-    const result = await command.execute(interaction, coordinator);
++    // client is passed as a third arg so handlers can inject it into the
++    // coordinator payload without importing Discord/index.js directly.
++    const result = await command.execute(interaction, coordinator, client);
+ 
+     // Dispatcher turns the result envelope into a Discord response
+     await dispatch(result);
+-- 
+2.50.1
+

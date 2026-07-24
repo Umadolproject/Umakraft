@@ -1,171 +1,155 @@
 /**
  * Umamoe → Refinery Pipeline Wire
- *
- * Authority: GOVERNANCE/ARCHITECTURE_AUTHORITY.md
- *
- * Connects Stage 1 (Umamoe) to Stage 2 (Refinery).
- * Orchestrates the full chain:
- *
- *   Miner → Courier → Inspector → Vault → Refiner → Compiler → Depot
- *
- * This module is the handoff boundary between Stage 1 and Stage 2.
- * It owns no business logic — only sequencing and error propagation.
+ * Phase 4: stage-level timeouts + throughput metrics.
  */
 
-import * as Miner   from './Miner/miner.js';
-import { transport } from './Courier/courier.js';
+import * as Miner from './Miner/miner.js';
+import { transport }  from './Courier/courier.js';
 import { receive, retrieve } from './Vault/vault.js';
-import { refine }   from '../Refinery/Refiner/refiner.js';
-import { compile }  from '../Refinery/Compiler/compiler.js';
+import { refine }  from '../Refinery/Refiner/refiner.js';
+import { compile } from '../Refinery/Compiler/compiler.js';
+import { createLogger }                        from '../core/pipelineLogger.js';
+import { failureEnvelope, successEnvelope }    from '../core/pipelineEnvelope.js';
+import { stageTimeout }                        from '../core/pipelineRuntime.js';
+import { recordStageRun }                      from '../core/pipelineMetrics.js';
 
-// ─── Logging ─────────────────────────────────────────────────────────────────
+const logger = createLogger('umamoe-pipeline');
 
-function log(level, message, context = {}) {
-  const entry = {
-    timestamp: new Date().toISOString(),
-    level,
-    component: 'pipeline',
-    message,
-    ...context,
-  };
-  if (level === 'error') console.error(JSON.stringify(entry));
-  else if (level === 'warn')  console.warn(JSON.stringify(entry));
-  else console.log(JSON.stringify(entry));
-}
+// ─── Timeout-aware stage runner ───────────────────────────────────────────────
 
-function pipelineError(stage, error, message, context = {}) {
-  return {
-    success: false,
-    failedAt: stage,
-    error,
-    message,
-    timestamp: new Date().toISOString(),
-    context,
-  };
-}
-
-// ─── Stage runner ─────────────────────────────────────────────────────────────
-
-/**
- * Run a single pipeline stage. Returns the result or a pipeline error envelope.
- *
- * @param {string}   stageName
- * @param {Function} fn
- * @param {...*}     args
- */
 async function runStage(stageName, fn, ...args) {
+  const start   = Date.now();
+  const limitMs = stageTimeout(stageName);
+
   try {
-    return await fn(...args);
+    let result;
+    if (limitMs > 0) {
+      result = await Promise.race([
+        fn(...args),
+        new Promise((_, reject) =>
+          setTimeout(
+            () => reject(new Error(`STAGE_TIMEOUT: ${stageName} exceeded ${limitMs}ms`)),
+            limitMs,
+          ),
+        ),
+      ]);
+    } else {
+      result = await fn(...args);
+    }
+    recordStageRun(stageName, Date.now() - start, false);
+    return result;
   } catch (err) {
-    log('error', `unhandled error in stage ${stageName}: ${err.message}`);
-    return pipelineError(stageName, 'PIPELINE_STAGE_ERROR', err.message);
+    recordStageRun(stageName, Date.now() - start, true);
+    const isTimeout = err.message?.startsWith('STAGE_TIMEOUT');
+    logger.error(
+      `${isTimeout ? 'timeout' : 'unhandled error'} in stage ${stageName}: ${err.message}`,
+      { stageName },
+    );
+    return failureEnvelope(
+      stageName,
+      isTimeout ? 'PIPELINE_STAGE_TIMEOUT' : 'PIPELINE_STAGE_ERROR',
+      err.message,
+    );
   }
 }
 
-// ─── Full pipeline: Miner → Depot ────────────────────────────────────────────
+// ─── processTrainer ───────────────────────────────────────────────────────────
 
-/**
- * Fetch a trainer profile and run it through the full pipeline.
- *
- * Miner → Courier → Inspector → Vault → Refiner → Compiler → Depot
- *
- * @param {string} trainerId
- * @param {object} [options]
- * @param {object} [options.previousVaultRecord] — prior snapshot for delta gain calculation
- * @returns {Promise<PipelineResult>}
- */
 export async function processTrainer(trainerId, options = {}) {
-  log('info', `pipeline start — trainerId=${trainerId}`);
+  logger.info('pipeline start', { trainerId });
 
-  // ── Stage 1a: Miner ───────────────────────────────────────────────────────
   const minerResult = await runStage('Miner', Miner.fetchTrainer, trainerId);
   if (minerResult.success === false && minerResult.failedAt) return minerResult;
   if (!minerResult.success) {
-    log('warn', `Miner failed — ${minerResult.error}`, { trainerId });
-    return pipelineError('Miner', minerResult.error, minerResult.message, { trainerId });
+    logger.warn('Miner failed', { trainerId, error: minerResult.error });
+    return failureEnvelope('Miner', minerResult.error, minerResult.message, { trainerId });
   }
 
-  // ── Stage 1b: Courier → Inspector ─────────────────────────────────────────
   const inspectorResult = await runStage('Courier', transport, minerResult);
   if (inspectorResult.failedAt) return inspectorResult;
   if (!inspectorResult.success || !inspectorResult.accepted) {
-    log('warn', `Inspector rejected data — ${inspectorResult.error}`, { trainerId });
-    return pipelineError('Inspector', inspectorResult.error, inspectorResult.message, { trainerId });
+    logger.warn('Inspector rejected data', { trainerId, error: inspectorResult.error });
+    return failureEnvelope('Inspector', inspectorResult.error, inspectorResult.message, { trainerId });
   }
 
-  // ── Stage 1c: Vault (store) ────────────────────────────────────────────────
   const vaultResult = await runStage('Vault', receive, inspectorResult);
   if (vaultResult.failedAt) return vaultResult;
   if (!vaultResult.success) {
-    log('warn', `Vault store failed — ${vaultResult.error}`, { trainerId });
-    return pipelineError('Vault', vaultResult.error, vaultResult.message, { trainerId });
+    logger.warn('Vault store failed', { trainerId, error: vaultResult.error });
+    return failureEnvelope('Vault', vaultResult.error, vaultResult.message, { trainerId });
   }
 
-  // ── Stage 1d: Vault (retrieve for Refiner) ────────────────────────────────
   const vaultRecord = await runStage('Vault.retrieve', retrieve, { id: trainerId });
   if (vaultRecord.failedAt) return vaultRecord;
   if (!vaultRecord.success || !vaultRecord.data) {
-    log('warn', `Vault retrieve failed — ${vaultRecord.error}`, { trainerId });
-    return pipelineError('Vault.retrieve', vaultRecord.error ?? 'VAULT_RETRIEVE_FAILED', 'Could not retrieve stored record', { trainerId });
+    logger.warn('Vault retrieve failed', { trainerId, error: vaultRecord.error });
+    return failureEnvelope(
+      'Vault.retrieve',
+      vaultRecord.error ?? 'VAULT_RETRIEVE_FAILED',
+      'Could not retrieve stored record',
+      { trainerId },
+    );
   }
 
-  // ── Stage 2a: Refiner ─────────────────────────────────────────────────────
+  let previousRecord = options.previousVaultRecord ?? null;
+  if (!previousRecord) {
+    const previousSnapshot = await runStage(
+      'Vault.retrievePrevious',
+      retrieve,
+      { id: trainerId, version: 'previous' },
+    );
+    if (!previousSnapshot?.failedAt && previousSnapshot?.success && previousSnapshot?.data) {
+      previousRecord = previousSnapshot.data;
+    }
+  }
+
   const refinedResult = await runStage(
     'Refiner',
     async (record, opts) => refine(record, opts),
     vaultRecord.data,
-    { previousRecord: options.previousVaultRecord }
+    { previousRecord },
   );
   if (refinedResult.failedAt) return refinedResult;
   if (!refinedResult.success) {
-    log('warn', `Refiner failed — ${refinedResult.error}`, { trainerId });
-    return pipelineError('Refiner', refinedResult.error, refinedResult.message, { trainerId });
+    logger.warn('Refiner failed', { trainerId, error: refinedResult.error });
+    return failureEnvelope('Refiner', refinedResult.error, refinedResult.message, { trainerId });
   }
 
-  // ── Stage 2b: Compiler → Depot ────────────────────────────────────────────
   const compileResult = await runStage('Compiler', compile, refinedResult);
   if (compileResult.failedAt) return compileResult;
   if (!compileResult.success) {
-    log('warn', `Compiler failed — ${compileResult.error}`, { trainerId });
-    return pipelineError('Compiler', compileResult.error, compileResult.message, { trainerId });
+    logger.warn('Compiler failed', { trainerId, error: compileResult.error });
+    return failureEnvelope('Compiler', compileResult.error, compileResult.message, { trainerId });
   }
 
-  log('info', `pipeline complete — trainerId=${trainerId} version=${compileResult.version}`);
-
-  return {
-    success:  true,
+  logger.info('pipeline complete', { trainerId, version: compileResult.version });
+  return successEnvelope('UmamoePipeline', {
     trainerId,
     version:  compileResult.version,
     product:  compileResult.product,
     storedAt: compileResult.storedAt,
-  };
+  }, { trainerId });
 }
 
-/**
- * Fetch ranked trainers and process each through the full pipeline.
- *
- * @param {object} [params] — e.g. { limit: 10 }
- * @returns {Promise<{ success: boolean, results: PipelineResult[] }>}
- */
+// ─── processRankings ──────────────────────────────────────────────────────────
+
 export async function processRankings(params = {}) {
-  log('info', 'pipeline start — rankings');
+  logger.info('pipeline start — rankings', { params });
 
   const minerResult = await runStage('Miner', Miner.fetchRankings, params);
   if (minerResult.failedAt) return minerResult;
   if (!minerResult.success) {
-    return pipelineError('Miner', minerResult.error, minerResult.message);
+    return failureEnvelope('Miner', minerResult.error, minerResult.message, { params });
   }
 
-  // Rankings returns an array of trainers
   const trainers = Array.isArray(minerResult.data)
     ? minerResult.data
     : minerResult.data?.trainers ?? [];
 
-  log('info', `processing ${trainers.length} trainers from rankings`);
+  logger.info('processing rankings', { trainerCount: trainers.length });
 
   const results = [];
   for (const trainer of trainers) {
-    // Build a synthetic Miner envelope per trainer so the pipeline stages work
     const syntheticEnvelope = {
       success: true,
       data: trainer,
@@ -193,7 +177,17 @@ export async function processRankings(params = {}) {
       continue;
     }
 
-    const refinedResult = refine(vaultRecord.data);
+    let previousRecord = null;
+    const previousSnapshot = await runStage(
+      'Vault.retrievePrevious',
+      retrieve,
+      { id: trainer.id, version: 'previous' },
+    );
+    if (!previousSnapshot?.failedAt && previousSnapshot?.success && previousSnapshot?.data) {
+      previousRecord = previousSnapshot.data;
+    }
+
+    const refinedResult = refine(vaultRecord.data, { previousRecord });
     if (!refinedResult.success) {
       results.push({ success: false, trainerId: trainer.id, error: refinedResult.error });
       continue;
@@ -201,15 +195,18 @@ export async function processRankings(params = {}) {
 
     const compileResult = await compile(refinedResult);
     results.push({
-      success:   compileResult.success,
+      success: compileResult.success,
       trainerId: trainer.id,
-      version:   compileResult.version,
-      error:     compileResult.error,
+      version: compileResult.version,
+      error: compileResult.error,
     });
   }
 
-  const succeeded = results.filter((r) => r.success).length;
-  log('info', `rankings pipeline complete — ${succeeded}/${results.length} succeeded`);
-
-  return { success: true, results };
+  const succeeded = results.filter(r => r.success).length;
+  logger.info('rankings pipeline complete', { succeeded, total: results.length });
+  return successEnvelope(
+    'UmamoeRankingsPipeline',
+    { results },
+    { total: results.length, succeeded },
+  );
 }

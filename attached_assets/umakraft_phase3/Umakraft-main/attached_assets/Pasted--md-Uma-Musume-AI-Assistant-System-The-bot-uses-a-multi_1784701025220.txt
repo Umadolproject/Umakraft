@@ -1,0 +1,156 @@
+```md
+# 🧠 Uma Musume AI Assistant System
+
+The bot uses a multi-layer AI system designed for **high-quality answers, low cost, and reliability**.
+
+---
+
+# 🤖 AI Model System
+
+The bot uses multiple AI models with different priorities.
+
+## 🥇 Main AI Model: GPT
+
+Used for:
+- Important questions
+- Complex strategy discussions
+- Detailed explanations
+- Difficult Uma Musume guides
+- Advanced analysis
+
+GPT provides the highest-quality reasoning and final answers.
+
+---
+
+## 🥈 Backup AI Model: Gemini (Free Tier)
+
+Used for:
+- Simple questions
+- General conversations
+- Common Uma Musume questions
+- Reducing API costs
+
+Gemini helps handle normal requests and works as a backup when GPT is unavailable.
+
+---
+
+# 🔎 Information System
+
+The bot can combine AI models with search and database systems.
+
+## 🌐 Current Information
+
+```
+
+Tavily + GPT/Gemini
+
+```
+
+Used for:
+- Latest Uma Musume updates
+- New events
+- Recent changes
+- Current information from the internet
+
+Flow:
+
+```
+
+User Question
+↓
+Tavily Search
+↓
+Web Information
+↓
+GPT/Gemini
+↓
+Final Answer
+
+```
+
+---
+
+## 📚 Guides & Database
+
+```
+
+Qdrant + GPT/Gemini
+
+```
+
+Used for:
+- Uma Musume character guides
+- Support card information
+- Training strategies
+- Skill explanations
+- Stored community knowledge
+
+Flow:
+
+```
+
+User Question
+↓
+Qdrant Database
+↓
+Relevant Guide Data
+↓
+GPT/Gemini
+↓
+Final Answer
+
+```
+
+---
+
+# ⚙️ Complete AI Flow
+
+```
+
+User Question
+|
+▼
+Question Analyzer
+|
+├── Simple Question
+|        |
+|        ▼
+|     Gemini (Free)
+|
+├── Important Question
+|        |
+|        ▼
+|       GPT
+|
+├── Needs Current Information
+|        |
+|        ▼
+|   Tavily Search
+|        |
+|        ▼
+|   GPT/Gemini
+|
+└── Needs Guide Data
+|
+▼
+Qdrant
+|
+▼
+GPT/Gemini
+
+```
+
+---
+
+# 🎯 Goal
+
+The system is designed to provide:
+
+✅ Accurate Uma Musume answers  
+✅ Updated information when needed  
+✅ Fast responses  
+✅ Lower API costs  
+✅ Reliable backup systems  
+
+The bot focuses on Uma Musume knowledge while keeping the AI infrastructure efficient and scalable.
+```

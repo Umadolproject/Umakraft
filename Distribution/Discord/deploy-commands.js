@@ -133,7 +133,7 @@ const link = new SlashCommandBuilder()
   .setName('link')
   .setDescription('Link a Discord account to an Uma.moe trainer')
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-  .addStringOption(o => o.setName('trainer').setDescription('Uma.moe trainer name — supports autocomplete'))
+  .addStringOption(o => o.setName('trainer').setDescription('Uma.moe trainer name — type to search').setAutocomplete(true))
   .addStringOption(o => o.setName('trainer_id').setDescription('Uma.moe trainer ID (overrides trainer name if both given)'))
   .addUserOption(o => o.setName('member').setDescription('Discord member to link (defaults to yourself)'))
   .addStringOption(o => o.setName('circle').setDescription('Which circle to link in (defaults to primary)'));
@@ -251,6 +251,21 @@ const warningSettings = new SlashCommandBuilder()
       ))
     .addStringOption(o => o.setName('value').setDescription('New value — true/false for toggles, a number for thresholds').setRequired(true)));
 
+
+
+const deadLetterInspect = new SlashCommandBuilder()
+  .setName('deadletter_inspect')
+  .setDescription('Inspect dead-letter broadcast records or list the recent dead-letter queue')
+  .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+  .addStringOption(o => o.setName('notification_key').setDescription('Specific notification key to inspect'))
+  .addIntegerOption(o => o.setName('limit').setDescription('Number of recent dead-letter records to list').setMinValue(1).setMaxValue(20));
+
+const deadLetterReplay = new SlashCommandBuilder()
+  .setName('deadletter_replay')
+  .setDescription('Replay a dead-letter notification by returning it to the delivery pipeline')
+  .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+  .addStringOption(o => o.setName('notification_key').setDescription('Notification key to replay').setRequired(true));
+
 // ─── AI Commands ──────────────────────────────────────────────────────────────
 
 const ask = new SlashCommandBuilder()
@@ -340,8 +355,15 @@ const commands = [
   keep, setTimezone, status, circleStatus, help,
   link, unlink, linkList, setFans, adminSync, adminSetJoinDate,
   testMilestone, timelineSetup, timelinePost, adminSyncCards, warningSettings,
+  deadLetterInspect, deadLetterReplay,
   ask, ai,
 ].map(c => c.toJSON());
+
+const commandNames = commands.map(command => command.name);
+const duplicateCommandNames = commandNames.filter((name, index) => commandNames.indexOf(name) !== index);
+if (duplicateCommandNames.length > 0) {
+  throw new Error(`Duplicate slash command definitions found: ${[...new Set(duplicateCommandNames)].join(', ')}`);
+}
 
 // ─── Deploy ────────────────────────────────────────────────────────────────────
 
@@ -359,6 +381,10 @@ const route = global
 
 const mode = global ? 'global' : `guild ${DISCORD_GUILD_ID}`;
 console.log(`Registering ${commands.length} slash commands (${mode})...`);
+console.log(`[deploy] Commands: ${commandNames.join(', ')}`);
 
 const data = await rest.put(route, { body: commands });
 console.log(`Successfully registered ${data.length} commands (${mode}).`);
+for (const command of data) {
+  console.log(`[deploy] Registered command: ${command.name} (id=${command.id})`);
+}

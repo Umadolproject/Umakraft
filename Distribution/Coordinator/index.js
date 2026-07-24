@@ -31,6 +31,9 @@ import { timelinePost }         from './actions/timelinePost.js';
 import { adminSyncCards }       from './actions/adminSyncCards.js';
 import { warningSettings }      from './actions/warningSettings.js';
 import { aiCommand }            from './actions/aiGateway.js';
+import { deadLetterInspect }    from './actions/deadLetterInspect.js';
+import { deadLetterReplay }     from './actions/deadLetterReplay.js';
+import { autocomplete }         from './actions/autocomplete.js';
 
 export const coordinator = {
   fanGain,
@@ -62,4 +65,7 @@ export const coordinator = {
   adminSyncCards,
   warningSettings,
   aiCommand,
+  deadLetterInspect,
+  deadLetterReplay,
+  autocomplete,
 };

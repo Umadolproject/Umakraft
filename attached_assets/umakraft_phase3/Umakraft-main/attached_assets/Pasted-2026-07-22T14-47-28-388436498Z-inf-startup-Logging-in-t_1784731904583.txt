@@ -1,0 +1,33 @@
+2026-07-22T14:47:28.388436498Z [inf]  [startup] Logging in to Discord...
+2026-07-22T14:47:28.388448728Z [inf]  [startup] Login call completed — waiting for ready event
+2026-07-22T14:47:28.388453468Z [inf]  [ready] Logged in as UmaKraftCircleBot#8905 (1526549146788429894)
+2026-07-22T14:47:28.388460068Z [inf]  [ready] Serving 1 guild(s)
+2026-07-22T14:47:28.388464808Z [inf]  [AI/RepositoryEngine] Initializing — root: /app
+2026-07-22T14:47:28.388469268Z [inf]  [startup] Bot is READY — UmaKraftCircleBot#8905
+2026-07-22T14:47:28.388473717Z [err]  (node:1) DeprecationWarning: The ready event has been renamed to clientReady to distinguish it from the gateway READY event and will only emit under that name in v15. Please use clientReady instead.
+2026-07-22T14:47:28.388478147Z [err]  (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-07-22T14:47:28.388914481Z [inf]  [startup] Checking required environment variables...
+2026-07-22T14:47:28.388918901Z [inf]  [startup] Environment OK — DISCORD_TOKEN and DISCORD_CLIENT_ID present
+2026-07-22T14:47:28.388938161Z [inf]  [startup] Creating Discord client...
+2026-07-22T14:47:28.388943231Z [inf]  [startup] Loading event handlers...
+2026-07-22T14:47:28.388947701Z [inf]  [startup] Health server listening on 0.0.0.0:8080
+2026-07-22T14:47:28.388952781Z [inf]  [startup] Registered event: guildMemberAdd
+2026-07-22T14:47:28.389037930Z [inf]  [startup] Registered event: guildMemberRemove
+2026-07-22T14:47:28.389044060Z [inf]  [startup] Registered event: interactionCreate
+2026-07-22T14:47:28.389047700Z [inf]  [startup] Registered event: ready
+2026-07-22T14:47:28.389051629Z [inf]  [startup] Loading command handlers...
+2026-07-22T14:47:28.389055479Z [inf]  [startup] Loaded 30 commands
+2026-07-22T14:47:28.804160221Z [inf]  [AI/VectorDatabase] Qdrant collection "umakraft" already exists.
+2026-07-22T14:47:28.804164441Z [inf]  [AI/RepositoryEngine] VDB backend: qdrant, current size: unknown (Qdrant)
+2026-07-22T14:47:28.804168581Z [inf]  [AI/RepositoryEngine] Running incremental index on startup.
+2026-07-22T14:47:28.804172411Z [inf]  [AI/RepositoryIndexer] Incremental index started.
+2026-07-22T14:47:28.884584715Z [inf]  Starting Container
+2026-07-22T14:47:29.333832200Z [err]  [ready] AI Repository Engine init failed (AI commands degraded): Bad Request
+2026-07-22T14:47:29.333837280Z [inf]  [tasks] registered "operation" (*/5 * * * *)
+2026-07-22T14:47:29.333841550Z [inf]  [tasks] starting "operation" — interval=300000ms
+2026-07-22T14:47:29.333845160Z [inf]  [tasks] tick — task="operation"
+2026-07-22T14:47:29.333849620Z [inf]  [Operation] Evaluation cycle started.
+2026-07-22T14:47:29.333853480Z [dbg]  [Operation/Logger] pipeline=core stage=operation status=unknown failures=0 duration=0ms
+2026-07-22T14:47:29.333857980Z [inf]  [Operation/Logger] pipeline=runtime stage=runtime status=ok failures=0 duration=n/ams
+2026-07-22T14:47:29.333862129Z [inf]  [Operation/Manager] decision=Healthy — All systems nominal
+2026-07-22T14:47:29.333866599Z [inf]  [Operation] Cycle complete. decision=Healthy subjects=[none]

@@ -1,34 +1,48 @@
 // Distribution/Discord/events/interactionCreate.js
-// Fires on every Discord interaction (slash command, button, autocomplete, etc.).
-// Routes slash command interactions to the Commands department.
+// Central interaction boundary — handles both slash commands and autocomplete.
+// Owns acknowledgement timing, command routing, execution logging, and
+// user-facing fallback handling for uncaught failures.
 
-import { dispatch } from '../../Dispatcher/index.js';
-import { coordinator } from '../../Coordinator/index.js';
+import { dispatch }     from '../../Dispatcher/index.js';
+import { coordinator }  from '../../Coordinator/index.js';
 
 export const name = 'interactionCreate';
 export const once = false;
 const INTERACTION_RESPONSE_HANDLED = Symbol('interactionResponseHandled');
 
-/**
- * The command handlers predate the centralized acknowledgement below. Some
- * call deferReply() themselves and some call reply() during validation before
- * doing slower work. Once the boundary has acknowledged the interaction,
- * translate those legacy calls into safe no-op/edit operations.
- */
+// ─── Autocomplete ─────────────────────────────────────────────────────────────
+
+async function handleAutocomplete(interaction) {
+  const commandName   = interaction.commandName;
+  const focusedOption = interaction.options.getFocused(true);
+
+  try {
+    const suggestions = await coordinator.autocomplete({
+      commandName,
+      focusedOption,
+      interaction,
+    });
+    await interaction.respond(Array.isArray(suggestions) ? suggestions : []);
+  } catch (err) {
+    console.error(`[AUTOCOMPLETE] Error for /${commandName} option "${focusedOption?.name}":`, err);
+    try { await interaction.respond([]); } catch { /* already responded */ }
+  }
+}
+
+// ─── Slash commands ───────────────────────────────────────────────────────────
+
 function acknowledgedInteraction(interaction) {
   return new Proxy(interaction, {
-    get(target, property, receiver) {
-      if (property === '__originalInteraction') {
-        return target;
-      }
+    get(target, property) {
+      if (property === '__originalInteraction') return target;
 
       if (property === 'deferReply') {
         return async () => target;
       }
 
       if (property === 'reply') {
-        return async (payload) => {
-          const { ephemeral: _ephemeral, ...editPayload } = payload ?? {};
+        return async (payload = {}) => {
+          const { ephemeral: _ephemeral, ...editPayload } = payload;
           await target.editReply(editPayload);
           return { [INTERACTION_RESPONSE_HANDLED]: true };
         };
@@ -40,85 +54,98 @@ function acknowledgedInteraction(interaction) {
   });
 }
 
+async function sendLastChanceFailure(interaction, message) {
+  if (!interaction.deferred && !interaction.replied) {
+    return interaction.reply({ content: message, ephemeral: true });
+  }
+  return interaction.editReply({ content: message });
+}
+
+// ─── Entry point ──────────────────────────────────────────────────────────────
+
 export async function execute(interaction, client) {
-  // Only handle slash commands here.
-  // Buttons and selects are handled by their respective collectors.
+  // ── Autocomplete ───────────────────────────────────────────────────────────
+  if (interaction.isAutocomplete()) {
+    return handleAutocomplete(interaction);
+  }
+
+  // ── Slash commands ─────────────────────────────────────────────────────────
   if (!interaction.isChatInputCommand()) return;
 
-  const command = client.commands.get(interaction.commandName);
+  const commandName = interaction.commandName;
+  const command     = client.commands.get(commandName);
+  const userTag     = interaction.user?.tag ?? interaction.user?.username ?? 'unknown-user';
+  const userId      = interaction.user?.id  ?? 'unknown-user-id';
+  const startedAt   = Date.now();
+
+  console.log(`[COMMAND] /${commandName} by ${userTag} (${userId}) id=${interaction.id}`);
+
   if (!command) {
-    console.warn(`[interactionCreate] Unknown command: ${interaction.commandName}`);
+    console.warn(`[COMMAND] Unknown command received: /${commandName}`);
     try {
       await interaction.reply({
-        content: 'This command is not available in the current bot build. Please try again shortly.',
+        content: 'This command is not available in the current bot build. Please redeploy commands and try again.',
         ephemeral: true,
       });
     } catch (err) {
-      console.error('[interactionCreate] Could not report unknown command:', err);
+      console.error(`[COMMAND] Failed to report unknown command /${commandName}:`, err);
     }
     return;
   }
 
-  const startedAt = Date.now();
-  console.log(
-    `[interactionCreate] Received /${interaction.commandName} ` +
-    `(id=${interaction.id}, user=${interaction.user?.id ?? 'unknown'})`
-  );
+  const shouldDefer = command.defer !== false;
+  const ephemeral   = command.ephemeral ?? false;
 
   try {
-    // Discord requires an acknowledgement within three seconds. Do this
-    // before validation, AI inference, image rendering, or data access.
-    if (!interaction.deferred && !interaction.replied) {
-      await interaction.deferReply({ ephemeral: command.ephemeral ?? false });
+    if (shouldDefer && !interaction.deferred && !interaction.replied) {
+      await interaction.deferReply({ ephemeral });
+      console.log(`[COMMAND] Deferred /${commandName} (${ephemeral ? 'ephemeral' : 'public'})`);
     }
 
-    const safeInteraction = acknowledgedInteraction(interaction);
+    const executionInteraction = shouldDefer
+      ? acknowledgedInteraction(interaction)
+      : interaction;
 
-    // client is passed as a third arg so handlers can inject it into the
-    // coordinator payload without importing Discord/index.js directly.
-    const result = await command.execute(safeInteraction, coordinator, client);
+    const result = await command.execute(executionInteraction, coordinator, client);
+
     if (result?.[INTERACTION_RESPONSE_HANDLED]) {
-      console.log(
-        `[interactionCreate] Completed validation response for /${interaction.commandName} ` +
-        `in ${Date.now() - startedAt}ms`
-      );
+      console.log(`[COMMAND] Replied inline for /${commandName} in ${Date.now() - startedAt}ms`);
       return;
     }
 
     if (!result || typeof result !== 'object') {
-      throw new Error('Command returned no response envelope');
+      throw new Error(`Command /${commandName} returned no response envelope`);
     }
 
     const dispatchableResult = result?.interaction?.__originalInteraction
       ? { ...result, interaction: result.interaction.__originalInteraction }
       : result;
 
-    // Dispatcher turns the result envelope into a Discord response
     await dispatch(dispatchableResult);
-    console.log(
-      `[interactionCreate] Completed /${interaction.commandName} ` +
-      `in ${Date.now() - startedAt}ms`
-    );
+    console.log(`[COMMAND] Reply sent successfully for /${commandName} in ${Date.now() - startedAt}ms`);
   } catch (err) {
-    console.error(`[interactionCreate] Unhandled error in /${interaction.commandName}:`, err);
-
-    const errPayload = {
-      success:     false,
-      failedAt:    'Commands',
-      error:       'UNEXPECTED_ERROR',
-      message:     err.message,
-      retriable:   false,
-      interaction,
-    };
+    console.error(`[COMMAND] Unhandled error in /${commandName}:`, err);
 
     try {
-      await dispatch(errPayload);
-      console.log(
-        `[interactionCreate] Error response sent for /${interaction.commandName} ` +
-        `after ${Date.now() - startedAt}ms`
-      );
+      await dispatch({
+        success:   false,
+        failedAt:  'Commands',
+        error:     'UNEXPECTED_ERROR',
+        message:   err.message,
+        retriable: false,
+        interaction,
+      });
+      console.log(`[COMMAND] Error response sent for /${commandName} in ${Date.now() - startedAt}ms`);
     } catch (dispatchErr) {
-      console.error('[interactionCreate] Dispatch also failed:', dispatchErr);
+      console.error(`[COMMAND] Dispatcher failed for /${commandName}:`, dispatchErr);
+      try {
+        await sendLastChanceFailure(
+          interaction,
+          'Something went wrong while processing this command. Check the bot logs and try again.',
+        );
+      } catch (lastChanceErr) {
+        console.error(`[COMMAND] Last-chance response also failed for /${commandName}:`, lastChanceErr);
+      }
     }
   }
 }

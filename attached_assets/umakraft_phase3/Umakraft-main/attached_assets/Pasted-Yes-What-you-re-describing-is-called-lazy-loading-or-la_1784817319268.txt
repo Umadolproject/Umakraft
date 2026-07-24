@@ -1,0 +1,113 @@
+Yes! What you're describing is called **lazy loading** (or lazy initialization), and it's exactly what you want for your bot. 🚀
+
+Instead of loading the Hugging Face model when the bot starts, **only load it when someone actually uses an AI command**.
+
+## Current behavior (slow startup)
+
+```text
+Bot starts
+ ↓
+Load Discord
+ ↓
+Load AI model (30-60 seconds)
+ ↓
+Bot becomes ready
+```
+
+## Better behavior (lazy loading)
+
+```text
+Bot starts
+ ↓
+Bot becomes ready immediately ✅
+
+User runs /ask
+ ↓
+Load model (first time only)
+ ↓
+Generate response
+
+Second /ask
+ ↓
+Model already loaded ✅
+Generate instantly
+```
+
+### Example
+
+```js
+let model = null;
+
+async function getModel() {
+    if (!model) {
+        console.log("Loading AI model...");
+        model = await loadModel();
+        console.log("Model ready!");
+    }
+
+    return model;
+}
+```
+
+Then in your AI command:
+
+```js
+await interaction.deferReply();
+
+const model = await getModel();
+
+const response = await model.generate(prompt);
+
+await interaction.editReply(response);
+```
+
+---
+
+## Even better: Auto-unload when idle
+
+If RAM is limited on Railway, you can unload the model after it's been idle for a while.
+
+```js
+let model = null;
+let lastUsed = Date.now();
+
+setInterval(() => {
+    if (model && Date.now() - lastUsed > 15 * 60 * 1000) {
+        console.log("Unloading model...");
+        model = null;
+        global.gc?.();
+    }
+}, 60000);
+```
+
+Then every time someone uses AI:
+
+```js
+lastUsed = Date.now();
+```
+
+This way:
+
+* 📥 First AI request loads the model.
+* ⚡ Later requests reuse it.
+* 💤 After 15 minutes with no AI requests, the model is released from memory.
+* 🚀 The next AI request loads it again.
+
+---
+
+## Why this is ideal for your Railway setup
+
+Since you're hosting **SmolLM2-360M** in the same Railway project:
+
+* ✅ Discord commands (`/ping`, `/help`, moderation, etc.) stay fast because they don't wait for the model.
+* ✅ The AI only consumes memory when it's actually needed.
+* ✅ Startup is much faster.
+* ✅ You reduce unnecessary CPU and RAM usage.
+
+### Prompt for Replit
+
+You can ask Replit:
+
+> Refactor the local AI service to use lazy loading. The Hugging Face model should **not** load during bot startup. Instead, initialize it only when the first AI command is executed, cache it in memory for subsequent requests, and automatically unload it after 15 minutes of inactivity to reduce RAM usage. Ensure non-AI Discord commands never wait for model initialization and continue responding immediately.
+
+I actually think this is one of the best optimizations you can make for your current architecture. It will make your bot feel much more responsive while keeping Railway resource usage lower.

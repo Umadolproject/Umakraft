@@ -23,12 +23,12 @@ args = "Start application"
 name = "Run tests"
 author = "agent"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "node umamoe/test/pipeline.test.js && node Refinery/test/pipeline.test.js"
-
 [workflows.workflow.metadata]
 outputType = "console"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "NODE_ENV=test node umamoe/test/pipeline.test.js && NODE_ENV=test node Refinery/test/pipeline.test.js && NODE_ENV=test node Workshop/test/pipeline.test.js"
 
 [[workflows.workflow]]
 name = "Start application"

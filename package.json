@@ -10,15 +10,16 @@
     "start": "node Distribution/Discord/index.js",
     "deploy-commands": "node Distribution/Discord/deploy-commands.js",
     "deploy-commands:global": "node Distribution/Discord/deploy-commands.js --global",
-    "test:umamoe": "node umamoe/test/pipeline.test.js",
-    "test:refinery": "node Refinery/test/pipeline.test.js",
-    "test:workshop": "node Workshop/test/pipeline.test.js",
-    "test": "node umamoe/test/pipeline.test.js && node Refinery/test/pipeline.test.js && node Workshop/test/pipeline.test.js"
+    "test:umamoe": "NODE_ENV=test node umamoe/test/pipeline.test.js",
+    "test:refinery": "NODE_ENV=test node Refinery/test/pipeline.test.js",
+    "test:workshop": "NODE_ENV=test node Workshop/test/pipeline.test.js",
+    "test": "NODE_ENV=test node umamoe/test/pipeline.test.js && NODE_ENV=test node Refinery/test/pipeline.test.js && NODE_ENV=test node Workshop/test/pipeline.test.js"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",
     "@qdrant/js-client-rest": "^1.18.0",
     "discord.js": "^14.27.0",
-    "puppeteer": "^22.15.0"
+    "puppeteer": "^22.15.0",
+    "sql.js": "^1.13.0"
   }
 }

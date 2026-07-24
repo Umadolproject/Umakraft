@@ -1,0 +1,25 @@
+2026-07-23T07:59:49.760932202Z [inf]  Starting Container
+2026-07-23T07:59:50.695642357Z [err]  [FATAL] Uncaught exception: Error: Missing DISCORD_TOKEN
+2026-07-23T07:59:50.695729801Z [inf]  [startup] Checking required environment variables...
+2026-07-23T07:59:50.695738341Z [err]  [startup] FATAL: DISCORD_TOKEN is not set — add it to Railway Variables
+2026-07-23T07:59:50.695879667Z [err]      at file:///app/Distribution/Discord/index.js:55:9
+2026-07-23T07:59:51.821060753Z [inf]  [startup] Checking required environment variables...
+2026-07-23T07:59:51.821065680Z [err]  [startup] FATAL: DISCORD_TOKEN is not set — add it to Railway Variables
+2026-07-23T07:59:51.821070463Z [err]  [FATAL] Uncaught exception: Error: Missing DISCORD_TOKEN
+2026-07-23T07:59:51.821075749Z [err]      at file:///app/Distribution/Discord/index.js:55:9
+2026-07-23T07:59:53.778308165Z [inf]  [startup] Checking required environment variables...
+2026-07-23T07:59:53.778319148Z [err]  [startup] FATAL: DISCORD_TOKEN is not set — add it to Railway Variables
+2026-07-23T07:59:53.778327087Z [err]  [FATAL] Uncaught exception: Error: Missing DISCORD_TOKEN
+2026-07-23T07:59:53.778333207Z [err]      at file:///app/Distribution/Discord/index.js:55:9
+2026-07-23T07:59:54.793962087Z [inf]  [startup] Checking required environment variables...
+2026-07-23T07:59:54.793967366Z [err]  [startup] FATAL: DISCORD_TOKEN is not set — add it to Railway Variables
+2026-07-23T07:59:54.793972751Z [err]  [FATAL] Uncaught exception: Error: Missing DISCORD_TOKEN
+2026-07-23T07:59:54.793977559Z [err]      at file:///app/Distribution/Discord/index.js:55:9
+2026-07-23T07:59:56.798153134Z [err]  [FATAL] Uncaught exception: Error: Missing DISCORD_TOKEN
+2026-07-23T07:59:56.798166938Z [err]      at file:///app/Distribution/Discord/index.js:55:9
+2026-07-23T07:59:56.798289931Z [inf]  [startup] Checking required environment variables...
+2026-07-23T07:59:56.798296765Z [err]  [startup] FATAL: DISCORD_TOKEN is not set — add it to Railway Variables
+2026-07-23T07:59:58.929726754Z [inf]  [startup] Checking required environment variables...
+2026-07-23T07:59:58.929730576Z [err]  [startup] FATAL: DISCORD_TOKEN is not set — add it to Railway Variables
+2026-07-23T07:59:58.929734362Z [err]  [FATAL] Uncaught exception: Error: Missing DISCORD_TOKEN
+2026-07-23T07:59:58.929739172Z [err]      at file:///app/Distribution/Discord/index.js:55:9

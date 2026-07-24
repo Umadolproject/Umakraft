@@ -1,0 +1,120 @@
+This log is actually very clear. 👍
+
+The bot **isn't crashing because of AI or Hugging Face**.
+
+It's crashing **before it even starts** because it can't find the Discord bot token.
+
+The important lines are:
+
+```text
+[startup] Checking required environment variables...
+[startup] FATAL: DISCORD_TOKEN is not set — add it to Railway Variables
+Error: Missing DISCORD_TOKEN
+at file:///app/Distribution/Discord/index.js:55:9
+```
+
+That means your code probably contains something like:
+
+```js
+const token = process.env.DISCORD_TOKEN;
+
+if (!token) {
+    throw new Error("Missing DISCORD_TOKEN");
+}
+```
+
+or
+
+```js
+if (!process.env.DISCORD_TOKEN) {
+    console.error("FATAL: DISCORD_TOKEN is not set");
+    process.exit(1);
+}
+```
+
+## What to check
+
+### 1. Railway Variables
+
+Make sure you have **exactly** this variable:
+
+```
+DISCORD_TOKEN
+```
+
+Not:
+
+```
+discord_token
+BOT_TOKEN
+TOKEN
+DiscordToken
+```
+
+Environment variable names are **case-sensitive**.
+
+---
+
+### 2. Does Railway have the value?
+
+It should look like:
+
+```
+DISCORD_TOKEN=MTIzNDU2Nzg5....
+```
+
+No quotes.
+
+Not:
+
+```
+"MTIz...."
+```
+
+---
+
+### 3. Is it in the correct service?
+
+If your Railway project has multiple services:
+
+```
+Discord Bot
+HF Server
+Redis
+Database
+```
+
+The **Discord Bot service** must contain `DISCORD_TOKEN`.
+
+Putting it on the Hugging Face service won't make it available to the bot.
+
+---
+
+## I noticed something else 👀
+
+The log says
+
+```
+Distribution/Discord/index.js
+```
+
+which means Railway is running the **built** JavaScript.
+
+If you recently changed the code but didn't rebuild, Railway could still be using an old build.
+
+---
+
+## I recommend checking these in order
+
+1. ✅ Is `DISCORD_TOKEN` present?
+2. ✅ Is it on the correct Railway service?
+3. ✅ Is the variable name exactly `DISCORD_TOKEN`?
+4. ✅ Redeploy after adding it.
+
+---
+
+### I can help further
+
+If you upload or paste **`Distribution/Discord/index.js` around lines 45–65**, I can tell you exactly why it's failing.
+
+Or even better, upload the project again (or the updated ZIP), and I'll audit **every `process.env`** so we can clean up those 30+ Railway secrets and identify only the ones the bot actually needs.

@@ -1,0 +1,216 @@
+2026-07-22T09:09:38.727162902Z [err]  
+2026-07-22T09:09:38.727169381Z [err]  Node.js v20.20.2
+2026-07-22T09:09:38.727178601Z [err]  node:internal/modules/esm/resolve:215
+2026-07-22T09:09:38.727186821Z [err]    const resolvedOption = FSLegacyMainResolve(packageJsonUrlString, packageConfig.main, baseStringified);
+2026-07-22T09:09:38.727190341Z [err]                           ^
+2026-07-22T09:09:38.727194591Z [err]  
+2026-07-22T09:09:38.727198521Z [err]  Error: Cannot find package '/app/node_modules/discord.js/index.js' imported from /app/Distribution/Discord/index.js
+2026-07-22T09:09:38.727202591Z [err]      at legacyMainResolve (node:internal/modules/esm/resolve:215:26)
+2026-07-22T09:09:38.727206051Z [err]      at packageResolve (node:internal/modules/esm/resolve:860:14)
+2026-07-22T09:09:38.727209681Z [err]      at moduleResolve (node:internal/modules/esm/resolve:946:18)
+2026-07-22T09:09:38.727213251Z [err]      at defaultResolve (node:internal/modules/esm/resolve:1188:11)
+2026-07-22T09:09:38.727218251Z [err]      at ModuleLoader.defaultResolve (node:internal/modules/esm/loader:708:12)
+2026-07-22T09:09:38.727221681Z [err]      at #cachedDefaultResolve (node:internal/modules/esm/loader:657:25)
+2026-07-22T09:09:38.727224991Z [err]      at ModuleLoader.resolve (node:internal/modules/esm/loader:640:38)
+2026-07-22T09:09:38.727228511Z [err]      at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:264:38)
+2026-07-22T09:09:38.727231671Z [err]      at ModuleJob._link (node:internal/modules/esm/module_job:168:49) {
+2026-07-22T09:09:38.727235730Z [err]    code: 'ERR_MODULE_NOT_FOUND'
+2026-07-22T09:09:38.727239410Z [err]  }
+2026-07-22T09:09:38.785483169Z [inf]  Starting Container
+2026-07-22T09:09:39.107257344Z [err]  Node.js v20.20.2
+2026-07-22T09:09:39.107276984Z [err]      at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:264:38)
+2026-07-22T09:09:39.107282524Z [err]  node:internal/modules/esm/resolve:215
+2026-07-22T09:09:39.107289674Z [err]      at packageResolve (node:internal/modules/esm/resolve:860:14)
+2026-07-22T09:09:39.107289724Z [err]      at ModuleJob._link (node:internal/modules/esm/module_job:168:49) {
+2026-07-22T09:09:39.107294334Z [err]    const resolvedOption = FSLegacyMainResolve(packageJsonUrlString, packageConfig.main, baseStringified);
+2026-07-22T09:09:39.107297784Z [err]    code: 'ERR_MODULE_NOT_FOUND'
+2026-07-22T09:09:39.107297954Z [err]      at moduleResolve (node:internal/modules/esm/resolve:946:18)
+2026-07-22T09:09:39.107303184Z [err]  }
+2026-07-22T09:09:39.107303994Z [err]      at defaultResolve (node:internal/modules/esm/resolve:1188:11)
+2026-07-22T09:09:39.107307394Z [err]                           ^
+2026-07-22T09:09:39.107311404Z [err]      at ModuleLoader.defaultResolve (node:internal/modules/esm/loader:708:12)
+2026-07-22T09:09:39.107315124Z [err]  
+2026-07-22T09:09:39.107317104Z [err]      at #cachedDefaultResolve (node:internal/modules/esm/loader:657:25)
+2026-07-22T09:09:39.107321714Z [err]  
+2026-07-22T09:09:39.107321794Z [err]      at ModuleLoader.resolve (node:internal/modules/esm/loader:640:38)
+2026-07-22T09:09:39.107329183Z [err]  Error: Cannot find package '/app/node_modules/discord.js/index.js' imported from /app/Distribution/Discord/index.js
+2026-07-22T09:09:39.952472276Z [err]  node:internal/modules/esm/resolve:215
+2026-07-22T09:09:39.952480536Z [err]    const resolvedOption = FSLegacyMainResolve(packageJsonUrlString, packageConfig.main, baseStringified);
+2026-07-22T09:09:39.952484385Z [err]                           ^
+2026-07-22T09:09:39.952488825Z [err]  
+2026-07-22T09:09:39.952492885Z [err]  Error: Cannot find package '/app/node_modules/discord.js/index.js' imported from /app/Distribution/Discord/index.js
+2026-07-22T09:09:39.952496805Z [err]      at legacyMainResolve (node:internal/modules/esm/resolve:215:26)
+2026-07-22T09:09:39.952499985Z [err]      at packageResolve (node:internal/modules/esm/resolve:860:14)
+2026-07-22T09:09:39.952503645Z [err]      at moduleResolve (node:internal/modules/esm/resolve:946:18)
+2026-07-22T09:09:39.952507285Z [err]      at defaultResolve (node:internal/modules/esm/resolve:1188:11)
+2026-07-22T09:09:39.952510885Z [err]      at ModuleLoader.defaultResolve (node:internal/modules/esm/loader:708:12)
+2026-07-22T09:09:39.952514335Z [err]      at #cachedDefaultResolve (node:internal/modules/esm/loader:657:25)
+2026-07-22T09:09:39.952517605Z [err]      at ModuleLoader.resolve (node:internal/modules/esm/loader:640:38)
+2026-07-22T09:09:39.952523615Z [err]      at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:264:38)
+2026-07-22T09:09:39.952527935Z [err]      at ModuleJob._link (node:internal/modules/esm/module_job:168:49) {
+2026-07-22T09:09:39.952531325Z [err]    code: 'ERR_MODULE_NOT_FOUND'
+2026-07-22T09:09:39.952534855Z [err]  }
+2026-07-22T09:09:39.952538285Z [err]  
+2026-07-22T09:09:39.952541675Z [err]  Node.js v20.20.2
+2026-07-22T09:09:40.761368074Z [err]  node:internal/modules/esm/resolve:215
+2026-07-22T09:09:40.761371514Z [err]    const resolvedOption = FSLegacyMainResolve(packageJsonUrlString, packageConfig.main, baseStringified);
+2026-07-22T09:09:40.761375064Z [err]                           ^
+2026-07-22T09:09:40.761379094Z [err]  
+2026-07-22T09:09:40.761382844Z [err]  Error: Cannot find package '/app/node_modules/discord.js/index.js' imported from /app/Distribution/Discord/index.js
+2026-07-22T09:09:40.761386314Z [err]      at legacyMainResolve (node:internal/modules/esm/resolve:215:26)
+2026-07-22T09:09:40.761390544Z [err]      at packageResolve (node:internal/modules/esm/resolve:860:14)
+2026-07-22T09:09:40.761393814Z [err]      at moduleResolve (node:internal/modules/esm/resolve:946:18)
+2026-07-22T09:09:40.761397984Z [err]      at defaultResolve (node:internal/modules/esm/resolve:1188:11)
+2026-07-22T09:09:40.761401454Z [err]      at ModuleLoader.defaultResolve (node:internal/modules/esm/loader:708:12)
+2026-07-22T09:09:40.761404514Z [err]      at #cachedDefaultResolve (node:internal/modules/esm/loader:657:25)
+2026-07-22T09:09:40.761407844Z [err]      at ModuleLoader.resolve (node:internal/modules/esm/loader:640:38)
+2026-07-22T09:09:40.761410974Z [err]      at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:264:38)
+2026-07-22T09:09:40.761413904Z [err]      at ModuleJob._link (node:internal/modules/esm/module_job:168:49) {
+2026-07-22T09:09:40.761417174Z [err]    code: 'ERR_MODULE_NOT_FOUND'
+2026-07-22T09:09:40.761421314Z [err]  }
+2026-07-22T09:09:40.761424394Z [err]  
+2026-07-22T09:09:40.761427854Z [err]  Node.js v20.20.2
+2026-07-22T09:09:41.522173234Z [err]  node:internal/modules/esm/resolve:215
+2026-07-22T09:09:41.522185873Z [err]    const resolvedOption = FSLegacyMainResolve(packageJsonUrlString, packageConfig.main, baseStringified);
+2026-07-22T09:09:41.522190553Z [err]                           ^
+2026-07-22T09:09:41.522194483Z [err]  
+2026-07-22T09:09:41.522197913Z [err]  Error: Cannot find package '/app/node_modules/discord.js/index.js' imported from /app/Distribution/Discord/index.js
+2026-07-22T09:09:41.522201593Z [err]      at legacyMainResolve (node:internal/modules/esm/resolve:215:26)
+2026-07-22T09:09:41.522206633Z [err]      at packageResolve (node:internal/modules/esm/resolve:860:14)
+2026-07-22T09:09:41.522209463Z [err]      at moduleResolve (node:internal/modules/esm/resolve:946:18)
+2026-07-22T09:09:41.522214183Z [err]      at defaultResolve (node:internal/modules/esm/resolve:1188:11)
+2026-07-22T09:09:41.522218013Z [err]      at ModuleLoader.defaultResolve (node:internal/modules/esm/loader:708:12)
+2026-07-22T09:09:41.522221683Z [err]      at #cachedDefaultResolve (node:internal/modules/esm/loader:657:25)
+2026-07-22T09:09:41.522225613Z [err]      at ModuleLoader.resolve (node:internal/modules/esm/loader:640:38)
+2026-07-22T09:09:41.522229013Z [err]      at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:264:38)
+2026-07-22T09:09:41.522232313Z [err]      at ModuleJob._link (node:internal/modules/esm/module_job:168:49) {
+2026-07-22T09:09:41.522235713Z [err]    code: 'ERR_MODULE_NOT_FOUND'
+2026-07-22T09:09:41.522238963Z [err]  }
+2026-07-22T09:09:41.522242143Z [err]  
+2026-07-22T09:09:41.522246563Z [err]  Node.js v20.20.2
+2026-07-22T09:09:42.339941945Z [err]  
+2026-07-22T09:09:42.339951105Z [err]  Error: Cannot find package '/app/node_modules/discord.js/index.js' imported from /app/Distribution/Discord/index.js
+2026-07-22T09:09:42.339958435Z [err]  node:internal/modules/esm/resolve:215
+2026-07-22T09:09:42.339960725Z [err]      at legacyMainResolve (node:internal/modules/esm/resolve:215:26)
+2026-07-22T09:09:42.339966545Z [err]    const resolvedOption = FSLegacyMainResolve(packageJsonUrlString, packageConfig.main, baseStringified);
+2026-07-22T09:09:42.339967585Z [err]      at packageResolve (node:internal/modules/esm/resolve:860:14)
+2026-07-22T09:09:42.339972415Z [err]                           ^
+2026-07-22T09:09:42.339974545Z [err]      at moduleResolve (node:internal/modules/esm/resolve:946:18)
+2026-07-22T09:09:42.339979775Z [err]      at defaultResolve (node:internal/modules/esm/resolve:1188:11)
+2026-07-22T09:09:42.339985175Z [err]      at ModuleLoader.defaultResolve (node:internal/modules/esm/loader:708:12)
+2026-07-22T09:09:42.339988505Z [err]      at #cachedDefaultResolve (node:internal/modules/esm/loader:657:25)
+2026-07-22T09:09:42.339992105Z [err]      at ModuleLoader.resolve (node:internal/modules/esm/loader:640:38)
+2026-07-22T09:09:42.339995565Z [err]      at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:264:38)
+2026-07-22T09:09:42.339998635Z [err]      at ModuleJob._link (node:internal/modules/esm/module_job:168:49) {
+2026-07-22T09:09:42.340001714Z [err]    code: 'ERR_MODULE_NOT_FOUND'
+2026-07-22T09:09:42.340005004Z [err]  }
+2026-07-22T09:09:42.340008504Z [err]  
+2026-07-22T09:09:42.340011584Z [err]  Node.js v20.20.2
+2026-07-22T09:13:43.020770786Z [err]  node:internal/modules/esm/resolve:215
+2026-07-22T09:13:43.020775036Z [err]    const resolvedOption = FSLegacyMainResolve(packageJsonUrlString, packageConfig.main, baseStringified);
+2026-07-22T09:13:43.020778906Z [err]                           ^
+2026-07-22T09:13:43.020784186Z [err]  
+2026-07-22T09:13:43.020788276Z [err]  Error: Cannot find package '/app/node_modules/discord.js/index.js' imported from /app/Distribution/Discord/index.js
+2026-07-22T09:13:43.020791746Z [err]      at legacyMainResolve (node:internal/modules/esm/resolve:215:26)
+2026-07-22T09:13:43.020795746Z [err]      at packageResolve (node:internal/modules/esm/resolve:860:14)
+2026-07-22T09:13:43.020799756Z [err]      at moduleResolve (node:internal/modules/esm/resolve:946:18)
+2026-07-22T09:13:43.020803426Z [err]      at defaultResolve (node:internal/modules/esm/resolve:1188:11)
+2026-07-22T09:13:43.020807176Z [err]      at ModuleLoader.defaultResolve (node:internal/modules/esm/loader:708:12)
+2026-07-22T09:13:43.020811036Z [err]      at #cachedDefaultResolve (node:internal/modules/esm/loader:657:25)
+2026-07-22T09:13:43.020814465Z [err]      at ModuleLoader.resolve (node:internal/modules/esm/loader:640:38)
+2026-07-22T09:13:43.020819225Z [err]      at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:264:38)
+2026-07-22T09:13:43.020825415Z [err]      at ModuleJob._link (node:internal/modules/esm/module_job:168:49) {
+2026-07-22T09:13:43.020829135Z [err]    code: 'ERR_MODULE_NOT_FOUND'
+2026-07-22T09:13:43.020833375Z [err]  }
+2026-07-22T09:13:43.020836725Z [err]  
+2026-07-22T09:13:43.020840715Z [err]  Node.js v20.20.2
+2026-07-22T09:13:43.020844365Z [err]  node:internal/modules/esm/resolve:215
+2026-07-22T09:13:43.020847615Z [err]    const resolvedOption = FSLegacyMainResolve(packageJsonUrlString, packageConfig.main, baseStringified);
+2026-07-22T09:13:43.020851115Z [err]                           ^
+2026-07-22T09:13:43.021504668Z [err]  
+2026-07-22T09:13:43.021507628Z [err]  Error: Cannot find package '/app/node_modules/discord.js/index.js' imported from /app/Distribution/Discord/index.js
+2026-07-22T09:13:43.021509958Z [err]      at legacyMainResolve (node:internal/modules/esm/resolve:215:26)
+2026-07-22T09:13:43.021512687Z [err]      at packageResolve (node:internal/modules/esm/resolve:860:14)
+2026-07-22T09:13:43.021515417Z [err]      at moduleResolve (node:internal/modules/esm/resolve:946:18)
+2026-07-22T09:13:43.021517947Z [err]      at defaultResolve (node:internal/modules/esm/resolve:1188:11)
+2026-07-22T09:13:43.021520487Z [err]      at ModuleLoader.defaultResolve (node:internal/modules/esm/loader:708:12)
+2026-07-22T09:13:43.021523827Z [err]      at #cachedDefaultResolve (node:internal/modules/esm/loader:657:25)
+2026-07-22T09:13:43.021527007Z [err]      at ModuleLoader.resolve (node:internal/modules/esm/loader:640:38)
+2026-07-22T09:13:43.021529327Z [err]      at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:264:38)
+2026-07-22T09:13:43.021531877Z [err]      at ModuleJob._link (node:internal/modules/esm/module_job:168:49) {
+2026-07-22T09:13:43.021534687Z [err]    code: 'ERR_MODULE_NOT_FOUND'
+2026-07-22T09:13:43.021537197Z [err]  }
+2026-07-22T09:13:43.021539567Z [err]  
+2026-07-22T09:13:43.021541927Z [err]  Node.js v20.20.2
+2026-07-22T09:13:43.701206872Z [err]  node:internal/modules/esm/resolve:215
+2026-07-22T09:13:43.701211062Z [err]    const resolvedOption = FSLegacyMainResolve(packageJsonUrlString, packageConfig.main, baseStringified);
+2026-07-22T09:13:43.701214842Z [err]                           ^
+2026-07-22T09:13:43.701219952Z [err]  
+2026-07-22T09:13:43.701227582Z [err]  Error: Cannot find package '/app/node_modules/discord.js/index.js' imported from /app/Distribution/Discord/index.js
+2026-07-22T09:13:43.701231992Z [err]      at legacyMainResolve (node:internal/modules/esm/resolve:215:26)
+2026-07-22T09:13:43.701240152Z [err]      at packageResolve (node:internal/modules/esm/resolve:860:14)
+2026-07-22T09:13:43.701243592Z [err]      at moduleResolve (node:internal/modules/esm/resolve:946:18)
+2026-07-22T09:13:43.701247612Z [err]      at defaultResolve (node:internal/modules/esm/resolve:1188:11)
+2026-07-22T09:13:43.701251272Z [err]      at ModuleLoader.defaultResolve (node:internal/modules/esm/loader:708:12)
+2026-07-22T09:13:43.701255802Z [err]      at #cachedDefaultResolve (node:internal/modules/esm/loader:657:25)
+2026-07-22T09:13:43.701258882Z [err]      at ModuleLoader.resolve (node:internal/modules/esm/loader:640:38)
+2026-07-22T09:13:43.701262372Z [err]      at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:264:38)
+2026-07-22T09:13:43.701266222Z [err]      at ModuleJob._link (node:internal/modules/esm/module_job:168:49) {
+2026-07-22T09:13:43.701271992Z [err]    code: 'ERR_MODULE_NOT_FOUND'
+2026-07-22T09:13:43.701275342Z [err]  }
+2026-07-22T09:13:43.701279162Z [err]  
+2026-07-22T09:13:43.701283132Z [err]  Node.js v20.20.2
+2026-07-22T09:13:44.458689515Z [err]  node:internal/modules/esm/resolve:215
+2026-07-22T09:13:44.458695765Z [err]    const resolvedOption = FSLegacyMainResolve(packageJsonUrlString, packageConfig.main, baseStringified);
+2026-07-22T09:13:44.458699015Z [err]                           ^
+2026-07-22T09:13:44.458702765Z [err]  
+2026-07-22T09:13:44.458705875Z [err]  Error: Cannot find package '/app/node_modules/discord.js/index.js' imported from /app/Distribution/Discord/index.js
+2026-07-22T09:13:44.458709165Z [err]      at legacyMainResolve (node:internal/modules/esm/resolve:215:26)
+2026-07-22T09:13:44.458712195Z [err]      at packageResolve (node:internal/modules/esm/resolve:860:14)
+2026-07-22T09:13:44.458714905Z [err]      at moduleResolve (node:internal/modules/esm/resolve:946:18)
+2026-07-22T09:13:44.458717745Z [err]      at defaultResolve (node:internal/modules/esm/resolve:1188:11)
+2026-07-22T09:13:44.458720505Z [err]      at ModuleLoader.defaultResolve (node:internal/modules/esm/loader:708:12)
+2026-07-22T09:13:44.458723265Z [err]      at #cachedDefaultResolve (node:internal/modules/esm/loader:657:25)
+2026-07-22T09:13:44.458725605Z [err]      at ModuleLoader.resolve (node:internal/modules/esm/loader:640:38)
+2026-07-22T09:13:44.458730005Z [err]      at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:264:38)
+2026-07-22T09:13:44.458732594Z [err]      at ModuleJob._link (node:internal/modules/esm/module_job:168:49) {
+2026-07-22T09:13:44.458735094Z [err]    code: 'ERR_MODULE_NOT_FOUND'
+2026-07-22T09:13:44.458737904Z [err]  }
+2026-07-22T09:13:44.458740794Z [err]  
+2026-07-22T09:13:44.458744054Z [err]  Node.js v20.20.2
+2026-07-22T09:13:45.256246786Z [err]  node:internal/modules/esm/resolve:215
+2026-07-22T09:13:45.256249566Z [err]    const resolvedOption = FSLegacyMainResolve(packageJsonUrlString, packageConfig.main, baseStringified);
+2026-07-22T09:13:45.256252366Z [err]                           ^
+2026-07-22T09:13:45.256254916Z [err]  
+2026-07-22T09:13:45.256257676Z [err]  Error: Cannot find package '/app/node_modules/discord.js/index.js' imported from /app/Distribution/Discord/index.js
+2026-07-22T09:13:45.256260116Z [err]      at legacyMainResolve (node:internal/modules/esm/resolve:215:26)
+2026-07-22T09:13:45.256262826Z [err]      at packageResolve (node:internal/modules/esm/resolve:860:14)
+2026-07-22T09:13:45.256265286Z [err]      at moduleResolve (node:internal/modules/esm/resolve:946:18)
+2026-07-22T09:13:45.256267846Z [err]      at defaultResolve (node:internal/modules/esm/resolve:1188:11)
+2026-07-22T09:13:45.256270526Z [err]      at ModuleLoader.defaultResolve (node:internal/modules/esm/loader:708:12)
+2026-07-22T09:13:45.256273206Z [err]      at #cachedDefaultResolve (node:internal/modules/esm/loader:657:25)
+2026-07-22T09:13:45.256276326Z [err]      at ModuleLoader.resolve (node:internal/modules/esm/loader:640:38)
+2026-07-22T09:13:45.256279066Z [err]      at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:264:38)
+2026-07-22T09:13:45.256281816Z [err]      at ModuleJob._link (node:internal/modules/esm/module_job:168:49) {
+2026-07-22T09:13:45.256284286Z [err]    code: 'ERR_MODULE_NOT_FOUND'
+2026-07-22T09:13:45.256292336Z [err]  }
+2026-07-22T09:13:45.256294736Z [err]  
+2026-07-22T09:13:45.256296976Z [err]  Node.js v20.20.2
+2026-07-22T09:13:45.979217381Z [err]  }
+2026-07-22T09:13:45.979221501Z [err]  node:internal/modules/esm/resolve:215
+2026-07-22T09:13:45.979225261Z [err]  
+2026-07-22T09:13:45.979229301Z [err]      at ModuleLoader.resolve (node:internal/modules/esm/loader:640:38)
+2026-07-22T09:13:45.979230661Z [err]  Node.js v20.20.2
+2026-07-22T09:13:45.979234930Z [err]    const resolvedOption = FSLegacyMainResolve(packageJsonUrlString, packageConfig.main, baseStringified);
+2026-07-22T09:13:45.979238860Z [err]      at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:264:38)
+2026-07-22T09:13:45.979244760Z [err]                           ^
+2026-07-22T09:13:45.979247340Z [err]      at defaultResolve (node:internal/modules/esm/resolve:1188:11)
+2026-07-22T09:13:45.979253520Z [err]  Error: Cannot find package '/app/node_modules/discord.js/index.js' imported from /app/Distribution/Discord/index.js
+2026-07-22T09:13:45.979253530Z [err]      at ModuleJob._link (node:internal/modules/esm/module_job:168:49) {
+2026-07-22T09:13:45.979255380Z [err]  
+2026-07-22T09:13:45.979258550Z [err]      at ModuleLoader.defaultResolve (node:internal/modules/esm/loader:708:12)
+2026-07-22T09:13:45.979264560Z [err]      at #cachedDefaultResolve (node:internal/modules/esm/loader:657:25)
+2026-07-22T09:13:45.979267430Z [err]      at legacyMainResolve (node:internal/modules/esm/resolve:215:26)
+2026-07-22T09:13:45.979268550Z [err]    code: 'ERR_MODULE_NOT_FOUND'
+2026-07-22T09:13:45.979272840Z [err]      at packageResolve (node:internal/modules/esm/resolve:860:14)
+2026-07-22T09:13:45.979276650Z [err]      at moduleResolve (node:internal/modules/esm/resolve:946:18)

@@ -1,107 +1,66 @@
 /**
  * Archive-Transporter
- *
- * Authority: GOVERNANCE/ARCHITECTURE_AUTHORITY.md
- * Registry:  GOVERNANCE/PIPELINE_REGISTRY.md
- * Department: Archive-Transporter — Stage 5, Broadcast
- * Version:   v2.0.0
- *
- * The fetch-and-handoff stage of the Broadcast pipeline.
- *
- * Sits between Archive and Announcer. Receives a notificationKey from either:
- *   - Archive-Inspector (new delivery)
- *   - Broker (restart recovery for incomplete records)
- *
- * Both callers use the same interface — Archive-Transporter does not distinguish
- * between a new notification and a restart-recovery retry.
- *
- * Workflow:
- *   1. Receive notificationKey
- *   2. Fetch full record from Archive
- *   3. Validate the record is well-formed
- *   4. Hand off the full record to Announcer
- *
- * Never evaluates eligibility, writes to Archive, selects variants, or renders
- * content. It only fetches and forwards.
+ * Phase 4: imageParams is no longer required — text-only notifications are valid.
  */
 
-import * as archive  from '../Archive/archive.js';
+import * as archive   from '../Archive/archive.js';
 import * as announcer from '../Announcer/announcer.js';
+import { createLogger } from '../../core/pipelineLogger.js';
 
-// ─── Logging ──────────────────────────────────────────────────────────────────
+const logger = createLogger('archive-transporter');
 
-function log(level, message, context = {}) {
-  const entry = {
-    timestamp: new Date().toISOString(),
-    level,
-    component: 'archive-transporter',
-    message,
-    ...context,
-  };
-  if (level === 'error') console.error(JSON.stringify(entry));
-  else if (level === 'warn')  console.warn(JSON.stringify(entry));
-  else console.log(JSON.stringify(entry));
-}
-
-// ─── Public API ───────────────────────────────────────────────────────────────
-
-/**
- * Fetch a notification record from Archive and hand it off to Announcer.
- *
- * Called by Archive-Inspector (new delivery) and Broker (restart recovery).
- * Both code paths use this same interface — Archive-Transporter does not
- * distinguish between a new notification and a restart-recovery retry.
- *
- * @param {string} notificationKey
- * @param {object|null} client  — Discord client forwarded to Announcer
- * @returns {Promise<void>}
- */
 export async function fetch(notificationKey, client) {
   if (!notificationKey) {
-    log('error', 'TRANSPORTER_MISSING_KEY: notificationKey is required');
+    logger.error('TRANSPORTER_MISSING_KEY: notificationKey is required');
     return;
   }
 
-  log('info', `fetching record key=${notificationKey}`);
+  logger.info('fetching record', { notificationKey });
 
-  // ── Step 1: Read the full record from Archive ──────────────────────────────
   let record;
   try {
     const result = await archive.get(notificationKey);
     if (result.error) {
-      log('error', `Archive.get failed for key=${notificationKey} — ${result.error}: ${result.message}`);
-      return; // programming error upstream — do not call Announcer
+      logger.error(`Archive.get failed: ${result.error}: ${result.message}`, { notificationKey });
+      return;
     }
     record = result.record;
   } catch (err) {
-    log('error', `Archive.get threw for key=${notificationKey}: ${err.message}`);
+    logger.error(`Archive.get threw: ${err.message}`, { notificationKey });
     return;
   }
 
-  // ── Step 2: Validate the record ────────────────────────────────────────────
   if (!record) {
-    log('error', `TRANSPORTER_RECORD_MISSING: no Archive record for key=${notificationKey} — this is a programming error upstream`);
-    return; // do not call Announcer with an empty payload
+    logger.error('TRANSPORTER_RECORD_MISSING: no Archive record', { notificationKey });
+    return;
+  }
+  if (record.deadLetter) {
+    logger.warn('record is dead-lettered — skipping delivery handoff', {
+      notificationKey,
+      reason: record.deadLetterReason,
+    });
+    return;
+  }
+  if (!record.payload) {
+    logger.error('TRANSPORTER_PAYLOAD_MISSING: record has no payload', { notificationKey });
+    return;
   }
 
-  if (!record.payload) {
-    log('error', `TRANSPORTER_PAYLOAD_MISSING: record has no payload for key=${notificationKey}`);
+  // Phase 4: imageParams is optional — Announcer's _renderCard handles its absence gracefully.
+  // A notification with only payload.message is a valid text-only delivery.
+  if (!record.payload.imageParams && !record.payload.message) {
+    logger.error('TRANSPORTER_EMPTY_PAYLOAD: payload has neither imageParams nor message', { notificationKey });
     return;
   }
 
   if (!record.payload.imageParams) {
-    log('warn', `TRANSPORTER_IMAGE_PARAMS_MISSING: payload.imageParams is absent for key=${notificationKey} — cannot call Announcer`);
-    return; // Announcer must never be called with incomplete fabrication data
+    logger.info('text-only notification — no card will be rendered', { notificationKey });
   }
 
-  // ── Step 3: Hand off to Announcer ──────────────────────────────────────────
-  log('info', `handing off key=${notificationKey} to Announcer`);
-
+  logger.info('handing off to Announcer', { notificationKey });
   try {
     await announcer.deliver(record, client);
   } catch (err) {
-    log('error', `Announcer.deliver threw for key=${notificationKey}: ${err.message}`);
-    // Leave all delivery flags at 0 — Broker will surface this record again
-    // on the next cron tick via Archive-Transporter for retry.
+    logger.error(`Announcer.deliver threw: ${err.message}`, { notificationKey });
   }
 }
