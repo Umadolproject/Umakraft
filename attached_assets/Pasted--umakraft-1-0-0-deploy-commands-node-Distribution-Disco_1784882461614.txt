@@ -1,0 +1,38 @@
+ umakraft@1.0.0 deploy-commands
+> node Distribution/Discord/deploy-commands.js
+
+Registering 32 slash commands (guild 1489093959044173935)...
+[deploy] Commands: fan_gain, profile, leaderboard, total_fan, total_circlefan_gain, circle_master, intercircleleaderboard, club_gain, joindate, memberlist, search_trainer, store, keep, set_timezone, status, circle_status, help, link, unlink, link_list, set_fans, admin_sync, admin_setjoindate, test_milestone, timeline_setup, timeline_post, admin_synccards, warningsettings, deadletter_inspect, deadletter_replay, ask, ai
+Successfully registered 32 commands (guild 1489093959044173935).
+[deploy] Registered command: fan_gain (id=1529465130813886566)
+[deploy] Registered command: profile (id=1529465130813886567)
+[deploy] Registered command: leaderboard (id=1529465130813886568)
+[deploy] Registered command: total_fan (id=1529465130813886569)
+[deploy] Registered command: total_circlefan_gain (id=1529465130813886570)
+[deploy] Registered command: circle_master (id=1529465130813886571)
+[deploy] Registered command: intercircleleaderboard (id=1529465130813886572)
+[deploy] Registered command: club_gain (id=1529465130813886573)
+[deploy] Registered command: joindate (id=1529465130813886574)
+[deploy] Registered command: memberlist (id=1529465130813886575)
+[deploy] Registered command: search_trainer (id=1529465131044442152)
+[deploy] Registered command: store (id=1529465131044442153)
+[deploy] Registered command: keep (id=1529465131044442154)
+[deploy] Registered command: set_timezone (id=1529465131044442155)
+[deploy] Registered command: status (id=1529465131044442156)
+[deploy] Registered command: circle_status (id=1529465131044442157)
+[deploy] Registered command: help (id=1529465131044442158)
+[deploy] Registered command: link (id=1529465131044442159)
+[deploy] Registered command: unlink (id=1529465131044442160)
+[deploy] Registered command: link_list (id=1529465131044442161)
+[deploy] Registered command: set_fans (id=1529465131296358531)
+[deploy] Registered command: admin_sync (id=1529465131296358532)
+[deploy] Registered command: admin_setjoindate (id=1529465131296358533)
+[deploy] Registered command: test_milestone (id=1529465131296358534)
+[deploy] Registered command: timeline_setup (id=1529465131296358535)
+[deploy] Registered command: timeline_post (id=1529465131296358536)
+[deploy] Registered command: admin_synccards (id=1529465131296358537)
+[deploy] Registered command: warningsettings (id=1529465131296358538)
+[deploy] Registered command: deadletter_inspect (id=1530104904654524429)
+[deploy] Registered command: deadletter_replay (id=1530104904654524430)
+[deploy] Registered command: ask (id=1529465131296358539)
+[deploy] Registered command: ai (id=1529465131296358540)
