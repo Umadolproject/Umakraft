@@ -96,9 +96,9 @@ VDB_TOP_K = "8"
 DISCORD_CLIENT_ID = "1526549146788429894"
 DISCORD_GUILD_ID = "1489093959044173935"
 CONFIGURED_CIRCLES = "974470619"
+UMAKRAFT_SQLITE_PATH = "/home/runner/workspace/.data/umakraft.sqlite"
 
 [userenv.development]
-UMAKRAFT_SQLITE_PATH = "/home/runner/workspace/.data/umakraft.sqlite"
 
 [[ports]]
 localPort = 3000
