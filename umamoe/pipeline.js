@@ -277,10 +277,25 @@ export async function processTrainer(trainerId, options = {}) {
 export async function processRankings(params = {}) {
   logger.info('pipeline start — rankings', { params });
 
-  const minerResult = await runStage('Miner', Miner.fetchRankings, params);
+  const circleId = params.circleId ?? params.circle ?? CONFIGURED_CIRCLES[0] ?? null;
+
+  const [minerResult, circleResult] = await Promise.all([
+    runStage('Miner', Miner.fetchRankings, params),
+    circleId
+      ? runStage('Miner.circle', Miner.fetchCircle, circleId)
+      : Promise.resolve(null),
+  ]);
+
   if (minerResult.failedAt) return minerResult;
   if (!minerResult.success) {
     return failureEnvelope('Miner', minerResult.error, minerResult.message, { params });
+  }
+
+  if (circleResult && !circleResult.success) {
+    logger.warn('Circle enrichment unavailable for rankings; continuing without it', {
+      circleId,
+      error: circleResult.error,
+    });
   }
 
   const trainers = Array.isArray(minerResult.data)
@@ -291,11 +306,19 @@ export async function processRankings(params = {}) {
 
   const results = [];
   for (const trainer of trainers) {
+    // Apply circle enrichment per trainer so rankings gain numbers match
+    // the authoritative API values used by processTrainer.
+    const enrichedTrainerData = circleResult?.success
+      ? mergeCircleMemberGains(trainer, circleResult, trainer.id)
+      : trainer;
+
     const syntheticEnvelope = {
       success: true,
-      data: trainer,
+      data: enrichedTrainerData,
       metadata: {
         ...minerResult.metadata,
+        attempts:  minerResult.metadata?.attempts,
+        statusCode: minerResult.metadata?.statusCode,
         endpoint: `/rankings → trainer/${trainer.id}`,
       },
     };
@@ -328,13 +351,22 @@ export async function processRankings(params = {}) {
       previousRecord = previousSnapshot.data;
     }
 
-    const refinedResult = refine(vaultRecord.data, { previousRecord });
+    const refinedResult = await runStage(
+      'Refiner',
+      async (record, opts) => refine(record, opts),
+      vaultRecord.data,
+      { previousRecord },
+    );
+    if (refinedResult.failedAt) {
+      results.push({ success: false, trainerId: trainer.id, error: refinedResult.error });
+      continue;
+    }
     if (!refinedResult.success) {
       results.push({ success: false, trainerId: trainer.id, error: refinedResult.error });
       continue;
     }
 
-    const compileResult = await compile(refinedResult);
+    const compileResult = await runStage('Compiler', compile, refinedResult);
     results.push({
       success: compileResult.success,
       trainerId: trainer.id,

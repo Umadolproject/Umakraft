@@ -190,13 +190,22 @@ export function refine(vaultRecord, options = {}) {
       dailyFanGain:   apiGains?.dailyFanGain   ?? deltas?.dailyFanGain   ?? estimated.dailyFanGain,
       weeklyFanGain:  apiGains?.weeklyFanGain  ?? deltas?.weeklyFanGain  ?? estimated.weeklyFanGain,
       monthlyFanGain: apiGains?.monthlyFanGain ?? deltas?.monthlyFanGain ?? estimated.monthlyFanGain,
-      ...(deltas && !apiGains?.dailyFanGain ? { fanDelta: deltas.fanDelta } : {}),
+      ...(deltas && apiGains?.dailyFanGain === undefined ? { fanDelta: deltas.fanDelta } : {}),
     };
-    const gainsSource = apiGains
+    // 'api' only when all three fields were supplied by the API.
+    // 'mixed' when the API provided some fields but deltas/estimates filled the rest.
+    // 'delta' / 'projected' when no API gains were present at all.
+    const apiFieldCount = apiGains
+      ? [apiGains.dailyFanGain, apiGains.weeklyFanGain, apiGains.monthlyFanGain]
+          .filter(v => v !== undefined).length
+      : 0;
+    const gainsSource = apiFieldCount === 3
       ? 'api'
-      : deltas
-        ? 'delta'
-        : 'projected';
+      : apiFieldCount > 0
+        ? 'mixed'
+        : deltas
+          ? 'delta'
+          : 'projected';
     const trend = deriveTrend(data.fans, data.rank);
 
     const refinedResult = {

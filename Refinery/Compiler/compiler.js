@@ -50,6 +50,21 @@ function isValidRefinedResult(envelope) {
 // ─── Conflict resolution ──────────────────────────────────────────────────────
 
 /**
+ * Structural equality check used during conflict detection.
+ * Arrays and objects are compared by value (JSON), primitives by ===.
+ * Avoids false-positive conflicts on array/object fields (e.g. characters,
+ * achievements) that are identical in content but distinct in reference.
+ */
+function deepEqual(a, b) {
+  if (a === b) return true;
+  if (typeof a !== typeof b) return false;
+  if (typeof a === 'object' && a !== null && b !== null) {
+    return JSON.stringify(a) === JSON.stringify(b);
+  }
+  return false;
+}
+
+/**
  * Merge multiple refined results into one canonical product.
  * Conflict rule: last-write-wins ordered by refinedAt timestamp.
  * Non-conflicting fields are merged additively.
@@ -66,7 +81,7 @@ function mergeRefinedResults(envelopes) {
   for (const envelope of sorted) {
     const result = envelope.refinedResult;
     for (const [key, value] of Object.entries(result)) {
-      if (key in merged && merged[key] !== value) {
+      if (key in merged && !deepEqual(merged[key], value)) {
         conflictsResolved.push({
           field: key,
           previous: merged[key],
@@ -87,8 +102,9 @@ function mergeRefinedResults(envelopes) {
 function assembleProduct(merged, envelopes, compiledAt) {
   return {
     // Core identity
-    id:      merged.id,
-    version: compiledAt,
+    id:           merged.id,
+    version:      compiledAt,
+    blueprintKey: `trainer:${merged.id}`,
 
     // Canonical product — copy (never mutate inputs)
     compiledProduct: {
