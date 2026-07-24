@@ -1,17 +1,106 @@
+# ── Required ─────────────────────────────────────────────────────────────────
+DISCORD_TOKEN=REPLACE_WITH_YOUR_DISCORD_TOKEN
+DISCORD_CLIENT_ID=1526549146788429894
+DISCORD_GUILD_ID=1489093959044173935
+
+# ── Uma.moe ───────────────────────────────────────────────────────────────────
+UMA_MOE_API_KEY=REPLACE_WITH_YOUR_UMA_MOE_API_KEY
+UMA_MOE_API_BASE_URL=https://uma.moe/api
+CONFIGURED_CIRCLES=974470619
+
+# ── AI — web search (add at least one for /ai and /ask online data) ───────────
+TAVILY_API_KEY=REPLACE_WITH_YOUR_TAVILY_API_KEY
+TAVILY_API_KEY_2=
+BRAVE_SEARCH_API_KEY=
+BRAVE_SEARCH_API_KEY_2=
+GOOGLE_CSE_API_KEY=
+GOOGLE_CSE_CX=
+SERPAPI_API_KEY=
+
+# ── AI — cloud generation (optional; local model is used by default) ──────────
+OPENAI_API_KEY=
+OPENAI_API_KEY_2=
+GEMINI_API_KEY=
+GEMINI_API_KEY_2=
+
+# ── Vector database — Qdrant Cloud (optional; falls back to in-memory) ────────
+QDRANT_URL=
+QDRANT_API_KEY=
+QDRANT_COLLECTION=umakraft
+
+# ── Broadcast pipeline ────────────────────────────────────────────────────────
 BROADCAST_DEADLETTER_INSPECT_LIMIT=10
 BROADCAST_MAX_DELIVERY_ATTEMPTS=5
 BROADCAST_RECOVERY_BATCH_SIZE=100
-DISCORD_CLIENT_ID=1526549146788429894
-DISCORD_GUILD_ID=1489093959044173935
-DISCORD_TOKEN=REPLACE_WITH_YOUR_DISCORD_TOKEN
-UMAKRAFT_SQLITE_PATH=/data/umakraft.sqlite
-UMAKRAFT_STORAGE_BACKEND=sqlite
+BROKER_CONCURRENCY=3
+
+# ── Pipeline timeouts ─────────────────────────────────────────────────────────
 PIPELINE_STAGE_TIMEOUT_MS=30000
 PIPELINE_MINER_TIMEOUT_MS=45000
 PIPELINE_FABRICATOR_TIMEOUT_MS=90000
-BROKER_CONCURRENCY=3
-VAULT_SNAPSHOT_RETAIN_COUNT=20
+
+# ── Storage ───────────────────────────────────────────────────────────────────
+UMAKRAFT_STORAGE_BACKEND=sqlite
+UMAKRAFT_SQLITE_PATH=/data/umakraft.sqlite
 UMAKRAFT_SQLITE_FLUSH_MS=5000
+VAULT_SNAPSHOT_RETAIN_COUNT=20
+
+# ── AI — search tuning ────────────────────────────────────────────────────────
+SEARCH_MAX_RESULTS=5
+SEARCH_PROVIDER_TIMEOUT_MS=5000
+SEARCH_CACHE_TTL_MS=600000
+SEARCH_CONFIDENCE_FALLBACK=0.65
+
+# ── AI — cache ────────────────────────────────────────────────────────────────
+CACHE_ENABLED=true
+CACHE_EMBEDDING_TTL_MS=3600000
+CACHE_EMBEDDING_MAX=1000
+CACHE_RESPONSE_TTL_MS=600000
+CACHE_RESPONSE_MAX=500
+
+# ── AI — rate limits ──────────────────────────────────────────────────────────
+AI_RATE_LIMIT_RPM=60
+AI_USER_RATE_LIMIT_RPM=10
+AI_GUILD_RATE_LIMIT_RPM=60
+AI_MAX_RETRIES=3
+AI_RETRY_BASE_DELAY_MS=1000
+
+# ── AI — topic filter ─────────────────────────────────────────────────────────
+TOPIC_FILTER_CONFIDENCE_THRESHOLD=0.70
+TOPIC_FILTER_AUDIT_LOG=true
+
+# ── AI — RAG / vector search ──────────────────────────────────────────────────
+VDB_EMBEDDING_DIM=1536
+VDB_TOP_K=8
+VDB_MIN_SCORE=0.60
+VDB_INDEX_INTERVAL_HOURS=6
+VDB_QUERY_CACHE_TTL_MS=600000
+VDB_BACKUP_PATH=/data/vdb_backup
+RAG_MAX_CONTEXT_TOKENS=6000
+RAG_MIN_CHUNKS=3
+
+# ── AI — indexer ──────────────────────────────────────────────────────────────
+INDEXER_EMBED_CONCURRENCY=5
+INDEXER_CHUNK_MIN_CHARS=50
+INDEXER_CHUNK_TARGET_CHARS=800
+INDEXER_CHUNK_MAX_CHARS=1200
+INDEXER_CHUNK_OVERLAP_CHARS=100
+
+# ── AI — message generation ───────────────────────────────────────────────────
+MESSAGE_MIN_WORDS=100
+MESSAGE_MAX_WORDS=150
+MESSAGE_MAX_REGENERATIONS=2
+
+# ── AI — features ─────────────────────────────────────────────────────────────
+AI_AUDIT_LOG_ENABLED=true
+AI_CITATION_MODE=true
+AI_CONFIDENCE_SCORE=false
+AI_CONVERSATION_MEMORY=false
+AI_REINDEX_ON_STARTUP=false
+
+# ── Announcer ─────────────────────────────────────────────────────────────────
 ANNOUNCER_USER_CACHE_TTL_MS=300000
-UMA_MOE_API_KEY=REPLACE_WITH_YOUR_UMA_MOE_API_KEY
-CONFIGURED_CIRCLES=974470619
+
+# ── Runtime ───────────────────────────────────────────────────────────────────
+NODE_ENV=production
+PORT=3000
