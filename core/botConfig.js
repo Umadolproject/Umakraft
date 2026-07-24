@@ -14,8 +14,11 @@ export const DISCORD_GUILD_ID  = process.env.DISCORD_GUILD_ID || '';   // Your D
 
 // ── Broadcast pipeline ────────────────────────────────────────────────────────
 // IDs of the circles the Broadcast pipeline should process.
+// Override at deploy time via the CONFIGURED_CIRCLES env var (comma-separated).
 // Can also be set at runtime via broker.setConfiguredCircles().
-export const CONFIGURED_CIRCLES = [];
+export const CONFIGURED_CIRCLES = process.env.CONFIGURED_CIRCLES
+  ? process.env.CONFIGURED_CIRCLES.split(',').map(s => s.trim()).filter(Boolean)
+  : ['974470619'];
 
 // ── Operations channel ────────────────────────────────────────────────────────
 // Discord channel ID for ops / alert messages from the Announcer.

@@ -26,6 +26,10 @@ restartPolicyMaxRetries = 5
 # ── Runtime (set by Railway automatically — do not override) ─────────────────
 NODE_ENV = "production"
 
+# ── Circle configuration ─────────────────────────────────────────────────────
+# Comma-separated list of uma.moe circle IDs for the Broadcast pipeline.
+CONFIGURED_CIRCLES = "974470619"
+
 # ── Secrets — set these in the Railway dashboard, not here ──────────────────
 # DISCORD_TOKEN      — required
 # OPENAI_API_KEY     — optional (embeddings)

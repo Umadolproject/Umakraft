@@ -226,3 +226,18 @@ export async function fetchStats() {
 export async function checkHealth() {
   return requestWithRetry(buildUrl(ENDPOINTS.health), ENDPOINTS.health);
 }
+
+/**
+ * Fetch circle data by circle ID.
+ * Uses /v4/circles?circle_id={id}
+ * @param {string|number} circleId
+ * @returns {Promise<MinerEnvelope>}
+ */
+export async function fetchCircle(circleId) {
+  if (!circleId) {
+    return failure('MINER_INVALID_PARAMS', 'circleId is required', 'error', false, { circleId });
+  }
+  const url = new URL(buildUrl(ENDPOINTS.circle));
+  url.searchParams.set('circle_id', circleId);
+  return requestWithRetry(url.toString(), ENDPOINTS.circle);
+}

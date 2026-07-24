@@ -29,6 +29,7 @@ export const ENDPOINTS = {
   search:   '/v3/search',
   rankings: '/rankings',
   stats:    '/stats',
+  circle:   '/v4/circles',   // ?circle_id={id}
 };
 
 /**
