@@ -1,0 +1,68 @@
+2026-07-24T09:03:34.490168017Z [inf]  
+2026-07-24T09:03:34.490173549Z [inf]  > umakraft@1.0.0 start
+2026-07-24T09:03:34.490178069Z [inf]  > node Distribution/Discord/index.js
+2026-07-24T09:03:34.490182473Z [inf]  
+2026-07-24T09:03:35.023774302Z [inf]  Starting Container
+2026-07-24T09:03:35.571527011Z [inf]  [startup] Checking required environment variables...
+2026-07-24T09:03:35.571531833Z [inf]  [startup] Environment OK — DISCORD_TOKEN and DISCORD_CLIENT_ID present
+2026-07-24T09:03:35.571536169Z [inf]  [startup] Creating Discord client...
+2026-07-24T09:03:35.571540259Z [inf]  [startup] Loading command handlers...
+2026-07-24T09:03:35.571544349Z [inf]  [startup] Health server listening on 0.0.0.0:3000
+2026-07-24T09:03:35.571549082Z [inf]  [startup] Loaded command: admin_setjoindate (adminSetJoinDate.js)
+2026-07-24T09:03:35.571553298Z [inf]  [startup] Loaded command: admin_sync (adminSync.js)
+2026-07-24T09:03:35.571557213Z [inf]  [startup] Loaded command: admin_synccards (adminSyncCards.js)
+2026-07-24T09:03:35.571561531Z [inf]  [startup] Loaded command: ai (ai.js)
+2026-07-24T09:03:35.571565823Z [inf]  [startup] Loaded command: ask (ask.js)
+2026-07-24T09:03:35.571569640Z [inf]  [startup] Loaded command: circle_master (circleMaster.js)
+2026-07-24T09:03:35.571573507Z [inf]  [startup] Loaded command: circle_status (circleStatus.js)
+2026-07-24T09:03:35.571577665Z [inf]  [startup] Loaded command: club_gain (clubGain.js)
+2026-07-24T09:03:35.571581574Z [inf]  [startup] Loaded command: deadletter_inspect (deadLetterInspect.js)
+2026-07-24T09:03:35.571587569Z [inf]  [startup] Loaded command: deadletter_replay (deadLetterReplay.js)
+2026-07-24T09:03:35.571591817Z [inf]  [startup] Loaded command: fan_gain (fanGain.js)
+2026-07-24T09:03:35.571595817Z [inf]  [startup] Loaded command: help (help.js)
+2026-07-24T09:03:35.571600168Z [inf]  [startup] Loaded command: intercircleleaderboard (interCircleLeaderboard.js)
+2026-07-24T09:03:35.571609261Z [inf]  [startup] Loaded command: joindate (joinDate.js)
+2026-07-24T09:03:35.571613527Z [inf]  [startup] Loaded command: keep (keep.js)
+2026-07-24T09:03:35.571617604Z [inf]  [startup] Loaded command: leaderboard (leaderboard.js)
+2026-07-24T09:03:35.571621486Z [inf]  [startup] Loaded command: link (link.js)
+2026-07-24T09:03:35.573369863Z [inf]  [startup] Loaded command: memberlist (memberList.js)
+2026-07-24T09:03:35.573379798Z [inf]  [startup] Registered event: interactionCreate (interactionCreate.js)
+2026-07-24T09:03:35.573383096Z [inf]  [startup] Loaded command: profile (profile.js)
+2026-07-24T09:03:35.573389660Z [inf]  [startup] Loaded command: search_trainer (searchTrainer.js)
+2026-07-24T09:03:35.573398663Z [inf]  [startup] Registered event: clientReady (ready.js)
+2026-07-24T09:03:35.573410736Z [inf]  [startup] Loaded command: total_circlefan_gain (totalCircleFanGain.js)
+2026-07-24T09:03:35.573420789Z [inf]  [startup] Loaded command: warningsettings (warningSettings.js)
+2026-07-24T09:03:35.573421175Z [inf]  [startup] Loaded command: total_fan (totalFan.js)
+2026-07-24T09:03:35.573431597Z [inf]  [startup] Loaded command: unlink (unlink.js)
+2026-07-24T09:03:35.573437682Z [inf]  [startup] Loaded 32 command handler(s)
+2026-07-24T09:03:35.573448308Z [inf]  [startup] Loading event handlers...
+2026-07-24T09:03:35.573452152Z [inf]  [startup] Loaded command: store (store.js)
+2026-07-24T09:03:35.573464373Z [inf]  [startup] Loaded command: test_milestone (testMilestone.js)
+2026-07-24T09:03:35.573465970Z [inf]  [startup] Registered event: guildMemberAdd (guildMemberAdd.js)
+2026-07-24T09:03:35.573476453Z [inf]  [startup] Loaded command: timeline_post (timelinePost.js)
+2026-07-24T09:03:35.573478106Z [inf]  [startup] Loaded command: link_list (linkList.js)
+2026-07-24T09:03:35.573481417Z [inf]  [startup] Loaded command: set_fans (setFans.js)
+2026-07-24T09:03:35.573482590Z [inf]  [startup] Registered event: guildMemberRemove (guildMemberRemove.js)
+2026-07-24T09:03:35.573489189Z [inf]  [startup] Loaded command: timeline_setup (timelineSetup.js)
+2026-07-24T09:03:35.573497573Z [inf]  [startup] Loaded command: set_timezone (setTimezone.js)
+2026-07-24T09:03:35.573505712Z [inf]  [startup] Loaded command: status (status.js)
+2026-07-24T09:03:35.579028949Z [inf]  [tasks] registered "operation" (*/5 * * * *)
+2026-07-24T09:03:35.579041036Z [inf]  [tasks] registered daily "miner-1800" at 18:00 Europe/Amsterdam
+2026-07-24T09:03:35.579048632Z [inf]  [tasks] registered daily "miner-1830" at 18:30 Europe/Amsterdam
+2026-07-24T09:03:35.579056195Z [inf]  [tasks] starting "operation" — interval=300000ms
+2026-07-24T09:03:35.579063623Z [inf]  [tasks] tick — task="operation"
+2026-07-24T09:03:35.579071502Z [inf]  [Operation] Evaluation cycle started.
+2026-07-24T09:03:35.579079365Z [inf]  [tasks] "miner-1800" next run in 416min (at 18:00 Europe/Amsterdam)
+2026-07-24T09:03:35.579085490Z [inf]  [tasks] "miner-1830" next run in 446min (at 18:30 Europe/Amsterdam)
+2026-07-24T09:03:35.579091432Z [dbg]  [Operation/Logger] pipeline=core stage=operation status=unknown failures=0 duration=0ms
+2026-07-24T09:03:35.579143408Z [inf]  [startup] Verified exactly 1 interactionCreate listener
+2026-07-24T09:03:35.579149086Z [inf]  [startup] Logging in to Discord...
+2026-07-24T09:03:35.579156799Z [inf]  [startup] Login call completed — waiting for ready event
+2026-07-24T09:03:35.579162148Z [inf]  [ready] Logged in as UmaKraftCircleBot#8905 (1526549146788429894)
+2026-07-24T09:03:35.579169640Z [inf]  [ready] Serving 1 guild(s)
+2026-07-24T09:03:35.579178336Z [inf]  [ready] AI initialization is deferred until the first AI command.
+2026-07-24T09:03:35.581462926Z [dbg]  [Operation/Logger] pipeline=core stage=miner-1800 status=unknown failures=0 duration=n/ams
+2026-07-24T09:03:35.581470035Z [dbg]  [Operation/Logger] pipeline=core stage=miner-1830 status=unknown failures=0 duration=n/ams
+2026-07-24T09:03:35.581477133Z [inf]  [Operation/Logger] pipeline=runtime stage=runtime status=ok failures=0 duration=n/ams
+2026-07-24T09:03:35.581490407Z [inf]  [Operation/Manager] decision=Healthy — All systems nominal
+2026-07-24T09:03:35.581500611Z [inf]  [Operation] Cycle complete. decision=Healthy subjects=[none]
