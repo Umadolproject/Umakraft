@@ -34,13 +34,13 @@ args = "npm test"
 name = "Start application"
 author = "agent"
 
+[workflows.workflow.metadata]
+outputType = "console"
+
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "npm start"
 waitForPort = 3000
-
-[workflows.workflow.metadata]
-outputType = "console"
 
 [userenv]
 
