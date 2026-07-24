@@ -6,3 +6,4 @@
 - [Discord interaction lifecycle](discord-interaction-lifecycle.md) — acknowledge slash commands centrally before slow work; dispatch responses through the original interaction object.
 - [Discord preview startup](discord-preview-startup.md) — keep the health/preview server alive without DISCORD_TOKEN; only the gateway login requires the token.
 - [Discord deployment](discord-deployment.md) — publish the bot as an always-on VM; autoscale/cloudrun cannot reliably maintain its gateway connection.
+- [Railway Discord log bridge](railway-discord-log-bridge.md) — separate authenticated deployment webhook and runtime log-drain endpoints; redact and batch logs before Discord delivery.

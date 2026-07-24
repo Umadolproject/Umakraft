@@ -13,7 +13,7 @@
     "test:umamoe": "NODE_ENV=test node umamoe/test/pipeline.test.js",
     "test:refinery": "NODE_ENV=test node Refinery/test/pipeline.test.js",
     "test:workshop": "NODE_ENV=test node Workshop/test/pipeline.test.js",
-    "test": "NODE_ENV=test node umamoe/test/pipeline.test.js && NODE_ENV=test node Refinery/test/pipeline.test.js && NODE_ENV=test node Workshop/test/pipeline.test.js && NODE_ENV=test node Distribution/test/interaction.test.js"
+    "test": "NODE_ENV=test node umamoe/test/pipeline.test.js && NODE_ENV=test node Refinery/test/pipeline.test.js && NODE_ENV=test node Workshop/test/pipeline.test.js && NODE_ENV=test node Distribution/test/interaction.test.js && NODE_ENV=test node Distribution/test/railwayLogBridge.test.js"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",

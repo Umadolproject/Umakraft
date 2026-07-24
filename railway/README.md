@@ -17,6 +17,36 @@ railway link            # link this repo to a Railway project
 railway up              # deploy
 ```
 
+## Discord deployment and log notifications
+
+The bot exposes two authenticated endpoints for posting Railway activity to
+the operations channel (`OPS_CHANNEL_ID`, defaulting to
+`1529852035590127686`):
+
+```text
+POST /webhooks/railway
+POST /webhooks/railway/logs
+Authorization: Bearer <matching secret>
+```
+
+Configure these after the service has a public Railway domain:
+
+1. In Railway project settings, add a project webhook pointing to
+   `https://<your-domain>/webhooks/railway`. Set the same value as
+   `RAILWAY_WEBHOOK_SECRET` in the service variables.
+2. Add a Railway log drain pointing to
+   `https://<your-domain>/webhooks/railway/logs`. Set the same value as
+   `RAILWAY_LOG_DRAIN_SECRET` in the service variables. The log bridge accepts
+   JSON, arrays of JSON entries, and plain-text log payloads.
+3. Ensure the Discord bot can view and send messages in channel
+   `1529852035590127686`.
+
+Deployment events are posted immediately. Runtime logs are redacted and
+batched for up to two seconds, with error-like entries marked `ERROR`.
+The bridge drops the oldest entries if Discord is unavailable or the queue
+reaches its safety limit; Railway remains the source of truth for complete
+logs.
+
 ---
 
 ## Required environment secrets

@@ -49,6 +49,8 @@ Only actual API keys and tokens belong here. Set them in Railway Variables / Rep
 | `BRAVE_SEARCH_API_KEY_2` | Brave backup key (optional) |
 | `GOOGLE_CSE_API_KEY` | Web search — Google CSE (optional) |
 | `SERPAPI_API_KEY` | Web search — SerpAPI (optional) |
+| `RAILWAY_WEBHOOK_SECRET` | Authenticates Railway deployment notifications (optional until Railway webhook is connected) |
+| `RAILWAY_LOG_DRAIN_SECRET` | Authenticates Railway runtime log forwarding (optional until Railway log drain is connected) |
 
 ## Non-sensitive configuration (edit files, not secrets)
 
@@ -56,7 +58,7 @@ Only actual API keys and tokens belong here. Set them in Railway Variables / Rep
 |---|---|
 | `DISCORD_CLIENT_ID` | `core/botConfig.js` |
 | `DISCORD_GUILD_ID` | `core/botConfig.js` |
-| `OPS_CHANNEL_ID` | `core/botConfig.js` |
+| `OPS_CHANNEL_ID` | `core/botConfig.js` — defaults to the Railway/Discord operations channel `1529852035590127686` |
 | `CONFIGURED_CIRCLES` | `core/botConfig.js` |
 | AI model, cache, search tuning | `AI/Configuration.js` |
 | Miner timeouts / retries | `umamoe/Miner/config.js` |

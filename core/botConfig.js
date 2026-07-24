@@ -21,6 +21,11 @@ export const CONFIGURED_CIRCLES = process.env.CONFIGURED_CIRCLES
   : ['974470619'];
 
 // ── Operations channel ────────────────────────────────────────────────────────
-// Discord channel ID for ops / alert messages from the Announcer.
-// Set to null to disable (alerts are logged to console only).
-export const OPS_CHANNEL_ID = null;
+// Discord channel ID for ops / alert messages from the Announcer and Railway
+// deployment/log notifications. Override for another server/channel.
+export const OPS_CHANNEL_ID = process.env.OPS_CHANNEL_ID || '1529852035590127686';
+
+// Railway webhook and log-drain authentication. These are secrets and must
+// only be configured as Railway/Replit environment secrets.
+export const RAILWAY_WEBHOOK_SECRET = process.env.RAILWAY_WEBHOOK_SECRET || '';
+export const RAILWAY_LOG_DRAIN_SECRET = process.env.RAILWAY_LOG_DRAIN_SECRET || '';

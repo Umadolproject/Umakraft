@@ -34,6 +34,16 @@ import { fileURLToPath } from 'node:url';
 import { join, dirname } from 'node:path';
 import { createServer } from 'node:http';
 import { loadCommands } from '../Commands/index.js';
+import {
+  announceRailwayDeployment,
+  queueRailwayLog,
+  getRailwayLogBridgeStats,
+} from '../../Broadcast/Announcer/railwayLogBridge.js';
+import {
+  OPS_CHANNEL_ID,
+  RAILWAY_WEBHOOK_SECRET,
+  RAILWAY_LOG_DRAIN_SECRET,
+} from '../../core/botConfig.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -42,10 +52,90 @@ let botReady = false;
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN?.trim() || '';
 const discordConfigured = Boolean(DISCORD_TOKEN);
 
+function readRequestBody(req, maxBytes = 256 * 1024) {
+  return new Promise((resolve, reject) => {
+    let size = 0;
+    const chunks = [];
+    req.on('data', chunk => {
+      size += chunk.length;
+      if (size > maxBytes) {
+        reject(Object.assign(new Error('request body too large'), { statusCode: 413 }));
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+    req.on('error', reject);
+  });
+}
+
+function isAuthorized(req, configuredSecret) {
+  if (!configuredSecret) return false;
+  const authorization = req.headers.authorization || '';
+  const bearer = authorization.match(/^Bearer\s+(.+)$/i)?.[1];
+  const supplied = bearer || req.headers['x-railway-webhook-secret'] || req.headers['x-railway-log-drain-secret'];
+  return typeof supplied === 'string' && supplied === configuredSecret;
+}
+
+function sendJson(res, statusCode, body) {
+  res.writeHead(statusCode, { 'Content-Type': 'application/json; charset=utf-8' });
+  res.end(JSON.stringify(body));
+}
+
 const healthServer = createServer((req, res) => {
   if (req.url === '/favicon.ico') {
     res.writeHead(204);
     res.end();
+  } else if (req.method === 'POST' && req.url === '/webhooks/railway') {
+    if (!isAuthorized(req, RAILWAY_WEBHOOK_SECRET)) {
+      sendJson(res, 401, { error: 'unauthorized' });
+      return;
+    }
+    readRequestBody(req).then(async raw => {
+      let payload;
+      try {
+        payload = raw ? JSON.parse(raw) : {};
+      } catch {
+        sendJson(res, 400, { error: 'invalid JSON' });
+        return;
+      }
+      try {
+        const result = await announceRailwayDeployment(payload, client, OPS_CHANNEL_ID);
+        sendJson(res, 202, { accepted: true, delivered: result.sent === true });
+      } catch (error) {
+        console.error(`[railway-webhook] Discord delivery failed: ${error.message}`);
+        sendJson(res, 502, { error: 'Discord delivery failed' });
+      }
+    }).catch(error => {
+      sendJson(res, error.statusCode || 400, { error: error.message });
+    });
+  } else if (req.method === 'POST' && req.url === '/webhooks/railway/logs') {
+    if (!isAuthorized(req, RAILWAY_LOG_DRAIN_SECRET || RAILWAY_WEBHOOK_SECRET)) {
+      sendJson(res, 401, { error: 'unauthorized' });
+      return;
+    }
+    readRequestBody(req).then(raw => {
+      let payload;
+      try {
+        payload = raw ? JSON.parse(raw) : {};
+      } catch {
+        // Some log drains send newline-delimited/plain text payloads.
+        payload = { message: raw };
+      }
+      const entries = Array.isArray(payload) ? payload : [payload];
+      const accepted = entries.reduce(
+        (count, entry) => count + (queueRailwayLog(entry, client, OPS_CHANNEL_ID).accepted ? 1 : 0),
+        0,
+      );
+      sendJson(res, 202, {
+        accepted: true,
+        queued: accepted,
+        ...getRailwayLogBridgeStats(),
+      });
+    }).catch(error => {
+      sendJson(res, error.statusCode || 400, { error: error.message });
+    });
   } else if (req.url === '/') {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     res.end(`<!doctype html>

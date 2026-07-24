@@ -33,6 +33,8 @@ CONFIGURED_CIRCLES = "974470619"
 
 # ── Secrets — set these in the Railway dashboard, not here ──────────────────
 # DISCORD_TOKEN      — required
+# RAILWAY_WEBHOOK_SECRET — secret configured on the Railway deployment webhook
+# RAILWAY_LOG_DRAIN_SECRET — secret configured on the Railway log drain
 # OPENAI_API_KEY     — optional (embeddings)
 # OPENAI_API_KEY_2   — optional (backup)
 # GEMINI_API_KEY     — optional
