@@ -9,3 +9,4 @@
 - [Railway Discord log bridge](railway-discord-log-bridge.md) — separate authenticated deployment webhook and runtime log-drain endpoints; redact and batch logs before Discord delivery.
 - [Workspace ZIP updates](workspace-zip-updates.md) — imported ZIPs may contain Replit state; merge application files only and exclude `.local`, agent state, and workspace metadata.
 - [Fan gain source priority](fan-gain-source-priority.md) — `/fan_gain` must use matched circle-member API gains before historical deltas or estimates.
+- [Miner endpoint fix](miner-endpoint-fix.md) — `/trainers/{id}` is 404; real endpoint is `/v4/user/profile/{id}`; baseUrl includes /api so paths must NOT repeat it; circle-first pipeline strategy implemented.

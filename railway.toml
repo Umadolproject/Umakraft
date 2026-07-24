@@ -17,8 +17,8 @@ restartPolicyMaxRetries = 5
 # Only secrets belong here — set them in the Railway dashboard, never commit.
 # All other configuration is hardcoded in the source files listed below.
 #
-#   core/botConfig.js     — DISCORD_CLIENT_ID, DISCORD_GUILD_ID, OPS_CHANNEL_ID
-#   AI/Configuration.js   — models, cache, search, rate limits, feature flags
+#   core/botConfig.js      — DISCORD_CLIENT_ID, DISCORD_GUILD_ID, OPS_CHANNEL_ID
+#   AI/Configuration.js    — models, cache, search, rate limits, feature flags
 #   umamoe/Miner/config.js — API timeouts and retry settings
 # ---------------------------------------------------------------------------
 
@@ -31,19 +31,43 @@ NODE_ENV = "production"
 # Comma-separated list of uma.moe circle IDs for the Broadcast pipeline.
 CONFIGURED_CIRCLES = "974470619"
 
+# ── Storage — REQUIRES a Railway Volume mounted at /data ─────────────────────
+#
+# Member links, vault records, and AI indexes are all written to SQLite at
+# the path below.  Without a persistent volume, this data is wiped on every
+# redeploy.
+#
+# How to add a Railway Volume:
+#   1. Railway dashboard → your service → Storage tab → Add Volume
+#   2. Set Mount Path to:  /data
+#   3. Railway will provision a persistent disk and mount it at /data
+#      automatically on every deployment.
+#
+# Once the volume is attached, the path below is correct and no further
+# code changes are needed.
+UMAKRAFT_SQLITE_PATH = "/data/umakraft.sqlite"
+
+# ── Uma.moe API ───────────────────────────────────────────────────────────────
+# Primary source: GET /api/v4/circles?circle_id=… (X-API-Key header)
+# Fallback:       GET /api/v4/user/profile/{id}   (X-API-Key header)
+# Without this key all API requests are unauthenticated and will be rejected.
+# Set UMA_MOE_API_KEY in Railway dashboard → Variables (not here — it is a secret).
+UMA_MOE_API_BASE_URL = "https://uma.moe/api"
+
 # ── Secrets — set these in the Railway dashboard, not here ──────────────────
-# DISCORD_TOKEN      — required
+# UMA_MOE_API_KEY        — required; X-API-Key for all uma.moe API requests
+# DISCORD_TOKEN          — required; bot authentication
 # RAILWAY_WEBHOOK_SECRET — secret configured on the Railway deployment webhook
 # RAILWAY_LOG_DRAIN_SECRET — secret configured on the Railway log drain
-# OPENAI_API_KEY     — optional (embeddings)
-# OPENAI_API_KEY_2   — optional (backup)
-# GEMINI_API_KEY     — optional
-# GEMINI_API_KEY_2   — optional (backup)
-# QDRANT_URL         — optional (falls back to in-memory)
-# QDRANT_API_KEY     — optional
-# TAVILY_API_KEY     — optional (web search)
-# TAVILY_API_KEY_2   — optional (backup)
+# OPENAI_API_KEY         — optional (embeddings)
+# OPENAI_API_KEY_2       — optional (backup)
+# GEMINI_API_KEY         — optional
+# GEMINI_API_KEY_2       — optional (backup)
+# QDRANT_URL             — optional (falls back to in-memory)
+# QDRANT_API_KEY         — optional
+# TAVILY_API_KEY         — optional (web search)
+# TAVILY_API_KEY_2       — optional (backup)
 # BRAVE_SEARCH_API_KEY   — optional (web search)
 # BRAVE_SEARCH_API_KEY_2 — optional (backup)
-# GOOGLE_CSE_API_KEY — optional (web search)
-# SERPAPI_API_KEY    — optional (web search)
+# GOOGLE_CSE_API_KEY     — optional (web search)
+# SERPAPI_API_KEY        — optional (web search)

@@ -1,6 +1,13 @@
 /**
  * Umamoe → Refinery Pipeline Wire
  * Phase 4: stage-level timeouts + throughput metrics.
+ *
+ * Data source strategy (see docs/miner-data-source.md):
+ *   1. Fetch circle FIRST — contains member fan data for the whole circle.
+ *   2. Extract trainer from circle members (id, name, fans, rank if present).
+ *   3. Only fetch the individual trainer profile (/api/v4/user/profile/{id})
+ *      when the circle does not supply all required fields (id/name/fans/rank).
+ *   4. Merge: profile fills rank + extended data; circle wins for fan values.
  */
 
 import * as Miner from './Miner/miner.js';
@@ -54,6 +61,8 @@ async function runStage(stageName, fn, ...args) {
   }
 }
 
+// ─── Numeric helpers ──────────────────────────────────────────────────────────
+
 function finiteNonNegative(value) {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0;
 }
@@ -68,6 +77,8 @@ function sumNumbers(values) {
   return numbers.length > 0 ? numbers.reduce((total, value) => total + value, 0) : undefined;
 }
 
+// ─── Circle member helpers ────────────────────────────────────────────────────
+
 function memberIdentityValues(member) {
   return [
     member?.id,
@@ -77,6 +88,9 @@ function memberIdentityValues(member) {
     member?.userId,
     member?.trainer?.id,
     member?.profile?.id,
+    // viewer_id is the primary circle member identifier
+    member?.viewer_id,
+    member?.account_id,
   ].filter(value => value !== undefined && value !== null).map(String);
 }
 
@@ -134,8 +148,8 @@ function circleMemberGains(member) {
   const dailyFans = member.daily_fans ?? member.dailyFans;
   if (Array.isArray(dailyFans) && dailyFans.length > 0) {
     const todayIndex = Math.min(new Date().getDate() - 1, dailyFans.length - 1);
-    direct.dailyFanGain ??= firstNumber(dailyFans[todayIndex], dailyFans[dailyFans.length - 1]);
-    direct.weeklyFanGain ??= sumNumbers(dailyFans.slice(Math.max(0, todayIndex - 6), todayIndex + 1));
+    direct.dailyFanGain   ??= firstNumber(dailyFans[todayIndex], dailyFans[dailyFans.length - 1]);
+    direct.weeklyFanGain  ??= sumNumbers(dailyFans.slice(Math.max(0, todayIndex - 6), todayIndex + 1));
     direct.monthlyFanGain ??= sumNumbers(dailyFans.slice(0, todayIndex + 1));
   }
 
@@ -144,30 +158,104 @@ function circleMemberGains(member) {
 }
 
 /**
- * Merge the matching circle member's API gains into a trainer response.
- * This is intentionally a pure pipeline-wire helper: acquisition remains in
- * Miner and business prioritisation remains in Refiner.
+ * Merge the matching circle member's API gains (and latest fan count) into a
+ * trainer response.
+ *
+ * Pure pipeline-wire helper: acquisition stays in Miner, business
+ * prioritisation stays in Refiner.
  */
 export function mergeCircleMemberGains(trainerData, circleResult, trainerId) {
   if (!trainerData || typeof trainerData !== 'object') return trainerData;
   const member = getCircleMember(circleResult, trainerId, trainerData);
-  const gains = circleMemberGains(member);
-  if (!gains) return trainerData;
+  const gains  = circleMemberGains(member);
+
+  // Latest absolute fan count from daily_fans — overrides profile placeholder.
+  const dailyFans  = member?.daily_fans ?? member?.dailyFans;
+  const latestFans = Array.isArray(dailyFans) && dailyFans.length > 0
+    ? dailyFans[dailyFans.length - 1]
+    : undefined;
+
+  if (!gains && latestFans === undefined) return trainerData;
 
   const memberRank = firstNumber(
-    member.rank,
-    member.placement,
-    member.ranking,
-    member.daily_rank,
-    member.dailyRank,
+    member?.rank,
+    member?.placement,
+    member?.ranking,
+    member?.daily_rank,
+    member?.dailyRank,
   );
 
   return {
     ...trainerData,
-    ...gains,
-    apiGains: { ...gains },
+    // Apply real fan total from circle when available
+    ...(typeof latestFans === 'number' ? { fans: latestFans } : {}),
+    ...(gains ?? {}),
+    apiGains: { ...(gains ?? {}) },
     ...(memberRank !== undefined ? { rank: memberRank } : {}),
   };
+}
+
+// ─── Circle-first helpers ─────────────────────────────────────────────────────
+
+/**
+ * Try to build a flat trainer object from circle member data.
+ * Returns null if the trainer is not found in the circle member list.
+ *
+ * Matching order:
+ *   1. viewer_id / account_id exact match (numeric string comparison)
+ *   2. Returns null — name matching is deferred to mergeCircleMemberGains
+ *      after a profile fetch supplies the canonical name.
+ */
+function extractTrainerFromCircle(circleResult, trainerId) {
+  const members = circleResult?.data?.members
+    ?? circleResult?.data?.circle?.members
+    ?? circleResult?.data?.data?.members
+    ?? [];
+
+  if (!Array.isArray(members) || members.length === 0) return null;
+
+  const targetId = String(trainerId);
+  const member   = members.find(m =>
+    String(m.viewer_id  ?? '') === targetId ||
+    String(m.account_id ?? '') === targetId ||
+    String(m.id         ?? '') === targetId ||
+    String(m.trainer_id ?? '') === targetId,
+  );
+
+  if (!member) return null;
+
+  const dailyFans  = member.daily_fans ?? member.dailyFans;
+  const latestFans = Array.isArray(dailyFans) && dailyFans.length > 0
+    ? dailyFans[dailyFans.length - 1]
+    : null;
+
+  const memberRank = firstNumber(
+    member.rank, member.placement, member.ranking, member.daily_rank, member.dailyRank,
+  );
+
+  return {
+    id:   String(member.viewer_id ?? member.account_id ?? trainerId),
+    name: member.trainer_name ?? member.name ?? '',
+    fans: typeof latestFans === 'number' ? latestFans : null,
+    rank: memberRank ?? null,
+    // Preserve raw circle fields for mergeCircleMemberGains enrichment
+    viewer_id:      member.viewer_id,
+    daily_fans:     member.daily_fans,
+    dailyFanGain:   member.dailyFanGain   ?? member.daily_gain   ?? null,
+    weeklyFanGain:  member.weeklyFanGain  ?? member.weekly_gain  ?? null,
+    monthlyFanGain: member.monthlyFanGain ?? member.monthly_gain ?? null,
+  };
+}
+
+/**
+ * Returns true when any of the four Inspector-required fields is absent.
+ * Used to decide whether a secondary profile fetch is needed.
+ */
+function hasMissingRequiredFields(data) {
+  if (!data) return true;
+  return ['id', 'name', 'fans', 'rank'].some(
+    f => data[f] === null || data[f] === undefined,
+  );
 }
 
 // ─── processTrainer ───────────────────────────────────────────────────────────
@@ -179,26 +267,98 @@ export async function processTrainer(trainerId, options = {}) {
     ?? options.circle
     ?? CONFIGURED_CIRCLES[0]
     ?? null;
-  const [minerResult, circleResult] = await Promise.all([
-    runStage('Miner', Miner.fetchTrainer, trainerId),
-    circleId
-      ? runStage('Miner.circle', Miner.fetchCircle, circleId)
-      : Promise.resolve(null),
-  ]);
-  if (minerResult.success === false && minerResult.failedAt) return minerResult;
-  if (!minerResult.success) {
-    logger.warn('Miner failed', { trainerId, error: minerResult.error });
-    return failureEnvelope('Miner', minerResult.error, minerResult.message, { trainerId });
-  }
+
+  // ── STEP 1: Fetch circle (primary source) ─────────────────────────────────
+  const circleResult = circleId
+    ? await runStage('Miner.circle', Miner.fetchCircle, circleId)
+    : null;
 
   if (circleResult && !circleResult.success) {
-    logger.warn('Circle enrichment unavailable; continuing with trainer data', {
-      trainerId,
-      circleId,
-      error: circleResult.error,
+    logger.warn('Circle fetch failed; will attempt trainer profile fallback', {
+      trainerId, circleId, error: circleResult.error,
     });
   }
 
+  // ── STEP 2: Try to build trainer envelope from circle member data ──────────
+  const circleTrainer = circleResult?.success
+    ? extractTrainerFromCircle(circleResult, trainerId)
+    : null;
+
+  // ── STEP 3: Decide if individual profile fetch is needed ──────────────────
+  //   • Trainer not found in circle (different ID scheme, or not a member)
+  //   • Or found but missing required fields (e.g. rank not in circle data)
+  let minerResult;
+
+  if (circleTrainer && !hasMissingRequiredFields(circleTrainer)) {
+    // Circle supplies all required fields — no extra API call needed.
+    logger.info('Trainer data complete from circle (primary source)', { trainerId });
+    minerResult = {
+      success:  true,
+      data:     circleTrainer,
+      metadata: {
+        endpoint:   `${circleId ? `/v4/circles?circle_id=${circleId}` : '/v4/circles'}`,
+        statusCode: 200,
+        timestamp:  new Date().toISOString(),
+        source:     'uma.moe',
+        attempts:   1,
+        dataSource: 'circle',
+      },
+    };
+  } else {
+    // Fetch individual trainer profile as fallback.
+    logger.info(
+      circleTrainer
+        ? 'Circle member found but missing required fields — fetching trainer profile'
+        : 'Trainer not found in circle — fetching trainer profile',
+      { trainerId },
+    );
+
+    const profileResult = await runStage('Miner', Miner.fetchTrainer, trainerId);
+
+    if (profileResult.success === false && profileResult.failedAt) return profileResult;
+
+    if (!profileResult.success) {
+      if (circleTrainer) {
+        // Have partial circle data — proceed; Inspector will catch any
+        // remaining required-field violations and surface them clearly.
+        logger.warn('Profile fallback failed; proceeding with partial circle data', {
+          trainerId, error: profileResult.error,
+        });
+        minerResult = {
+          success:  true,
+          data:     circleTrainer,
+          metadata: {
+            endpoint:   `/v4/circles?circle_id=${circleId}`,
+            statusCode: 200,
+            timestamp:  new Date().toISOString(),
+            source:     'uma.moe',
+            attempts:   1,
+            dataSource: 'circle-partial',
+          },
+        };
+      } else {
+        logger.warn('Miner failed — no circle data, no profile', {
+          trainerId, error: profileResult.error,
+        });
+        return failureEnvelope('Miner', profileResult.error, profileResult.message, { trainerId });
+      }
+    } else if (circleTrainer) {
+      // Merge: profile fills rank + extended fields; circle data wins for fans.
+      const circleFields = Object.fromEntries(
+        Object.entries(circleTrainer).filter(([, v]) => v !== null && v !== undefined),
+      );
+      minerResult = {
+        ...profileResult,
+        data: { ...profileResult.data, ...circleFields },
+      };
+    } else {
+      minerResult = profileResult;
+    }
+  }
+
+  // ── STEP 4: Apply circle gains (fans, dailyFanGain, weeklyFanGain, …) ──────
+  // mergeCircleMemberGains also sets the latest absolute fan count from
+  // daily_fans, overriding any placeholder (e.g. fans: 0 from profile).
   const enrichedMinerResult = circleResult?.success
     ? {
         ...minerResult,
@@ -206,6 +366,7 @@ export async function processTrainer(trainerId, options = {}) {
       }
     : minerResult;
 
+  // ── STEP 5: Courier → Inspector ───────────────────────────────────────────
   const inspectorResult = await runStage('Courier', transport, enrichedMinerResult);
   if (inspectorResult.failedAt) return inspectorResult;
   if (!inspectorResult.success || !inspectorResult.accepted) {
@@ -213,6 +374,7 @@ export async function processTrainer(trainerId, options = {}) {
     return failureEnvelope('Inspector', inspectorResult.error, inspectorResult.message, { trainerId });
   }
 
+  // ── STEP 6: Vault store + retrieve ───────────────────────────────────────
   const vaultResult = await runStage('Vault', receive, inspectorResult);
   if (vaultResult.failedAt) return vaultResult;
   if (!vaultResult.success) {
@@ -232,6 +394,7 @@ export async function processTrainer(trainerId, options = {}) {
     );
   }
 
+  // ── STEP 7: Previous snapshot for Refiner delta calculation ──────────────
   let previousRecord = options.previousVaultRecord ?? null;
   if (!previousRecord) {
     const previousSnapshot = await runStage(
@@ -244,6 +407,7 @@ export async function processTrainer(trainerId, options = {}) {
     }
   }
 
+  // ── STEP 8: Refiner → Compiler ────────────────────────────────────────────
   const refinedResult = await runStage(
     'Refiner',
     async (record, opts) => refine(record, opts),
@@ -314,12 +478,12 @@ export async function processRankings(params = {}) {
 
     const syntheticEnvelope = {
       success: true,
-      data: enrichedTrainerData,
+      data:    enrichedTrainerData,
       metadata: {
         ...minerResult.metadata,
-        attempts:  minerResult.metadata?.attempts,
+        attempts:   minerResult.metadata?.attempts,
         statusCode: minerResult.metadata?.statusCode,
-        endpoint: `/rankings → trainer/${trainer.id}`,
+        endpoint:   `/rankings → trainer/${trainer.id}`,
       },
     };
 
@@ -368,10 +532,10 @@ export async function processRankings(params = {}) {
 
     const compileResult = await runStage('Compiler', compile, refinedResult);
     results.push({
-      success: compileResult.success,
+      success:   compileResult.success,
       trainerId: trainer.id,
-      version: compileResult.version,
-      error: compileResult.error,
+      version:   compileResult.version,
+      error:     compileResult.error,
     });
   }
 
