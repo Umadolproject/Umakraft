@@ -53,6 +53,35 @@ function cronToMs(cronExpr) {
   return 30 * 60 * 1000;
 }
 
+/**
+ * Calculate milliseconds until the next occurrence of hour:minute in the given
+ * IANA timezone. Handles DST correctly by recalculating on every fire.
+ *
+ * @param {number} hour      0–23 in the target timezone
+ * @param {number} minute    0–59 in the target timezone
+ * @param {string} timezone  IANA timezone string (e.g. "Europe/Amsterdam")
+ * @returns {number} milliseconds until next occurrence (always > 0)
+ */
+function msUntilNextDailyAt(hour, minute, timezone) {
+  const now = new Date();
+  // Determine the timezone's current UTC offset by comparing what the TZ
+  // thinks "now" is vs. actual UTC now.  On a UTC server, toLocaleString
+  // with a timeZone option returns the wall-clock time in that zone, and
+  // wrapping it in new Date() re-parses it as if it were UTC — giving us
+  // a Date whose getTime() equals (UTC epoch) + (TZ offset).
+  const tzNow  = new Date(now.toLocaleString('en-US', { timeZone: timezone }));
+  const offsetMs = now.getTime() - tzNow.getTime(); // negative for zones ahead of UTC
+
+  const msPerDay   = 24 * 60 * 60 * 1000;
+  const localNow   = now.getTime() - offsetMs;                          // "local epoch ms"
+  const localMidnight = Math.floor(localNow / msPerDay) * msPerDay;    // today 00:00 local
+  const targetLocalMs = localMidnight + hour * 3_600_000 + minute * 60_000;
+
+  let diff = targetLocalMs - localNow;
+  if (diff <= 0) diff += msPerDay;   // already passed today → schedule for tomorrow
+  return diff;
+}
+
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 /**
@@ -69,13 +98,37 @@ export function schedule(name, cronExpr, fn) {
     return;
   }
   registerTask(name, cronExpr);
-  _tasks.set(name, { cronExpr, fn, intervalId: null });
+  _tasks.set(name, { cronExpr, fn, intervalId: null, daily: null });
   log.info(`[tasks] registered "${name}" (${cronExpr})`);
 }
 
 /**
+ * Register a named task that fires once per day at a specific wall-clock time
+ * in the given IANA timezone. DST-safe: the delay is recalculated after each fire.
+ *
+ * @param {string}   name      — unique task identifier
+ * @param {number}   hour      — 0–23 in the target timezone
+ * @param {number}   minute    — 0–59 in the target timezone
+ * @param {string}   timezone  — IANA timezone (e.g. "Europe/Amsterdam")
+ * @param {Function} fn        — async function; receives the Discord client as its first arg
+ */
+export function scheduleDailyAt(name, hour, minute, timezone, fn) {
+  if (_tasks.has(name)) {
+    log.warn(`[tasks] task "${name}" already registered — skipping duplicate`);
+    return;
+  }
+  const label = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')} ${timezone}`;
+  const cronExpr = `${minute} ${hour} * * * [${timezone}]`;
+  registerTask(name, cronExpr);
+  _tasks.set(name, { cronExpr, fn, intervalId: null, daily: { hour, minute, timezone } });
+  log.info(`[tasks] registered daily "${name}" at ${label}`);
+}
+
+/**
  * Start all registered tasks.
- * Each task fires once immediately, then repeats on the cron interval.
+ * - Interval tasks fire immediately then repeat on the cron interval.
+ * - Daily tasks (registered via scheduleDailyAt) fire at the next wall-clock
+ *   occurrence and self-reschedule for exactly 24 h later each time.
  *
  * @param {object|null} client  — Discord.js Client, passed as first arg to every task fn
  */
@@ -86,34 +139,57 @@ export function start(client = null) {
       continue;
     }
 
-    const intervalMs = cronToMs(task.cronExpr);
-    log.info(`[tasks] starting "${name}" — interval=${intervalMs}ms`);
+    if (task.daily) {
+      // ── Wall-clock daily task ─────────────────────────────────────────────
+      const { hour, minute, timezone } = task.daily;
+      const label = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')} ${timezone}`;
 
-    const run = async () => {
-      log.info(`[tasks] tick — task="${name}"`);
-      recordTaskStart(name);
-      const { success, error } = await safeRun(() => task.fn(client), name);
-      recordTaskEnd(name, { success, error });
-    };
+      const scheduleNext = () => {
+        const delayMs = msUntilNextDailyAt(hour, minute, timezone);
+        log.info(`[tasks] "${name}" next run in ${Math.round(delayMs / 60_000)}min (at ${label})`);
+        task.intervalId = setTimeout(async () => {
+          log.info(`[tasks] tick — task="${name}"`);
+          recordTaskStart(name);
+          const { success, error } = await safeRun(() => task.fn(client), name);
+          recordTaskEnd(name, { success, error });
+          scheduleNext(); // reschedule for next day (recalculates offset → DST-safe)
+        }, delayMs);
+      };
 
-    // Fire immediately so the first health check happens at startup,
-    // then repeat on the configured interval. run() is async — attach a catch
-    // so a synchronous throw or unhandled rejection doesn't leak.
-    run().catch((err) => log.error(`[tasks] first-run of "${name}" failed`, err));
-    task.intervalId = setInterval(
-      () => { run().catch((err) => log.error(`[tasks] scheduled run of "${name}" failed`, err)); },
-      intervalMs
-    );
+      scheduleNext();
+    } else {
+      // ── Fixed-interval task ───────────────────────────────────────────────
+      const intervalMs = cronToMs(task.cronExpr);
+      log.info(`[tasks] starting "${name}" — interval=${intervalMs}ms`);
+
+      const run = async () => {
+        log.info(`[tasks] tick — task="${name}"`);
+        recordTaskStart(name);
+        const { success, error } = await safeRun(() => task.fn(client), name);
+        recordTaskEnd(name, { success, error });
+      };
+
+      // Fire immediately so the first health check happens at startup,
+      // then repeat on the configured interval. run() is async — attach a catch
+      // so a synchronous throw or unhandled rejection doesn't leak.
+      run().catch((err) => log.error(`[tasks] first-run of "${name}" failed`, err));
+      task.intervalId = setInterval(
+        () => { run().catch((err) => log.error(`[tasks] scheduled run of "${name}" failed`, err)); },
+        intervalMs
+      );
+    }
   }
 }
 
 /**
- * Stop all running tasks.
+ * Stop all running tasks (both interval and daily).
  * Useful for graceful shutdown or in tests.
  */
 export function stopAll() {
   for (const [name, task] of _tasks) {
     if (task.intervalId) {
+      // Works for both setInterval handles and setTimeout handles
+      clearTimeout(task.intervalId);
       clearInterval(task.intervalId);
       task.intervalId = null;
       log.info(`[tasks] stopped "${name}"`);
