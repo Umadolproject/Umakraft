@@ -1,0 +1,66 @@
+Pipeline inspection — findings
+
+I read the main pipeline wires (`umamoe/pipeline.js`, `Refinery/Refiner`, `Refinery/Compiler`, `Workshop/pipeline.js`, `Broadcast/pipeline.js`) plus Miner/Courier/Inspector/Vault. Here are the real bugs and stale spots, ordered by impact.
+
+1. `processRankings` diverges from `processTrainer` — three related bugs
+`umamoe/pipeline.js` L277–353.
+
+- No `runStage` wrapping for Refiner/Compiler (L331, L337). Unlike `processTrainer`, these two stages are called raw:
+  ```js
+  const refinedResult = refine(vaultRecord.data, { previousRecord });   // no timeout, no metrics
+  const compileResult = await compile(refinedResult);                    // ditto; thrown errors bubble
+  ```
+  A thrown error in Compiler here escapes the loop and kills the whole rankings batch instead of producing a per-trainer failure entry.
+- No circle enrichment. `processTrainer` merges `CONFIGURED_CIRCLES[0]` via `mergeCircleMemberGains`, so rankings trainers never get authoritative `apiGains` and always fall back to `delta`/`projected`. If circle enrichment is the primary gain source, rankings numbers will differ from single-trainer numbers.
+- Synthetic envelope drops `success` provenance: the loop rebuilds `{success:true, data: trainer, metadata}` per trainer but doesn't carry `minerResult.metadata.attempts`/`statusCode` per row — harmless, but makes rankings audit trails weaker than single-trainer ones.
+
+2. Compiler flags spurious conflicts on array/object fields
+`Refinery/Compiler/compiler.js` L69.
+
+```js
+if (key in merged && merged[key] !== value) { conflictsResolved.push(...) }
+```
+`characters` and `achievements` are arrays (Refiner always fills them, defaulting to `[]`). Two envelopes will always have distinct array references → `!==` is always true → every multi-source compile logs `characters` and `achievements` as "conflicts resolved" even when they're identical. Use a deep/JSON compare, or skip arrays/objects.
+
+3. `blueprintKey` is never set — Workshop logs `(unknown)` forever
+`Workshop/pipeline.js` L57 reads `compiledProduct?.blueprintKey`, but `Compiler.assembleProduct` (L87–127) never emits one. Every produced deliverable is tagged `blueprintKey: '(unknown)'` in the Workshop logs and returned envelope. Either the Compiler should compute the blueprint key (e.g. `trainer:${id}:${version}`) or the Fabricator should assign it and Workshop should read it back.
+
+4. Refiner: `fanDelta` gate treats a legitimate `0` as missing
+`Refinery/Refiner/refiner.js` L193.
+
+```js
+...(deltas && !apiGains?.dailyFanGain ? { fanDelta: deltas.fanDelta } : {}),
+```
+If the API returns `dailyFanGain: 0` (a valid quiet day), `!apiGains?.dailyFanGain` is `true` and `fanDelta` is spliced in — inconsistent with the `apiGains?.dailyFanGain ?? ...` used on the line above (which correctly keeps the `0`). Use `apiGains?.dailyFanGain === undefined`.
+
+5. Refiner: `gainsSource: 'api'` is misleading on partial API data
+Same file, L195. If `extractApiGains` returns `{ weeklyFanGain: 1234 }` only, the merged `gains` will fill `dailyFanGain`/`monthlyFanGain` from `deltas`/`estimated`, but `gainsSource` is still stamped `'api'`. Either drop back to `'mixed'` unless all three came from API, or record per-field provenance.
+
+6. `mergeCircleMemberGains` — `todayIndex` assumes a calendar-month array
+`umamoe/pipeline.js` L136.
+
+```js
+const todayIndex = Math.min(new Date().getDate() - 1, dailyFans.length - 1);
+```
+This is only correct if `daily_fans` is indexed 0..dayOfMonth-1 of the current month. Any rolling-window shape (last-N-days, previous-month tail included) makes `weekly`/`monthly` sums wrong. Worth documenting or verifying against a live payload.
+
+7. Dead-branch check in `processTrainer`
+L188:
+```js
+if (minerResult.success === false && minerResult.failedAt) return minerResult;
+if (!minerResult.success) { return failureEnvelope('Miner', ...); }
+```
+The first line only fires for `runStage`-produced timeouts/thrown errors; the second re-wraps natural Miner failures. Fine, but merge them or comment — as written it hides which envelope shape is returned to callers (`failedAt` present vs not), which downstream code sometimes branches on.
+
+8. Small stale items
+- `Refinery/Refiner/refiner.js` `estimateGains` is documented as "temporary until real deltas are wired in", but deltas are wired in (Vault previous snapshot). The projection is now only a last-resort fallback — worth updating the comment or gating it behind a config flag so tests don't silently accept projections.
+- `umamoe/Vault/adapters/sqliteAdapter.js` L125: `SELECT ..., NULL AS updated_at` in the `previous` branch. If `hydrateRecord` reads `updated_at` to populate `metadata.storedAt`, the previous-snapshot `storedAt` becomes null and Refiner falls back to `metadata.inspectedAt` (which is fine, but silent).
+- Compiler `presentationHints.highlight` uses `!= null` — this is one of the few places `!=` is correct (matches both null and undefined). Keep it, but note it's inconsistent with the strict comparisons elsewhere.
+
+Suggested first fixes (highest ROI)
+1. Refactor `processRankings` to reuse the same stage-wrapped body as `processTrainer` (single loop iteration = single trainer path).
+2. Deep-compare in `mergeRefinedResults` before pushing a conflict entry.
+3. Emit `blueprintKey` from the Compiler (`trainer:${id}` or `${id}:${compiledAt}`).
+4. Fix the `fanDelta` `0` gate and tighten `gainsSource` to `'mixed'` on partial API data.
+
+Want me to apply any of these? I'd suggest starting with (1) and (2) — they're the ones most likely to be masking real differences in production output.
