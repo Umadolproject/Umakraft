@@ -91,6 +91,3 @@ export async function loadCommands(logger = console) {
 
   return _loadPromise;
 }
-
-const { commands } = await loadCommands();
-export const commandMap = commands;

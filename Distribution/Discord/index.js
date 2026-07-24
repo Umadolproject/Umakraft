@@ -27,7 +27,7 @@ for (const signal of ['SIGTERM', 'SIGINT']) {
   });
 }
 
-import { Client, Collection, GatewayIntentBits } from 'discord.js';
+import { Client, Collection, GatewayIntentBits, Events } from 'discord.js';
 import { DISCORD_CLIENT_ID, DISCORD_GUILD_ID } from '../../core/botConfig.js';
 import { readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -174,7 +174,7 @@ if (discordConfigured) {
   // Update the health-server flag when the bot becomes ready.
   // ready.js (loaded above) handles task scheduling and logging;
   // this listener's only job is to flip the local botReady flag.
-  client.once('clientReady', () => {
+  client.once(Events.ClientReady, () => {
     botReady = true;
   });
 

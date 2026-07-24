@@ -2,11 +2,12 @@
 // Fires once when the bot connects to the Discord gateway and is ready.
 // Registers all scheduled tasks and starts the task runner.
 
+import { Events } from 'discord.js';
 import { schedule, scheduleDailyAt, start } from '../../../tasks/index.js';
 import { runOperationCycle } from '../../../Operation/operation.js';
 import { runMinerCycle } from '../../../tasks/minerTask.js';
 
-export const name = 'clientReady';
+export const name = Events.ClientReady;
 export const once = true;
 
 const MINER_TIMEZONE = process.env.MINER_TIMEZONE || 'Europe/Amsterdam';

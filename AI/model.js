@@ -42,10 +42,19 @@ class HuggingFaceModel {
       env.useFSCache = true;
       log.info(`[AI] Using model cache: ${env.cacheDir}`);
 
-      this._pipeline = await pipeline('text-generation', this._modelId, {
-        dtype: 'q4',
-        device: this._device,
-      });
+      const MODEL_LOAD_TIMEOUT_MS = 120_000;
+      this._pipeline = await Promise.race([
+        pipeline('text-generation', this._modelId, {
+          dtype: 'q4',
+          device: this._device,
+        }),
+        new Promise((_, reject) => {
+          const timer = setTimeout(() => {
+            reject(new Error(`AI_MODEL_LOAD_TIMEOUT: model download exceeded ${MODEL_LOAD_TIMEOUT_MS}ms`));
+          }, MODEL_LOAD_TIMEOUT_MS);
+          timer.unref?.();
+        }),
+      ]);
 
       this._ready = true;
       this._lastUsedAt = Date.now();
