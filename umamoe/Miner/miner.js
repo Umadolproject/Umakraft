@@ -63,7 +63,7 @@ async function fetchWithTimeout(url, options = {}) {
 
   const headers = { ...(options.headers ?? {}) };
   if (API_CONFIG.apiKey) {
-    headers['Authorization'] = `Bearer ${API_CONFIG.apiKey}`;
+    headers['X-API-Key'] = API_CONFIG.apiKey;
   }
 
   try {
