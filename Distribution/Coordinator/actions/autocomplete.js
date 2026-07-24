@@ -57,9 +57,9 @@ async function withTimeout(ms, fn) {
 async function trainerSuggestions(query) {
   const q = (query ?? '').trim();
 
-  // Discord sends an empty string on first focus — show nothing until
-  // the user has typed at least 2 characters.
-  if (q.length < 2) return [];
+  // Always show local-DB results even for empty/short queries.
+  // Only skip the live API call for very short queries (< 2 chars) to avoid
+  // sending noisy API requests before the user has typed anything meaningful.
 
   // ── 1. Query local DB ────────────────────────────────────────────────────
   const localRows = await withTimeout(
@@ -73,7 +73,7 @@ async function trainerSuggestions(query) {
   );
 
   // ── 2. Supplement with live API when local results are thin ──────────────
-  if (byId.size < LOCAL_MIN_RESULTS) {
+  if (q.length >= 2 && byId.size < LOCAL_MIN_RESULTS) {
     const apiResult = await withTimeout(AUTOCOMPLETE_TIMEOUT_MS, () =>
       searchTrainers({ q, limit: 25 }),
     );
