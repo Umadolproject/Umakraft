@@ -182,6 +182,14 @@ if (discordConfigured) {
     console.error('[discord] Client error:', err);
   });
 
+  // Session invalidated — another process has taken over this token's gateway
+  // connection and discord.js cannot resume. Exit so Railway's restart policy
+  // establishes a fresh session instead of hanging silently without events.
+  client.on('invalidated', () => {
+    console.error('[discord] Session invalidated — gateway stolen by another process. Exiting for restart.');
+    process.exit(1);
+  });
+
   // Discord.js v14 does not emit a 'disconnect' event on the Client.
   // Use shardDisconnect / shardResume to track gateway connection state.
   client.on('shardDisconnect', (_event, shardId) => {
