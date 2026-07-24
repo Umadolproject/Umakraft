@@ -1,0 +1,85 @@
+2026-07-24T08:38:18.060825274Z [inf]  Starting Container
+2026-07-24T08:38:18.449968302Z [inf]  
+2026-07-24T08:38:18.449975172Z [inf]  > umakraft@1.0.0 start
+2026-07-24T08:38:18.449979981Z [inf]  > node Distribution/Discord/index.js
+2026-07-24T08:38:18.449983621Z [inf]  
+2026-07-24T08:38:18.449987441Z [inf]  [startup] Checking required environment variables...
+2026-07-24T08:38:18.449992241Z [inf]  [startup] Environment OK — DISCORD_TOKEN and DISCORD_CLIENT_ID present
+2026-07-24T08:38:18.449996071Z [inf]  [startup] Creating Discord client...
+2026-07-24T08:38:18.450000301Z [inf]  [startup] Loading command handlers...
+2026-07-24T08:38:18.450003831Z [inf]  [startup] Health server listening on 0.0.0.0:3000
+2026-07-24T08:38:18.450007081Z [inf]  [startup] Loaded command: admin_setjoindate (adminSetJoinDate.js)
+2026-07-24T08:38:18.450010431Z [inf]  [startup] Loaded command: admin_sync (adminSync.js)
+2026-07-24T08:38:18.450013541Z [inf]  [startup] Loaded command: admin_synccards (adminSyncCards.js)
+2026-07-24T08:38:18.450016801Z [inf]  [startup] Loaded command: ai (ai.js)
+2026-07-24T08:38:18.450020251Z [inf]  [startup] Loaded command: ask (ask.js)
+2026-07-24T08:38:18.450024701Z [inf]  [startup] Loaded command: circle_master (circleMaster.js)
+2026-07-24T08:38:18.450028981Z [inf]  [startup] Loaded command: circle_status (circleStatus.js)
+2026-07-24T08:38:18.450032461Z [inf]  [startup] Loaded command: club_gain (clubGain.js)
+2026-07-24T08:38:18.450036481Z [inf]  [startup] Loaded command: deadletter_inspect (deadLetterInspect.js)
+2026-07-24T08:38:18.450039821Z [inf]  [startup] Loaded command: deadletter_replay (deadLetterReplay.js)
+2026-07-24T08:38:18.450043011Z [inf]  [startup] Loaded command: fan_gain (fanGain.js)
+2026-07-24T08:38:18.450046251Z [inf]  [startup] Loaded command: help (help.js)
+2026-07-24T08:38:18.450050251Z [inf]  [startup] Loaded command: intercircleleaderboard (interCircleLeaderboard.js)
+2026-07-24T08:38:18.450053850Z [inf]  [startup] Loaded command: joindate (joinDate.js)
+2026-07-24T08:38:18.454103143Z [inf]  [startup] Loaded command: keep (keep.js)
+2026-07-24T08:38:18.454108753Z [inf]  [startup] Loaded command: leaderboard (leaderboard.js)
+2026-07-24T08:38:18.454113013Z [inf]  [startup] Loaded command: link (link.js)
+2026-07-24T08:38:18.454116493Z [inf]  [startup] Loaded command: link_list (linkList.js)
+2026-07-24T08:38:18.454119613Z [inf]  [startup] Loaded command: memberlist (memberList.js)
+2026-07-24T08:38:18.454123803Z [inf]  [startup] Loaded command: profile (profile.js)
+2026-07-24T08:38:18.454127233Z [inf]  [startup] Loaded command: search_trainer (searchTrainer.js)
+2026-07-24T08:38:18.454130303Z [inf]  [startup] Loaded command: set_fans (setFans.js)
+2026-07-24T08:38:18.454133552Z [inf]  [startup] Loaded command: set_timezone (setTimezone.js)
+2026-07-24T08:38:18.454136852Z [inf]  [startup] Loaded command: status (status.js)
+2026-07-24T08:38:18.454140152Z [inf]  [startup] Loaded command: store (store.js)
+2026-07-24T08:38:18.454143942Z [inf]  [startup] Loaded command: test_milestone (testMilestone.js)
+2026-07-24T08:38:18.454146922Z [inf]  [startup] Loaded command: timeline_post (timelinePost.js)
+2026-07-24T08:38:18.454149922Z [inf]  [startup] Loaded command: timeline_setup (timelineSetup.js)
+2026-07-24T08:38:18.454152962Z [inf]  [startup] Loaded command: total_circlefan_gain (totalCircleFanGain.js)
+2026-07-24T08:38:18.454155922Z [inf]  [startup] Loaded command: total_fan (totalFan.js)
+2026-07-24T08:38:18.454159752Z [inf]  [startup] Loaded command: unlink (unlink.js)
+2026-07-24T08:38:18.454162982Z [inf]  [startup] Loaded command: warningsettings (warningSettings.js)
+2026-07-24T08:38:18.454165972Z [inf]  [startup] Loaded 32 command handler(s)
+2026-07-24T08:38:18.454169272Z [inf]  [startup] Loading event handlers...
+2026-07-24T08:38:18.454172522Z [inf]  [startup] Registered event: guildMemberAdd (guildMemberAdd.js)
+2026-07-24T08:38:18.454176302Z [inf]  [startup] Registered event: guildMemberRemove (guildMemberRemove.js)
+2026-07-24T08:38:18.458412692Z [inf]  [startup] Registered event: interactionCreate (interactionCreate.js)
+2026-07-24T08:38:18.458421922Z [inf]  [startup] Registered event: clientReady (ready.js)
+2026-07-24T08:38:18.458428242Z [inf]  [startup] Verified exactly 1 interactionCreate listener
+2026-07-24T08:38:18.458433332Z [inf]  [startup] Logging in to Discord...
+2026-07-24T08:38:18.830754044Z [inf]  [startup] Login call completed — waiting for ready event
+2026-07-24T08:38:18.847107579Z [inf]  [ready] Logged in as UmaKraftCircleBot#8905 (1526549146788429894)
+2026-07-24T08:38:18.847112909Z [inf]  [ready] Serving 1 guild(s)
+2026-07-24T08:38:18.847116109Z [inf]  [ready] AI initialization is deferred until the first AI command.
+2026-07-24T08:38:18.850403731Z [inf]  [tasks] registered "operation" (*/5 * * * *)
+2026-07-24T08:38:18.850408151Z [inf]  [tasks] registered daily "miner-1800" at 18:00 Europe/Amsterdam
+2026-07-24T08:38:18.850412211Z [inf]  [tasks] registered daily "miner-1830" at 18:30 Europe/Amsterdam
+2026-07-24T08:38:18.850415431Z [inf]  [tasks] starting "operation" — interval=300000ms
+2026-07-24T08:38:18.850418821Z [inf]  [tasks] tick — task="operation"
+2026-07-24T08:38:18.850422201Z [inf]  [Operation] Evaluation cycle started.
+2026-07-24T08:38:19.050221260Z [inf]  [Operation] Cycle complete. decision=Healthy subjects=[none]
+2026-07-24T08:38:19.050241750Z [inf]  [tasks] "miner-1800" next run in 442min (at 18:00 Europe/Amsterdam)
+2026-07-24T08:38:19.050250150Z [inf]  [tasks] "miner-1830" next run in 472min (at 18:30 Europe/Amsterdam)
+2026-07-24T08:38:19.050255050Z [dbg]  [Operation/Logger] pipeline=core stage=operation status=unknown failures=0 duration=0ms
+2026-07-24T08:38:19.050258650Z [dbg]  [Operation/Logger] pipeline=core stage=miner-1800 status=unknown failures=0 duration=n/ams
+2026-07-24T08:38:19.050262590Z [dbg]  [Operation/Logger] pipeline=core stage=miner-1830 status=unknown failures=0 duration=n/ams
+2026-07-24T08:38:19.050266620Z [inf]  [Operation/Logger] pipeline=runtime stage=runtime status=ok failures=0 duration=n/ams
+2026-07-24T08:38:19.050270180Z [inf]  [Operation/Manager] decision=Healthy — All systems nominal
+2026-07-24T08:43:20.748222005Z [inf]  [Operation/Logger] pipeline=core stage=operation status=ok failures=0 duration=1ms
+2026-07-24T08:43:20.748229165Z [dbg]  [Operation/Logger] pipeline=core stage=miner-1800 status=unknown failures=0 duration=n/ams
+2026-07-24T08:43:20.748234315Z [dbg]  [Operation/Logger] pipeline=core stage=miner-1830 status=unknown failures=0 duration=n/ams
+2026-07-24T08:43:20.748238885Z [inf]  [Operation/Logger] pipeline=runtime stage=runtime status=ok failures=0 duration=n/ams
+2026-07-24T08:43:20.748241575Z [inf]  [tasks] tick — task="operation"
+2026-07-24T08:43:20.748243755Z [inf]  [Operation/Manager] decision=Healthy — All systems nominal
+2026-07-24T08:43:20.748244565Z [inf]  [Operation] Evaluation cycle started.
+2026-07-24T08:43:20.748248545Z [inf]  [Operation] Cycle complete. decision=Healthy subjects=[none]
+2026-07-24T08:48:23.236889552Z [inf]  [tasks] tick — task="operation"
+2026-07-24T08:48:23.236892932Z [inf]  [Operation] Evaluation cycle started.
+2026-07-24T08:48:23.236896721Z [inf]  [Operation/Logger] pipeline=core stage=operation status=ok failures=0 duration=0ms
+2026-07-24T08:48:23.236900601Z [dbg]  [Operation/Logger] pipeline=core stage=miner-1800 status=unknown failures=0 duration=n/ams
+2026-07-24T08:48:23.236904001Z [dbg]  [Operation/Logger] pipeline=core stage=miner-1830 status=unknown failures=0 duration=n/ams
+2026-07-24T08:48:23.236907731Z [inf]  [Operation/Logger] pipeline=runtime stage=runtime status=ok failures=0 duration=n/ams
+2026-07-24T08:48:23.236910751Z [wrn]  [Operation/Logger] Memory pressure detected — stage=runtime heap=17906672/19767296
+2026-07-24T08:48:23.236914101Z [wrn]  [Operation/Manager] decision=Warning — runtime has memory pressure
+2026-07-24T08:48:23.236917621Z [inf]  [Operation] Cycle complete. decision=Warning subjects=[runtime]
