@@ -32,18 +32,18 @@ async function resolveTrainerIdByName(name) {
   if (local?.trainer_id) return String(local.trainer_id);
 
   // ── 2. Uma.moe search API ─────────────────────────────────────────────────
+  // Search endpoint returns { items: [...] }; each item has account_id + trainer_name.
   const result = await searchTrainers({ q: trimmed, limit: 5 });
   if (!result?.success) return null;
 
-  const raw = Array.isArray(result.data)
-    ? result.data
-    : (result.data?.trainers ?? result.data?.results ?? []);
+  const raw = result.data?.items
+    ?? (Array.isArray(result.data) ? result.data : []);
 
   // Only accept an exact (case-insensitive) name match to avoid wrong links.
   const exact = raw.find(
-    t => t?.name?.toLowerCase() === trimmed.toLowerCase(),
+    t => t?.trainer_name?.toLowerCase() === trimmed.toLowerCase(),
   );
-  return exact?.id != null ? String(exact.id) : null;
+  return exact?.account_id != null ? String(exact.account_id) : null;
 }
 
 // ─── Coordinator action ───────────────────────────────────────────────────────

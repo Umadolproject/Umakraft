@@ -79,18 +79,19 @@ async function trainerSuggestions(query) {
     );
 
     if (apiResult?.success) {
-      const raw = Array.isArray(apiResult.data)
-        ? apiResult.data
-        : (apiResult.data?.trainers ?? apiResult.data?.results ?? []);
+      // Search endpoint returns { items: [...], total, page, ... }
+      // Each item has account_id and trainer_name (not id/name).
+      const raw = apiResult.data?.items
+        ?? (Array.isArray(apiResult.data) ? apiResult.data : []);
 
-      const validRaw = raw.filter(t => t?.id != null && t?.name);
+      const validRaw = raw.filter(t => t?.account_id != null && t?.trainer_name);
 
       // Upsert API results into local DB (fire-and-forget; don't block response).
-      upsertTrainers(validRaw.map(t => ({ id: t.id, name: t.name }))).catch(() => {});
+      upsertTrainers(validRaw.map(t => ({ id: t.account_id, name: t.trainer_name }))).catch(() => {});
 
       for (const t of validRaw) {
-        if (!byId.has(String(t.id))) {
-          byId.set(String(t.id), String(t.name));
+        if (!byId.has(String(t.account_id))) {
+          byId.set(String(t.account_id), String(t.trainer_name));
         }
       }
     } else {
