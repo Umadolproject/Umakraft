@@ -508,7 +508,13 @@ export async function processRankings(params = {}) {
   // The circle param here is an uma.moe circle ID (never the Discord guild ID).
   // Fall back to the first configured circle so the circle endpoint can be used
   // for fan-gain enrichment even when no explicit circle was requested.
-  const circleId = params.circleId ?? params.circle ?? CONFIGURED_CIRCLES[0] ?? null;
+  //
+  // type === 'interCircle' means cross-circle rankings — skip circle enrichment
+  // since no single circle context applies.
+  const isInterCircle = params.type === 'interCircle';
+  const circleId = isInterCircle
+    ? null
+    : (params.circleId ?? params.circle ?? CONFIGURED_CIRCLES[0] ?? null);
 
   // Only pass params the /v4/rankings/gains endpoint actually accepts.
   // Internal pipeline params (circle, scope) must NOT be forwarded.
@@ -524,6 +530,11 @@ export async function processRankings(params = {}) {
   const rankingsFetchParams = { sort_by: scopeSortBy };
   if (params.top   != null) rankingsFetchParams.limit = params.top;
   if (params.limit != null) rankingsFetchParams.limit = params.limit;
+  // Forward date to the rankings API when provided (e.g. /leaderboard date:2026-07-01).
+  // The API may or may not support it — if it 400s, the Miner retry logic handles it.
+  if (params.date  != null) rankingsFetchParams.date  = params.date;
+  // Forward day for circleMaster (day-of-month filter, 1-31).
+  if (params.day   != null) rankingsFetchParams.day   = params.day;
 
   const [minerResult, circleResult] = await Promise.all([
     runStage('Miner', Miner.fetchRankings, rankingsFetchParams),
@@ -596,12 +607,20 @@ export async function processRankings(params = {}) {
   logger.info('processing rankings', { trainerCount: trainers.length });
 
   const results = [];
+  let enrichedCount = 0;
   for (const trainer of trainers) {
     // Apply circle enrichment per trainer so rankings gain numbers match
     // the authoritative API values used by processTrainer.
     const enrichedTrainerData = circleResult?.success
       ? mergeCircleMemberGains(trainer, circleResult, trainer.id)
       : trainer;
+
+    // Track whether circle enrichment actually supplied fan counts — when
+    // mergeCircleMemberGains can't find the member in the circle, fans stays
+    // at 0 (the rankings API does not include absolute fan counts).
+    if (circleResult?.success && (enrichedTrainerData.fans ?? 0) > (trainer.fans ?? 0)) {
+      enrichedCount++;
+    }
 
     const syntheticEnvelope = {
       success: true,
@@ -667,7 +686,12 @@ export async function processRankings(params = {}) {
   }
 
   const succeeded = results.filter(r => r.success).length;
-  logger.info('rankings pipeline complete', { succeeded, total: results.length });
+  logger.info('rankings pipeline complete', {
+    succeeded,
+    total: results.length,
+    circleEnriched: enrichedCount,
+    missingFans: circleResult?.success ? results.length - enrichedCount : 0,
+  });
   return successEnvelope(
     'UmamoeRankingsPipeline',
     { results },

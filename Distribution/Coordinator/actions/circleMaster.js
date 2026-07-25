@@ -35,7 +35,7 @@ export async function circleMaster(payload) {
         day:         opts.day    ?? today,
         generatedAt: new Date().toISOString(),
       },
-      topContributors: cp.topContributors ?? [],
+      topContributors: cp.topContributors ?? cp.entries ?? [],
       trend:           cp.trend           ?? null,
       presentationHints: cp.presentationHints ?? {},
     }),
