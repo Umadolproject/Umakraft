@@ -5,16 +5,18 @@
 //   1. options.trainerId  — provided directly (e.g. /store, /keep, /link trainer_id:...)
 //   2. options.trainer    — value from the trainer autocomplete field
 //      a. Pure numeric string → treat as trainer ID (autocomplete selection)
-//      b. Text name → check member_links first, then the local trainer DB
-//      c. Local DB fuzzy search → LIKE match when exact fails
-//      d. Live uma.moe search API → last resort for unknown names
+//      b. Text name → check member_links first, then the local trainer DB (EXACT only)
+//      c. Live uma.moe search API → last resort for unknown names
 //   3. options.member     — Discord GuildMember → look up their linked trainerId
 //   4. self (userId)      — the calling user's linked trainerId
+//
+// IMPORTANT: Never use fuzzy/LIKE matching — it picks wrong trainers and shows
+// made-up data.  Only exact name matches are safe.
 //
 // Returns: { success: boolean, value?: string, message?: string }
 
 import { getLinkByDiscordId, getLinkByTrainerName } from './memberLinks.js';
-import { getByName, searchByName } from './trainerDb.js';
+import { getByName } from './trainerDb.js';
 import { searchTrainers } from '../../../umamoe/Miner/miner.js';
 
 /**
@@ -41,27 +43,28 @@ export async function resolveMember(options, guildId, userId) {
     if (memberLink) return { success: true, value: memberLink.trainerId };
 
     // 2c. Exact match in the local trainer DB (seeded from circles on startup)
+    //     Only EXACT (case-insensitive) matches — never fuzzy/LIKE.
     const dbEntry = await getByName(options.trainer);
     if (dbEntry?.trainer_id) return { success: true, value: dbEntry.trainer_id };
 
-    // 2d. Fuzzy match in the local trainer DB (LIKE search)
-    const fuzzyMatches = await searchByName(options.trainer, 5);
-    if (fuzzyMatches.length === 1) {
-      // Single unambiguous match — use it
-      return { success: true, value: fuzzyMatches[0].trainer_id };
-    }
-    if (fuzzyMatches.length > 1) {
-      // Multiple matches — return the first but warn
-      return { success: true, value: fuzzyMatches[0].trainer_id };
-    }
-
-    // 2e. Live uma.moe search API — last resort for unknown names
+    // 2d. Live uma.moe search API — last resort for unknown names.
+    //     Only accept the result if the API returned a trainer whose name
+    //     is a close match (starts with the query, case-insensitive).
     try {
-      const liveResult = await searchTrainers({ q: options.trainer, limit: 3 });
+      const liveResult = await searchTrainers({ q: options.trainer, limit: 5 });
       if (liveResult?.success && Array.isArray(liveResult.data) && liveResult.data.length > 0) {
-        const first = liveResult.data[0];
-        const trainerId = String(first.id ?? first.viewer_id ?? first.trainer_id ?? '');
-        if (trainerId) return { success: true, value: trainerId };
+        const query = options.trainer.trim().toLowerCase();
+        for (const item of liveResult.data) {
+          const name = (item.name ?? item.trainer_name ?? '').trim();
+          const id   = String(item.id ?? item.viewer_id ?? item.trainer_id ?? '');
+          if (!id) continue;
+          // Require the returned name to START WITH the query — prevents
+          // picking a completely unrelated trainer.
+          if (name.toLowerCase().startsWith(query)) {
+            return { success: true, value: id };
+          }
+        }
+        // No close name match — don't guess.  Fall through to the error.
       }
     } catch {
       // Live search is best-effort; fall through to error

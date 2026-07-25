@@ -604,11 +604,27 @@ export async function processRankings(params = {}) {
 
   const trainers = rawTrainers.map(normalizeRankingItem).filter(t => t?.id);
 
-  logger.info('processing rankings', { trainerCount: trainers.length });
+  // When a specific circle is configured (non-interCircle), filter rankings to
+  // only include members of that circle.  The /v4/rankings/gains endpoint
+  // returns global results; circle_id on each item tells us which circle they
+  // belong to.  Without this filter, trainers from other circles appear in the
+  // leaderboard with 0 fans (circle enrichment fails for non-members).
+  const circleFiltered = circleId
+    ? trainers.filter(t => String(t.circle_id ?? t.circleId ?? '') === String(circleId))
+    : trainers;
+
+  if (circleId && circleFiltered.length < trainers.length) {
+    logger.info(
+      `filtered ${trainers.length - circleFiltered.length} non-circle trainers from rankings`,
+      { circleId, before: trainers.length, after: circleFiltered.length },
+    );
+  }
+
+  logger.info('processing rankings', { trainerCount: circleFiltered.length });
 
   const results = [];
   let enrichedCount = 0;
-  for (const trainer of trainers) {
+  for (const trainer of circleFiltered) {
     // Apply circle enrichment per trainer so rankings gain numbers match
     // the authoritative API values used by processTrainer.
     const enrichedTrainerData = circleResult?.success
