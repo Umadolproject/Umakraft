@@ -77,6 +77,24 @@ function sumNumbers(values) {
   return numbers.length > 0 ? numbers.reduce((total, value) => total + value, 0) : undefined;
 }
 
+/**
+ * Return the most recent non-zero fan total from a cumulative daily_fans
+ * array (uma.moe pre-allocates 31 slots; future days are 0). Falls back to
+ * today's index, then walks backwards to the last real value.
+ */
+function latestDailyFanCount(dailyFans) {
+  if (!Array.isArray(dailyFans) || dailyFans.length === 0) return undefined;
+  const start = Math.min(new Date().getDate() - 1, dailyFans.length - 1);
+  for (let i = start; i >= 0; i--) {
+    if (finiteNonNegative(dailyFans[i]) && dailyFans[i] > 0) return dailyFans[i];
+  }
+  // Fall back to any non-zero value later in the array (defensive).
+  for (let i = start + 1; i < dailyFans.length; i++) {
+    if (finiteNonNegative(dailyFans[i]) && dailyFans[i] > 0) return dailyFans[i];
+  }
+  return undefined;
+}
+
 // ─── Circle member helpers ────────────────────────────────────────────────────
 
 function memberIdentityValues(member) {
@@ -145,12 +163,59 @@ function circleMemberGains(member) {
     ),
   };
 
+  // daily_fans from uma.moe is a CUMULATIVE running total of a member's
+  // absolute fan count at the end of each day (e.g. [99234948, 99474675, …]),
+  // NOT per-day gains.  Compute gains as deltas, and treat a zero/missing
+  // baseline as a join-day (gain = 0) so mid-month joiners do not spike
+  // (see BUG-004 in docs/KNOWLEDGE_BASE.md).
   const dailyFans = member.daily_fans ?? member.dailyFans;
   if (Array.isArray(dailyFans) && dailyFans.length > 0) {
-    const todayIndex = Math.min(new Date().getDate() - 1, dailyFans.length - 1);
-    direct.dailyFanGain   ??= firstNumber(dailyFans[todayIndex], dailyFans[dailyFans.length - 1]);
-    direct.weeklyFanGain  ??= sumNumbers(dailyFans.slice(Math.max(0, todayIndex - 6), todayIndex + 1));
-    direct.monthlyFanGain ??= sumNumbers(dailyFans.slice(0, todayIndex + 1));
+    const rawTodayIndex = Math.min(new Date().getDate() - 1, dailyFans.length - 1);
+    // Some responses pre-allocate 31 slots and leave future days as 0;
+    // walk back to the most recent non-zero entry so "today" is real.
+    let todayIndex = rawTodayIndex;
+    while (todayIndex > 0 && !finiteNonNegative(dailyFans[todayIndex])) todayIndex--;
+    while (todayIndex > 0 && dailyFans[todayIndex] === 0) todayIndex--;
+
+    const today = finiteNonNegative(dailyFans[todayIndex]) ? dailyFans[todayIndex] : undefined;
+
+    if (today !== undefined) {
+      const prevDay = todayIndex >= 1 ? dailyFans[todayIndex - 1] : undefined;
+      const weekAgo = todayIndex >= 7 ? dailyFans[todayIndex - 7] : undefined;
+
+      // First non-zero value in the array = this member's month-start baseline.
+      let baselineIndex = 0;
+      while (baselineIndex < todayIndex && !(finiteNonNegative(dailyFans[baselineIndex]) && dailyFans[baselineIndex] > 0)) {
+        baselineIndex++;
+      }
+      const baseline = finiteNonNegative(dailyFans[baselineIndex]) ? dailyFans[baselineIndex] : undefined;
+
+      // Daily: 0 if we have no valid previous day (join-day / first-seen).
+      if (direct.dailyFanGain === undefined) {
+        direct.dailyFanGain = finiteNonNegative(prevDay) && prevDay > 0
+          ? Math.max(0, today - prevDay)
+          : 0;
+      }
+
+      // Weekly: prefer 7-day delta; fall back to today − baseline when the
+      // member has fewer than 7 days of history.
+      if (direct.weeklyFanGain === undefined) {
+        if (finiteNonNegative(weekAgo) && weekAgo > 0) {
+          direct.weeklyFanGain = Math.max(0, today - weekAgo);
+        } else if (baseline !== undefined && baselineIndex < todayIndex) {
+          direct.weeklyFanGain = Math.max(0, today - baseline);
+        } else {
+          direct.weeklyFanGain = 0;
+        }
+      }
+
+      // Monthly: today − month-start baseline. 0 on the join day itself.
+      if (direct.monthlyFanGain === undefined) {
+        direct.monthlyFanGain = baseline !== undefined && baselineIndex < todayIndex
+          ? Math.max(0, today - baseline)
+          : 0;
+      }
+    }
   }
 
   const gains = Object.fromEntries(Object.entries(direct).filter(([, value]) => value !== undefined));
@@ -170,10 +235,10 @@ export function mergeCircleMemberGains(trainerData, circleResult, trainerId) {
   const gains  = circleMemberGains(member);
 
   // Latest absolute fan count from daily_fans — overrides profile placeholder.
+  // Use the most recent non-zero entry at or before today's index so a
+  // preallocated 31-slot array with future days = 0 does not report fans: 0.
   const dailyFans  = member?.daily_fans ?? member?.dailyFans;
-  const latestFans = Array.isArray(dailyFans) && dailyFans.length > 0
-    ? dailyFans[dailyFans.length - 1]
-    : undefined;
+  const latestFans = latestDailyFanCount(dailyFans);
 
   if (!gains && latestFans === undefined) return trainerData;
 
@@ -225,9 +290,8 @@ function extractTrainerFromCircle(circleResult, trainerId) {
   if (!member) return null;
 
   const dailyFans  = member.daily_fans ?? member.dailyFans;
-  const latestFans = Array.isArray(dailyFans) && dailyFans.length > 0
-    ? dailyFans[dailyFans.length - 1]
-    : null;
+  const latestFansValue = latestDailyFanCount(dailyFans);
+  const latestFans = latestFansValue === undefined ? null : latestFansValue;
 
   const memberRank = firstNumber(
     member.rank, member.placement, member.ranking, member.daily_rank, member.dailyRank,

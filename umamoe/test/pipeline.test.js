@@ -137,6 +137,11 @@ assert('circle monthly gain is merged',                    enriched.monthlyFanGa
 assert('circle member placement replaces trainer rank',    enriched.rank === 7);
 assert('canonical API gains marker is attached',           enriched.apiGains?.dailyFanGain === 125000);
 
+// daily_fans is a CUMULATIVE running total per day, so gains must be deltas.
+// With every prior day = 10 and today = 250:
+//   dailyFanGain   = today − prevDay        = 250 − 10 = 240
+//   weeklyFanGain  = today − 7-days-ago     = 250 − 10 = 240
+//   monthlyFanGain = today − month-baseline = 250 − 10 = 240
 const dailyValues = Array(31).fill(10);
 const todayIndex = new Date().getDate() - 1;
 dailyValues[todayIndex] = 250;
@@ -149,8 +154,63 @@ const arrayEnriched = mergeCircleMemberGains(circleTrainer, {
     }],
   },
 }, 'trainer-circle-001');
-assert('daily_fans array supplies API daily gain',          arrayEnriched.dailyFanGain === 250);
-assert('daily_fans array supplies API weekly gain',        arrayEnriched.weeklyFanGain === 310);
+assert('daily_fans array yields daily gain as today − prevDay', arrayEnriched.dailyFanGain === 240);
+assert('daily_fans array yields weekly gain as today − 7-days-ago', arrayEnriched.weeklyFanGain === 240);
+assert('daily_fans array yields monthly gain as today − month-start baseline', arrayEnriched.monthlyFanGain === 240);
+
+// ── Regression: join-day member (baseline is first non-zero value) ──────────
+// Array with zeros through day (todayIndex-2), then 120, then 180 today.
+// baseline = 120 (first non-zero). No valid weekAgo, so weekly falls back to
+// today − baseline. prevDay = 120 → daily = 60. monthly = today − baseline = 60.
+if (todayIndex >= 2) {
+  const joinDayValues = Array(31).fill(0);
+  joinDayValues[todayIndex - 1] = 120;
+  joinDayValues[todayIndex]     = 180;
+  const joinDayEnriched = mergeCircleMemberGains(circleTrainer, {
+    success: true,
+    data: { members: [{ trainer_id: 'trainer-circle-001', daily_fans: joinDayValues }] },
+  }, 'trainer-circle-001');
+  assert('join-day daily gain is today − yesterday',      joinDayEnriched.dailyFanGain   === 60);
+  assert('join-day weekly gain falls back to today − baseline', joinDayEnriched.weeklyFanGain  === 60);
+  assert('join-day monthly gain is today − baseline',     joinDayEnriched.monthlyFanGain === 60);
+  assert('join-day fans is latest non-zero cumulative value',   joinDayEnriched.fans === 180);
+}
+
+// ── Regression: preallocated array with future days = 0 ────────────────────
+// Latest fans should be the most recent NON-ZERO value at or before today,
+// not dailyFans[dailyFans.length - 1] (which is 0 on preallocated arrays).
+if (todayIndex >= 4) {
+  const preallocated = Array(31).fill(0);
+  preallocated[todayIndex - 4] = 10;
+  preallocated[todayIndex - 3] = 20;
+  preallocated[todayIndex - 2] = 25;
+  preallocated[todayIndex - 1] = 28;
+  preallocated[todayIndex]     = 30;
+  const prealloc = mergeCircleMemberGains(circleTrainer, {
+    success: true,
+    data: { members: [{ trainer_id: 'trainer-circle-001', daily_fans: preallocated }] },
+  }, 'trainer-circle-001');
+  assert('preallocated future days do not zero out fans',  prealloc.fans === 30);
+  assert('preallocated array yields correct daily delta',  prealloc.dailyFanGain === 2);
+}
+
+// ── Regression: real-shape uma.moe sample (cumulative fan totals) ──────────
+// From docs/UMA_MOE_IMAGE_ASSETS.md: daily_fans = [99234948, 99474675, …].
+// With today = day 2, the OLD code returned dailyFanGain === 99474675 (the
+// whole running total). The fix returns the day-over-day delta of 239727.
+if (todayIndex >= 1) {
+  const realShape = Array(31).fill(0);
+  realShape[todayIndex - 1] = 99234948;
+  realShape[todayIndex]     = 99474675;
+  const realShapeEnriched = mergeCircleMemberGains(circleTrainer, {
+    success: true,
+    data: { members: [{ trainer_id: 'trainer-circle-001', daily_fans: realShape }] },
+  }, 'trainer-circle-001');
+  assert('cumulative daily_fans yields day-over-day delta (not the running total)',
+    realShapeEnriched.dailyFanGain === 239727);
+  assert('cumulative daily_fans latest fans equals today\'s cumulative total',
+    realShapeEnriched.fans === 99474675);
+}
 
 const unmatched = mergeCircleMemberGains(circleTrainer, {
   success: true,
