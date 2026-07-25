@@ -7,7 +7,10 @@ export async function leaderboard(payload) {
   return runRankingsPipeline({
     payload,
     rankingsParams: {
-      circle: parseCircleId(options.circle) ?? guildId,
+      // Use the parsed uma.moe circle ID, or null to let processRankings fall
+      // back to CONFIGURED_CIRCLES. Never pass the Discord guild ID here — it
+      // is not a valid uma.moe circle identifier.
+      circle: parseCircleId(options.circle) ?? null,
       scope:  options.scope  ?? 'daily',
       top:    options.top    ?? 10,
       date:   options.date   ?? null,

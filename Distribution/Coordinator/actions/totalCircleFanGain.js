@@ -7,7 +7,7 @@ export async function totalCircleFanGain(payload) {
   return runRankingsPipeline({
     payload,
     rankingsParams: {
-      circle: parseCircleId(options.circle) ?? guildId,
+      circle: parseCircleId(options.circle) ?? null,
       type:   'totalCircleFanGain',
     },
     blueprintKey: 'totalCircleFanGain',

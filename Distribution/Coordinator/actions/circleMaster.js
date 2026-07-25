@@ -23,7 +23,7 @@ export async function circleMaster(payload) {
   return runRankingsPipeline({
     payload,
     rankingsParams: {
-      circle: parseCircleId(options.circle) ?? guildId,
+      circle: parseCircleId(options.circle) ?? null,
       day:    options.day    ?? today,
       type:   'circleMaster',
     },

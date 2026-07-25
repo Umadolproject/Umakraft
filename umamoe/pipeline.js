@@ -505,10 +505,22 @@ export async function processTrainer(trainerId, options = {}) {
 export async function processRankings(params = {}) {
   logger.info('pipeline start — rankings', { params });
 
+  // The circle param here is an uma.moe circle ID (never the Discord guild ID).
+  // Fall back to the first configured circle so the circle endpoint can be used
+  // for fan-gain enrichment even when no explicit circle was requested.
   const circleId = params.circleId ?? params.circle ?? CONFIGURED_CIRCLES[0] ?? null;
 
+  // Only pass params that the /rankings API endpoint actually accepts.
+  // Internal pipeline params (circle, scope, top) must NOT be forwarded because
+  // they have no meaning to the rankings endpoint and `date: null` serialises
+  // to the string "null" which causes API errors.
+  const rankingsFetchParams = {};
+  if (params.top   != null) rankingsFetchParams.limit = params.top;
+  if (params.limit != null) rankingsFetchParams.limit = params.limit;
+  if (params.date  != null) rankingsFetchParams.date  = params.date;
+
   const [minerResult, circleResult] = await Promise.all([
-    runStage('Miner', Miner.fetchRankings, params),
+    runStage('Miner', Miner.fetchRankings, rankingsFetchParams),
     circleId
       ? runStage('Miner.circle', Miner.fetchCircle, circleId)
       : Promise.resolve(null),
@@ -526,9 +538,37 @@ export async function processRankings(params = {}) {
     });
   }
 
-  const trainers = Array.isArray(minerResult.data)
+  // Normalise each trainer item from the rankings response to a flat object
+  // that carries an `id` field (required by the Inspector). The /rankings
+  // endpoint returns raw objects whose primary key may be `account_id` or
+  // `viewer_id` rather than `id`, so we normalise here before inspection.
+  function normalizeRankingItem(raw) {
+    if (!raw || typeof raw !== 'object') return raw;
+    // Already normalised (unit-test mocks or previous callers)
+    if (typeof raw.id === 'string' && raw.id !== '') return raw;
+    const id = String(
+      raw.account_id ?? raw.viewer_id ?? raw.trainer_id ?? raw.id ?? '',
+    );
+    return {
+      id,
+      name:  String(raw.name ?? raw.trainer_name ?? ''),
+      fans:  typeof raw.fans === 'number' ? raw.fans : 0,
+      rank:  raw.rank ?? raw.ranking ?? raw.team_class ?? raw.placement ?? 1,
+      // Preserve all original fields for circle enrichment and downstream use
+      ...raw,
+      // Override with the canonical id so downstream code always gets it
+      id,
+    };
+  }
+
+  const rawTrainers = Array.isArray(minerResult.data)
     ? minerResult.data
-    : minerResult.data?.trainers ?? [];
+    : minerResult.data?.trainers
+      ?? minerResult.data?.data
+      ?? minerResult.data?.rankings
+      ?? [];
+
+  const trainers = rawTrainers.map(normalizeRankingItem).filter(t => t?.id);
 
   logger.info('processing rankings', { trainerCount: trainers.length });
 

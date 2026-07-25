@@ -8,7 +8,7 @@ export async function memberList(payload) {
     payload,
     rankingsParams: {
       type:          'memberList',
-      circle:        parseCircleId(options.circle) ?? guildId,
+      circle:        parseCircleId(options.circle) ?? null,
       includeFormer: options.includeFormer ?? false,
     },
     blueprintKey: 'memberList',

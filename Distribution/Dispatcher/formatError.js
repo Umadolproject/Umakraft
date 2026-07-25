@@ -17,12 +17,27 @@ const ERROR_MESSAGES = {
     'Could not retrieve data from Uma.moe right now. Please try again shortly.',
   MINER_RATE_LIMITED:
     'Uma.moe is being rate-limited right now. Please try again shortly.',
+  API_PERMANENT_ERROR:
+    'Uma.moe returned an error for this request. Please try again or contact an admin.',
+  API_TIMEOUT:
+    'Uma.moe did not respond in time. Please try again shortly.',
+  API_NETWORK_ERROR:
+    'Could not reach Uma.moe. Please check your connection and try again shortly.',
+  API_RATE_LIMIT_EXCEEDED:
+    'Uma.moe is being rate-limited right now. Please try again shortly.',
   INSPECTOR_REJECTION:
     'The data returned from Uma.moe was not valid. Please try again shortly or contact an admin.',
   DEPOT_NOT_FOUND:
     'No data is available for this member yet. Try again after the next sync.',
   PIPELINE_STAGE_ERROR:
     'Could not retrieve data right now. Please try again shortly.',
+  PIPELINE_STAGE_TIMEOUT:
+    'A pipeline stage timed out. Please try again shortly.',
+  // Leaderboard-specific
+  RANKINGS_NO_DATA:
+    'No leaderboard data is available for this period. Try again after the next sync.',
+  RANKINGS_EMPTY:
+    'No trainers qualified for the leaderboard this period.',
 
   // Workshop
   FABRICATOR_RENDER_ERROR:
