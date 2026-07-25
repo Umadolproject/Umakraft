@@ -78,7 +78,7 @@ const interCircleLeaderboard = new SlashCommandBuilder()
 const clubGain = new SlashCommandBuilder()
   .setName('club_gain')
   .setDescription('30-day club gain history — daily progress, running totals, and summary stats')
-  .addStringOption(o => o.setName('club').setDescription('Club name to view (requires Administrator for other clubs)'))
+  .addStringOption(o => o.setName('club').setDescription('Club name to view (requires Administrator for other clubs)').setAutocomplete(true))
   .addIntegerOption(o => o.setName('days').setDescription('Number of days to show (1–30, defaults to 30)').setMinValue(1).setMaxValue(30));
 
 const joinDate = new SlashCommandBuilder()

@@ -722,6 +722,77 @@ function tmplLeaderboard(p, w) {
 // Used for any blueprint that does not yet have a dedicated template.
 // Renders the blueprint name, trigger, and all top-level product fields.
 
+function tmplClubGain(p, w) {
+  const meta     = p.meta ?? {};
+  const rows     = Array.isArray(p.rows) ? p.rows : [];
+  const summary  = p.summary ?? {};
+  const clubName = meta.clubName ?? 'Unknown Club';
+  const days     = meta.periodDays ?? rows.length ?? 30;
+
+  const tableRows = rows.map((r) => {
+    const dateStr = r.date ? new Date(r.date).toLocaleDateString('en-US', { month: 'short', day: '2-digit' }) : '—';
+    const gain    = r.dailyGain ?? 0;
+    const total   = r.runningTotal ?? 0;
+    const gainStr = (gain >= 0 ? '+' : '−') + Math.abs(gain).toLocaleString('en-US');
+    const gainColor = gain > 0 ? '#55C271' : gain < 0 ? '#FF5AA5' : '#9E9E9E';
+    return `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 16px;border-bottom:1px solid #F0EAF8">
+        <div style="font-size:13px;color:#3A3552;font-weight:600;flex:1">${dateStr}</div>
+        <div style="font-size:14px;font-weight:700;color:${gainColor};flex:1;text-align:right">${gainStr}</div>
+        <div style="font-size:14px;font-weight:600;color:#3A3552;flex:1;text-align:right">${total.toLocaleString('en-US')}</div>
+      </div>`;
+  }).join('');
+
+  const empty = rows.length === 0
+    ? `<div style="text-align:center;padding:32px;color:#9E9E9E;font-size:15px">No data available for this period.</div>`
+    : '';
+
+  return wrapHtml(w, `
+    <div class="s-header" style="justify-content:space-between">
+      <div>
+        <div class="title">📈 Club Gain Report</div>
+        <div style="font-size:13px;opacity:0.88;margin-top:4px">Club: ${clubName}</div>
+      </div>
+      <div style="text-align:right">
+        <div style="background:rgba(255,255,255,0.2);border-radius:8px;padding:4px 12px;font-size:13px;font-weight:700;letter-spacing:1px;text-transform:uppercase">Last ${days} Days</div>
+        <div class="ts" style="margin-top:6px">${fmtTs(meta.generatedAt)}</div>
+      </div>
+    </div>
+    <div class="s-body">
+      <div style="display:flex;justify-content:space-between;padding:10px 16px;background:#F8F5FE;border-radius:8px 8px 0 0;font-size:11px;font-weight:700;color:#6B5B95;text-transform:uppercase;letter-spacing:0.5px">
+        <div style="flex:1">Date</div>
+        <div style="flex:1;text-align:right">Daily Gain</div>
+        <div style="flex:1;text-align:right">Running Total</div>
+      </div>
+      ${tableRows}${empty}
+    </div>
+    <div class="s-body" style="padding-top:16px">
+      <div style="display:flex;gap:12px;flex-wrap:wrap">
+        <div style="flex:1;min-width:120px;background:#F8F5FE;border-radius:12px;padding:14px;text-align:center">
+          <div style="font-size:11px;color:#9E9E9E;text-transform:uppercase;letter-spacing:0.5px">Total Gain</div>
+          <div style="font-size:20px;font-weight:700;color:#3A3552;margin-top:4px">${(summary.total ?? 0).toLocaleString('en-US')}</div>
+        </div>
+        <div style="flex:1;min-width:120px;background:#F8F5FE;border-radius:12px;padding:14px;text-align:center">
+          <div style="font-size:11px;color:#9E9E9E;text-transform:uppercase;letter-spacing:0.5px">Avg / Day</div>
+          <div style="font-size:20px;font-weight:700;color:#3A3552;margin-top:4px">${(summary.average ?? 0).toLocaleString('en-US')}</div>
+        </div>
+        <div style="flex:1;min-width:120px;background:#F8F5FE;border-radius:12px;padding:14px;text-align:center">
+          <div style="font-size:11px;color:#9E9E9E;text-transform:uppercase;letter-spacing:0.5px">Highest</div>
+          <div style="font-size:20px;font-weight:700;color:#55C271;margin-top:4px">${(summary.highest ?? 0).toLocaleString('en-US')}</div>
+        </div>
+        <div style="flex:1;min-width:120px;background:#F8F5FE;border-radius:12px;padding:14px;text-align:center">
+          <div style="font-size:11px;color:#9E9E9E;text-transform:uppercase;letter-spacing:0.5px">Lowest</div>
+          <div style="font-size:20px;font-weight:700;color:#FF5AA5;margin-top:4px">${(summary.lowest ?? 0).toLocaleString('en-US')}</div>
+        </div>
+      </div>
+    </div>
+    <div class="s-footer">
+      <div class="footer-text">UmaKraft • uma.moe data</div>
+      <span class="attr">UmaKraft</span>
+    </div>
+  `);
+}
+
 function tmplGeneric(descriptor, p, w) {
   const fields = Object.entries(p)
     .filter(([k]) => k !== 'blueprintKey' && k !== 'avatarDataUri')
@@ -778,6 +849,7 @@ function buildHtml(blueprintKey, descriptor, product, avatarDataUri, canvasWidth
     case 'milestone': return tmplMilestone(product, avatarDataUri, canvasWidth);
     case 'joinDate':     return tmplJoinDate(product, avatarDataUri, canvasWidth);
     case 'leaderboard':  return tmplLeaderboard(product, canvasWidth);
+    case 'clubGain':     return tmplClubGain(product, canvasWidth);
     default:             return tmplGeneric(descriptor, product, canvasWidth);
   }
 }

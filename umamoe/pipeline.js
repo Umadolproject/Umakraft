@@ -674,3 +674,125 @@ export async function processRankings(params = {}) {
     { total: results.length, succeeded },
   );
 }
+
+// ─── processClubGain ──────────────────────────────────────────────────────────
+
+/**
+ * Build a 30-day club gain spreadsheet for a single circle.
+ *
+ * Fetches the circle, sums each member's cumulative daily_fans array across
+ * all members per day, then computes the day-over-day delta (daily gain) and a
+ * running total. Returns the rows[] and summary stats the clubGain blueprint
+ * expects — this does NOT route through Inspector/Refiner/Compiler because the
+ * output is aggregate club-level history, not a per-trainer compiled product.
+ *
+ * @param {object} params
+ * @param {string} [params.circleId]  — uma.moe circle ID (falls back to first configured)
+ * @param {number} [params.days=30]   — number of days to include (1–30)
+ * @returns {Promise<envelope>} — { success, clubGain: { clubId, clubName, rows, summary } }
+ */
+export async function processClubGain(params = {}) {
+  const circleId = params.circleId
+    ?? params.circle
+    ?? CONFIGURED_CIRCLES[0]
+    ?? null;
+
+  if (!circleId) {
+    return failureEnvelope(
+      'UmamoeClubGainPipeline',
+      'CIRCLE_ID_REQUIRED',
+      'A circle ID is required to build a club gain report',
+      { params },
+      false,
+    );
+  }
+
+  const days = Math.min(Math.max(params.days ?? 30, 1), 30);
+
+  logger.info('pipeline start — club gain', { circleId, days });
+
+  const circleResult = await runStage('Miner.circle', Miner.fetchCircle, circleId);
+  if (circleResult.failedAt) return circleResult;
+  if (!circleResult.success) {
+    return failureEnvelope(
+      'Miner.circle',
+      circleResult.error ?? 'CIRCLE_FETCH_FAILED',
+      circleResult.message ?? `Could not fetch circle ${circleId}`,
+      { circleId },
+      circleResult.retriable ?? true,
+    );
+  }
+
+  const members = circleResult?.data?.members
+    ?? circleResult?.data?.circle?.members
+    ?? circleResult?.data?.data?.members
+    ?? [];
+
+  if (!Array.isArray(members) || members.length === 0) {
+    return failureEnvelope(
+      'UmamoeClubGainPipeline',
+      'CIRCLE_NO_MEMBERS',
+      `Circle ${circleId} has no members to aggregate`,
+      { circleId },
+      false,
+    );
+  }
+
+  // Sum every member's cumulative daily_fans into one per-day circle total.
+  // uma.moe pre-allocates 31 slots; future days are 0 and must be excluded.
+  const todayIndex = Math.min(new Date().getDate() - 1, 30);
+  const startIndex  = Math.max(0, todayIndex - days + 1);
+
+  const dailyTotals = new Array(days).fill(0);
+  for (const member of members) {
+    const dailyFans = member?.daily_fans ?? member?.dailyFans;
+    if (!Array.isArray(dailyFans)) continue;
+    for (let i = 0; i < days; i++) {
+      const idx = startIndex + i;
+      const v = dailyFans[idx];
+      if (finiteNonNegative(v) && v > 0) dailyTotals[i] += v;
+    }
+  }
+
+  // Day-over-day deltas = the daily gain. Running total accumulates gains.
+  const rows = [];
+  let runningTotal = 0;
+  for (let i = 0; i < days; i++) {
+    const today  = dailyTotals[i];
+    const prev   = i > 0 ? dailyTotals[i - 1] : null;
+    const gain   = prev == null ? 0 : Math.max(0, today - prev);
+    runningTotal += gain;
+
+    const date = new Date();
+    date.setDate(date.getDate() - (days - 1 - i));
+    rows.push({
+      date:         date.toISOString().substring(0, 10),
+      dailyGain:    gain,
+      runningTotal,
+    });
+  }
+
+  const gains = rows.map(r => r.dailyGain).filter(g => g > 0);
+  const total   = gains.reduce((a, b) => a + b, 0);
+  const average = gains.length > 0 ? Math.round(total / gains.length) : 0;
+  const highest = gains.length > 0 ? Math.max(...gains) : 0;
+  const lowest  = gains.length > 0 ? Math.min(...gains) : 0;
+
+  const clubName = circleResult?.data?.circle?.name
+    ?? circleResult?.data?.name
+    ?? circleResult?.data?.circle_name
+    ?? String(circleId);
+
+  const summary = { total, average, highest, lowest };
+
+  logger.info('club gain pipeline complete', { circleId, rows: rows.length });
+
+  return successEnvelope('UmamoeClubGainPipeline', {
+    clubGain: {
+      clubId:   String(circleId),
+      clubName,
+      rows,
+      summary,
+    },
+  }, { circleId, days });
+}

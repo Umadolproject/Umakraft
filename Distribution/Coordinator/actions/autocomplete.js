@@ -244,6 +244,7 @@ const CIRCLE_AUTOCOMPLETE = new Map([
   ['memberlist',           new Set(['circle'])],
   ['link',                 new Set(['circle'])],
   ['set_fans',             new Set(['circle'])],
+  ['club_gain',            new Set(['club'])],
 ]);
 
 // ─── Router ───────────────────────────────────────────────────────────────────
