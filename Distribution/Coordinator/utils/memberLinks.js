@@ -4,7 +4,7 @@
 // Table: member_links (discord_id, guild_id, trainer_id, trainer_name, linked_at, join_date)
 // Primary key: (discord_id, guild_id) — one trainer per member per guild.
 //
-// Uses the shared sql.js SQLite runtime (core/sqlite.js).
+// Uses the shared sql.js / Turso runtime (core/sqlite.js).
 
 import { resolveSqlitePath } from '../../../core/storageBackend.js';
 import { queryAll, queryOne, withRead, withWrite, persistDatabase } from '../../../core/sqlite.js';
@@ -14,8 +14,8 @@ let _initPromise = null;
 
 async function init() {
   if (_initPromise) return _initPromise;
-  _initPromise = withWrite(dbPath, (db) => {
-    db.run(`
+  _initPromise = withWrite(dbPath, async (db) => {
+    await db.run(`
       CREATE TABLE IF NOT EXISTS member_links (
         discord_id   TEXT NOT NULL,
         guild_id     TEXT NOT NULL,
@@ -24,15 +24,15 @@ async function init() {
         linked_at    TEXT NOT NULL,
         join_date    TEXT,
         PRIMARY KEY (discord_id, guild_id)
-      );
-      CREATE INDEX IF NOT EXISTS idx_ml_guild      ON member_links (guild_id);
-      CREATE INDEX IF NOT EXISTS idx_ml_trainer_id ON member_links (guild_id, trainer_id);
-      CREATE INDEX IF NOT EXISTS idx_ml_trainer_nm ON member_links (guild_id, trainer_name COLLATE NOCASE);
+      )
     `);
+    await db.run(`CREATE INDEX IF NOT EXISTS idx_ml_guild      ON member_links (guild_id)`);
+    await db.run(`CREATE INDEX IF NOT EXISTS idx_ml_trainer_id ON member_links (guild_id, trainer_id)`);
+    await db.run(`CREATE INDEX IF NOT EXISTS idx_ml_trainer_nm ON member_links (guild_id, trainer_name COLLATE NOCASE)`);
 
     // Migrate: add join_date column if upgrading from an older schema
     try {
-      db.run(`ALTER TABLE member_links ADD COLUMN join_date TEXT`);
+      await db.run(`ALTER TABLE member_links ADD COLUMN join_date TEXT`);
     } catch {
       // Column already exists — safe to ignore
     }
@@ -50,8 +50,8 @@ async function init() {
 export async function upsertLink({ discordId, guildId, trainerId, trainerName }) {
   await init();
   const linkedAt = new Date().toISOString();
-  const result = await withWrite(dbPath, (db) => {
-    db.run(
+  const result = await withWrite(dbPath, async (db) => {
+    await db.run(
       `INSERT INTO member_links (discord_id, guild_id, trainer_id, trainer_name, linked_at)
        VALUES (?, ?, ?, ?, ?)
        ON CONFLICT (discord_id, guild_id) DO UPDATE SET
@@ -62,9 +62,7 @@ export async function upsertLink({ discordId, guildId, trainerId, trainerName })
     );
     return { success: true, linkedAt };
   });
-  // Flush immediately — links are a user-initiated action, not a hot path.
-  // Deferring to the 5 s timer risks losing the write on a rapid restart or
-  // SIGKILL (e.g. Railway deploy → replace cycle).
+  // Flush immediately — links are user-initiated, not a hot path.
   await persistDatabase(dbPath);
   return result;
 }
@@ -75,14 +73,14 @@ export async function upsertLink({ discordId, guildId, trainerId, trainerName })
  */
 export async function updateJoinDate(discordId, guildId, joinDate) {
   await init();
-  return withWrite(dbPath, (db) => {
-    const existing = queryOne(
+  return withWrite(dbPath, async (db) => {
+    const existing = await queryOne(
       db,
       `SELECT discord_id FROM member_links WHERE discord_id = ? AND guild_id = ?`,
       [discordId, guildId],
     );
     if (!existing) return { success: false, error: 'NOT_LINKED' };
-    db.run(
+    await db.run(
       `UPDATE member_links SET join_date = ? WHERE discord_id = ? AND guild_id = ?`,
       [joinDate, discordId, guildId],
     );
@@ -95,14 +93,14 @@ export async function updateJoinDate(discordId, guildId, joinDate) {
  */
 export async function removeLink(discordId, guildId) {
   await init();
-  const result = await withWrite(dbPath, (db) => {
-    const existing = queryOne(
+  const result = await withWrite(dbPath, async (db) => {
+    const existing = await queryOne(
       db,
       `SELECT trainer_name FROM member_links WHERE discord_id = ? AND guild_id = ?`,
       [discordId, guildId],
     );
     if (!existing) return { success: false, error: 'NOT_LINKED' };
-    db.run(
+    await db.run(
       `DELETE FROM member_links WHERE discord_id = ? AND guild_id = ?`,
       [discordId, guildId],
     );
@@ -130,8 +128,8 @@ function hydrateLink(row) {
  */
 export async function getLinkByDiscordId(discordId, guildId) {
   await init();
-  return withRead(dbPath, (db) => {
-    const row = queryOne(
+  return withRead(dbPath, async (db) => {
+    const row = await queryOne(
       db,
       `SELECT discord_id, trainer_id, trainer_name, linked_at, join_date
        FROM member_links WHERE discord_id = ? AND guild_id = ?`,
@@ -146,8 +144,8 @@ export async function getLinkByDiscordId(discordId, guildId) {
  */
 export async function getLinkByTrainerId(trainerId, guildId) {
   await init();
-  return withRead(dbPath, (db) => {
-    const row = queryOne(
+  return withRead(dbPath, async (db) => {
+    const row = await queryOne(
       db,
       `SELECT discord_id, trainer_id, trainer_name, linked_at, join_date
        FROM member_links WHERE trainer_id = ? AND guild_id = ?`,
@@ -162,8 +160,8 @@ export async function getLinkByTrainerId(trainerId, guildId) {
  */
 export async function getLinkByTrainerName(trainerName, guildId) {
   await init();
-  return withRead(dbPath, (db) => {
-    const row = queryOne(
+  return withRead(dbPath, async (db) => {
+    const row = await queryOne(
       db,
       `SELECT discord_id, trainer_id, trainer_name, linked_at, join_date
        FROM member_links WHERE guild_id = ? AND trainer_name = ? COLLATE NOCASE`,
@@ -178,15 +176,15 @@ export async function getLinkByTrainerName(trainerName, guildId) {
  */
 export async function listLinks(guildId, { limit = 20, offset = 0 } = {}) {
   await init();
-  return withRead(dbPath, (db) => {
-    const rows = queryAll(
+  return withRead(dbPath, async (db) => {
+    const rows = await queryAll(
       db,
       `SELECT discord_id, trainer_id, trainer_name, linked_at, join_date
        FROM member_links WHERE guild_id = ?
        ORDER BY linked_at DESC LIMIT ? OFFSET ?`,
       [guildId, limit, offset],
     );
-    const total = queryOne(
+    const total = await queryOne(
       db,
       `SELECT COUNT(*) AS cnt FROM member_links WHERE guild_id = ?`,
       [guildId],

@@ -16,23 +16,23 @@ let _initPromise = null;
 
 async function init() {
   if (_initPromise) return _initPromise;
-  _initPromise = withWrite(dbPath, (db) => {
-    db.run(`
+  _initPromise = withWrite(dbPath, async (db) => {
+    await db.run(`
       CREATE TABLE IF NOT EXISTS trainer_cards (
-        trainer_id  TEXT NOT NULL PRIMARY KEY,
-        name        TEXT NOT NULL,
-        fans        INTEGER NOT NULL DEFAULT 0,
-        rank        INTEGER,
+        trainer_id   TEXT NOT NULL PRIMARY KEY,
+        name         TEXT NOT NULL,
+        fans         INTEGER NOT NULL DEFAULT 0,
+        rank         INTEGER,
         white_skills INTEGER NOT NULL DEFAULT 0,
-        skills_json TEXT NOT NULL DEFAULT '[]',
-        stored_at   TEXT NOT NULL,
-        expires_at  TEXT,
-        kept        INTEGER NOT NULL DEFAULT 0
-      );
-      CREATE INDEX IF NOT EXISTS idx_tc_name ON trainer_cards (name COLLATE NOCASE);
-      CREATE INDEX IF NOT EXISTS idx_tc_rank ON trainer_cards (rank);
-      CREATE INDEX IF NOT EXISTS idx_tc_white ON trainer_cards (white_skills);
+        skills_json  TEXT NOT NULL DEFAULT '[]',
+        stored_at    TEXT NOT NULL,
+        expires_at   TEXT,
+        kept         INTEGER NOT NULL DEFAULT 0
+      )
     `);
+    await db.run(`CREATE INDEX IF NOT EXISTS idx_tc_name  ON trainer_cards (name COLLATE NOCASE)`);
+    await db.run(`CREATE INDEX IF NOT EXISTS idx_tc_rank  ON trainer_cards (rank)`);
+    await db.run(`CREATE INDEX IF NOT EXISTS idx_tc_white ON trainer_cards (white_skills)`);
     return { success: true };
   });
   return _initPromise;
@@ -55,21 +55,19 @@ function hydrate(row) {
 
 /**
  * Insert or update a trainer card. Sets a 72-hour expiry unless kept=true.
- *
- * @param {{ trainerId, name, fans, rank, whiteSkills, skills }} card
  */
 export async function upsertCard(card) {
   await init();
   const storedAt  = new Date().toISOString();
   const expiresAt = new Date(Date.now() + TTL_MS).toISOString();
 
-  return withWrite(dbPath, (db) => {
+  return withWrite(dbPath, async (db) => {
     // Preserve kept flag if record already exists
-    const existing = queryOne(db, `SELECT kept FROM trainer_cards WHERE trainer_id = ?`, [card.trainerId]);
+    const existing = await queryOne(db, `SELECT kept FROM trainer_cards WHERE trainer_id = ?`, [card.trainerId]);
     const kept = existing?.kept ?? 0;
     const effectiveExpiry = kept ? null : expiresAt;
 
-    db.run(
+    await db.run(
       `INSERT INTO trainer_cards (trainer_id, name, fans, rank, white_skills, skills_json, stored_at, expires_at, kept)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT (trainer_id) DO UPDATE SET
@@ -101,9 +99,9 @@ export async function upsertCard(card) {
  */
 export async function getCard(trainerId) {
   await init();
-  return withRead(dbPath, (db) => {
+  return withRead(dbPath, async (db) => {
     const now = new Date().toISOString();
-    const row = queryOne(
+    const row = await queryOne(
       db,
       `SELECT * FROM trainer_cards
        WHERE trainer_id = ?
@@ -120,10 +118,10 @@ export async function getCard(trainerId) {
  */
 export async function markKept(trainerId) {
   await init();
-  return withWrite(dbPath, (db) => {
-    const existing = queryOne(db, `SELECT name FROM trainer_cards WHERE trainer_id = ?`, [trainerId]);
+  return withWrite(dbPath, async (db) => {
+    const existing = await queryOne(db, `SELECT name FROM trainer_cards WHERE trainer_id = ?`, [trainerId]);
     if (!existing) return { success: false, error: 'NOT_FOUND' };
-    db.run(
+    await db.run(
       `UPDATE trainer_cards SET kept = 1, expires_at = NULL WHERE trainer_id = ?`,
       [trainerId],
     );
@@ -133,13 +131,10 @@ export async function markKept(trainerId) {
 
 /**
  * Search trainer cards by optional name fragment, rank, or white skill count.
- *
- * @param {{ name?, rank?, whiteSkills?, limit? }} filters
- * @returns {{ results: Card[] }}
  */
 export async function searchCards({ name, rank, whiteSkills, limit = 20 } = {}) {
   await init();
-  return withRead(dbPath, (db) => {
+  return withRead(dbPath, async (db) => {
     const now    = new Date().toISOString();
     const where  = [`(kept = 1 OR expires_at IS NULL OR expires_at > ?)`];
     const params = [now];
@@ -157,7 +152,7 @@ export async function searchCards({ name, rank, whiteSkills, limit = 20 } = {}) 
       params.push(whiteSkills);
     }
 
-    const rows = queryAll(
+    const rows = await queryAll(
       db,
       `SELECT * FROM trainer_cards
        WHERE ${where.join(' AND ')}
@@ -174,9 +169,12 @@ export async function searchCards({ name, rank, whiteSkills, limit = 20 } = {}) 
  */
 export async function purgeExpired() {
   await init();
-  return withWrite(dbPath, (db) => {
+  return withWrite(dbPath, async (db) => {
     const now = new Date().toISOString();
-    db.run(`DELETE FROM trainer_cards WHERE kept = 0 AND expires_at IS NOT NULL AND expires_at <= ?`, [now]);
+    await db.run(
+      `DELETE FROM trainer_cards WHERE kept = 0 AND expires_at IS NOT NULL AND expires_at <= ?`,
+      [now],
+    );
     return { success: true, deleted: db.getRowsModified() };
   });
 }

@@ -7,7 +7,7 @@ let _initPromise = null;
 async function init() {
   if (_initPromise) return _initPromise;
   _initPromise = withWrite(dbPath, async (db) => {
-    db.run(`
+    await db.run(`
       CREATE TABLE IF NOT EXISTS terminal_records (
         terminal_id TEXT PRIMARY KEY,
         blueprint_key TEXT NOT NULL,
@@ -21,9 +21,11 @@ async function init() {
         received_at TEXT NOT NULL,
         state TEXT NOT NULL,
         claimed_at TEXT
-      );
+      )
+    `);
+    await db.run(`
       CREATE INDEX IF NOT EXISTS idx_terminal_state_received_at
-        ON terminal_records (state, received_at DESC);
+        ON terminal_records (state, received_at DESC)
     `);
     return { success: true };
   });
@@ -52,7 +54,7 @@ export async function put(record) {
   await init();
   try {
     return withWrite(dbPath, async (db) => {
-      db.run(
+      await db.run(
         `INSERT OR REPLACE INTO terminal_records (
           terminal_id, blueprint_key, blueprint_name, trigger_json, type,
           png_base64, meta_json, validated_at, fabricator_version,
@@ -84,7 +86,7 @@ export async function get(terminalId) {
   await init();
   try {
     return withRead(dbPath, async (db) => {
-      const row = queryOne(
+      const row = await queryOne(
         db,
         `SELECT * FROM terminal_records WHERE terminal_id = ?`,
         [terminalId],
@@ -115,7 +117,7 @@ export async function list(filter = {}) {
         params.push(filter.state);
       }
       const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
-      const rows = queryAll(
+      const rows = await queryAll(
         db,
         `SELECT * FROM terminal_records ${whereSql} ORDER BY received_at DESC`,
         params,
@@ -131,7 +133,7 @@ export async function del(terminalId) {
   await init();
   try {
     return withWrite(dbPath, async (db) => {
-      db.run(`DELETE FROM terminal_records WHERE terminal_id = ?`, [terminalId]);
+      await db.run(`DELETE FROM terminal_records WHERE terminal_id = ?`, [terminalId]);
       return db.getRowsModified() > 0
         ? { success: true }
         : { success: false, error: 'TERMINAL_NOT_FOUND', message: `No record for terminalId=${terminalId}` };

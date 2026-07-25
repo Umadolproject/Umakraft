@@ -28,6 +28,9 @@ Mixing these causes double-prefix URLs like `https://uma.moe/api/api/v4/circles`
 5. `mergeCircleMemberGains` also sets absolute `fans` from `daily_fans[-1]`
 
 ## Railway persistence (links)
-SQLite at `/data/umakraft.sqlite`. Without a Railway Volume at `/data`, data is wiped on redeploy.
-Fix: Railway dashboard → service → Storage → Add Volume → Mount Path `/data`.
-`UMAKRAFT_SQLITE_PATH` env var is now explicitly set in `railway.toml` comments.
+Switched from sql.js (file-on-disk, ephemeral on Railway) to Turso libSQL (hosted cloud SQLite, free).
+- `core/sqlite.js` auto-selects backend: if `TURSO_DATABASE_URL` set → libSQL, else → sql.js (tests/local).
+- `queryAll`/`queryOne` are now async; all 8 adapter files updated to `await` them and `await db.run()`.
+- All tables live in one Turso database; sql.js was per-file, now everything shares one cloud DB.
+- No Railway Volume needed. User just needs TURSO_DATABASE_URL + TURSO_AUTH_TOKEN in Railway Variables.
+- `persistDatabase`/`flushAll` are no-ops in Turso mode.

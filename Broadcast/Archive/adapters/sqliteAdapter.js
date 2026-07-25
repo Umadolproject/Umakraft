@@ -7,7 +7,7 @@ let _initPromise = null;
 async function initSchema() {
   if (_initPromise) return _initPromise;
   _initPromise = withWrite(dbPath, async (db) => {
-    db.run(`
+    await db.run(`
       CREATE TABLE IF NOT EXISTS archive_claims (
         notification_key TEXT PRIMARY KEY,
         type TEXT NOT NULL,
@@ -23,7 +23,9 @@ async function initSchema() {
         dead_letter INTEGER NOT NULL DEFAULT 0,
         dead_letter_reason TEXT,
         dead_lettered_at TEXT
-      );
+      )
+    `);
+    await db.run(`
       CREATE TABLE IF NOT EXISTS archive_history (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         notification_key TEXT NOT NULL,
@@ -32,18 +34,13 @@ async function initSchema() {
         discord_code INTEGER,
         attempted_at TEXT NOT NULL,
         detail TEXT
-      );
-      CREATE INDEX IF NOT EXISTS idx_archive_circle_incomplete
-        ON archive_claims (circle_id, dead_letter, channel_sent, dm_member_sent, dm_leader_sent, claimed_at DESC);
-      CREATE INDEX IF NOT EXISTS idx_archive_dead_letter_time
-        ON archive_claims (dead_letter, dead_lettered_at DESC);
-      CREATE INDEX IF NOT EXISTS idx_archive_type_claimed_at
-        ON archive_claims (type, claimed_at DESC);
-      CREATE INDEX IF NOT EXISTS idx_archive_history_key_time
-        ON archive_history (notification_key, attempted_at DESC);
-      CREATE INDEX IF NOT EXISTS idx_archive_history_outcome_time
-        ON archive_history (outcome, attempted_at DESC);
+      )
     `);
+    await db.run(`CREATE INDEX IF NOT EXISTS idx_archive_circle_incomplete ON archive_claims (circle_id, dead_letter, channel_sent, dm_member_sent, dm_leader_sent, claimed_at DESC)`);
+    await db.run(`CREATE INDEX IF NOT EXISTS idx_archive_dead_letter_time   ON archive_claims (dead_letter, dead_lettered_at DESC)`);
+    await db.run(`CREATE INDEX IF NOT EXISTS idx_archive_type_claimed_at    ON archive_claims (type, claimed_at DESC)`);
+    await db.run(`CREATE INDEX IF NOT EXISTS idx_archive_history_key_time   ON archive_history (notification_key, attempted_at DESC)`);
+    await db.run(`CREATE INDEX IF NOT EXISTS idx_archive_history_outcome_time ON archive_history (outcome, attempted_at DESC)`);
     return { success: true };
   });
   return _initPromise;
@@ -81,7 +78,7 @@ export async function insert(record) {
   try {
     return withWrite(dbPath, async (db) => {
       const payloadJson = JSON.stringify({ recipients: record.recipients, payload: record.payload });
-      db.run(
+      await db.run(
         `INSERT OR IGNORE INTO archive_claims (
           notification_key, type, circle_id, claimed_at, channel_sent,
           dm_member_sent, dm_leader_sent, channel_msg_id, channel_id, guild_id,
@@ -100,7 +97,7 @@ export async function get(notificationKey) {
   await initSchema();
   try {
     return withRead(dbPath, async (db) => {
-      const row = queryOne(db, `SELECT * FROM archive_claims WHERE notification_key = ?`, [notificationKey]);
+      const row = await queryOne(db, `SELECT * FROM archive_claims WHERE notification_key = ?`, [notificationKey]);
       return { record: hydrate(row) };
     });
   } catch (err) {
@@ -113,13 +110,13 @@ export async function getIncomplete(circleId = null) {
   try {
     return withRead(dbPath, async (db) => {
       const rows = circleId == null
-        ? queryAll(
+        ? await queryAll(
             db,
             `SELECT * FROM archive_claims
              WHERE dead_letter = 0 AND (channel_sent = 0 OR dm_member_sent = 0 OR dm_leader_sent = 0)
              ORDER BY claimed_at DESC`,
           )
-        : queryAll(
+        : await queryAll(
             db,
             `SELECT * FROM archive_claims
              WHERE circle_id = ? AND dead_letter = 0 AND (channel_sent = 0 OR dm_member_sent = 0 OR dm_leader_sent = 0)
@@ -137,7 +134,7 @@ async function setFlags(notificationKey, patch = {}) {
   await initSchema();
   try {
     return withWrite(dbPath, async (db) => {
-      const existing = queryOne(db, `SELECT notification_key FROM archive_claims WHERE notification_key = ?`, [notificationKey]);
+      const existing = await queryOne(db, `SELECT notification_key FROM archive_claims WHERE notification_key = ?`, [notificationKey]);
       if (!existing) {
         return { success: false, error: 'ARCHIVE_NOT_FOUND', message: `No record for key=${notificationKey}` };
       }
@@ -148,7 +145,7 @@ async function setFlags(notificationKey, patch = {}) {
         params.push(value);
       }
       params.push(notificationKey);
-      db.run(`UPDATE archive_claims SET ${sets.join(', ')} WHERE notification_key = ?`, params);
+      await db.run(`UPDATE archive_claims SET ${sets.join(', ')} WHERE notification_key = ?`, params);
       return { success: true };
     });
   } catch (err) {
@@ -177,18 +174,18 @@ export async function markDeadLetter(notificationKey, { reason, step, attemptCou
   await initSchema();
   try {
     return withWrite(dbPath, async (db) => {
-      const existing = queryOne(db, `SELECT notification_key FROM archive_claims WHERE notification_key = ?`, [notificationKey]);
+      const existing = await queryOne(db, `SELECT notification_key FROM archive_claims WHERE notification_key = ?`, [notificationKey]);
       if (!existing) {
         return { success: false, error: 'ARCHIVE_NOT_FOUND', message: `No record for key=${notificationKey}` };
       }
       const deadLetteredAt = new Date().toISOString();
-      db.run(
+      await db.run(
         `UPDATE archive_claims
          SET dead_letter = 1, dead_letter_reason = ?, dead_lettered_at = ?
          WHERE notification_key = ?`,
         [reason ?? null, deadLetteredAt, notificationKey],
       );
-      db.run(
+      await db.run(
         `INSERT INTO archive_history (notification_key, step, outcome, discord_code, attempted_at, detail)
          VALUES (?, ?, 'dead_letter', NULL, ?, ?)`,
         [notificationKey, step ?? 'dead_letter', deadLetteredAt, JSON.stringify({ reason, attemptCount })],
@@ -204,18 +201,18 @@ export async function replayDeadLetter(notificationKey) {
   await initSchema();
   try {
     return withWrite(dbPath, async (db) => {
-      const existing = queryOne(db, `SELECT notification_key FROM archive_claims WHERE notification_key = ?`, [notificationKey]);
+      const existing = await queryOne(db, `SELECT notification_key FROM archive_claims WHERE notification_key = ?`, [notificationKey]);
       if (!existing) {
         return { success: false, error: 'ARCHIVE_NOT_FOUND', message: `No record for key=${notificationKey}` };
       }
       const replayedAt = new Date().toISOString();
-      db.run(
+      await db.run(
         `UPDATE archive_claims
          SET dead_letter = 0, dead_letter_reason = NULL, dead_lettered_at = NULL
          WHERE notification_key = ?`,
         [notificationKey],
       );
-      db.run(
+      await db.run(
         `INSERT INTO archive_history (notification_key, step, outcome, discord_code, attempted_at, detail)
          VALUES (?, 'dead_letter_replay', 'success', NULL, ?, 'Replay requested')`,
         [notificationKey, replayedAt],
@@ -232,7 +229,7 @@ export async function listDeadLetters({ circleId = null, limit = 10 } = {}) {
   try {
     return withRead(dbPath, async (db) => {
       const rows = circleId == null
-        ? queryAll(
+        ? await queryAll(
             db,
             `SELECT * FROM archive_claims
              WHERE dead_letter = 1
@@ -240,7 +237,7 @@ export async function listDeadLetters({ circleId = null, limit = 10 } = {}) {
              LIMIT ?`,
             [limit],
           )
-        : queryAll(
+        : await queryAll(
             db,
             `SELECT * FROM archive_claims
              WHERE dead_letter = 1 AND circle_id = ?
@@ -259,7 +256,7 @@ export async function recordHistory(notificationKey, { step, outcome, discordCod
   await initSchema();
   try {
     return withWrite(dbPath, async (db) => {
-      db.run(
+      await db.run(
         `INSERT INTO archive_history (notification_key, step, outcome, discord_code, attempted_at, detail)
          VALUES (?, ?, ?, ?, ?, ?)`,
         [notificationKey, step, outcome, discordCode ?? null, new Date().toISOString(), detail ?? null],
@@ -275,7 +272,7 @@ export async function getHistory(notificationKey) {
   await initSchema();
   try {
     return withRead(dbPath, async (db) => ({
-      history: queryAll(
+      history: await queryAll(
         db,
         `SELECT id, notification_key AS notificationKey, step, outcome, discord_code AS discordCode, attempted_at AS attemptedAt, detail
          FROM archive_history
@@ -300,7 +297,7 @@ export async function getStats() {
   await initSchema();
   try {
     return withRead(dbPath, async (db) => {
-      const counts = queryOne(
+      const counts = await queryOne(
         db,
         `SELECT
            COUNT(*) AS total,
@@ -309,7 +306,7 @@ export async function getStats() {
            SUM(CASE WHEN dead_letter = 1 THEN 1 ELSE 0 END) AS dead_letters
          FROM archive_claims`,
       ) ?? {};
-      const history = queryOne(db, `SELECT COUNT(*) AS history_entries FROM archive_history`) ?? {};
+      const history = await queryOne(db, `SELECT COUNT(*) AS history_entries FROM archive_history`) ?? {};
       return {
         success: true,
         total: Number(counts.total ?? 0),
@@ -329,7 +326,7 @@ export async function prune({ olderThanDays } = {}) {
   try {
     return withWrite(dbPath, async (db) => {
       const cutoff = new Date(Date.now() - olderThanDays * 86_400_000).toISOString();
-      db.run(
+      await db.run(
         `DELETE FROM archive_claims
          WHERE claimed_at < ?
            AND ((channel_sent = 1 AND dm_member_sent = 1 AND dm_leader_sent = 1) OR dead_letter = 1)`,

@@ -7,7 +7,7 @@ let _initPromise = null;
 async function init() {
   if (_initPromise) return _initPromise;
   _initPromise = withWrite(dbPath, async (db) => {
-    db.run(`
+    await db.run(`
       CREATE TABLE IF NOT EXISTS depot_products (
         id TEXT NOT NULL,
         version TEXT NOT NULL,
@@ -15,9 +15,9 @@ async function init() {
         provenance_json TEXT NOT NULL,
         stored_at TEXT NOT NULL,
         PRIMARY KEY (id, version)
-      );
-      CREATE INDEX IF NOT EXISTS idx_depot_id_version ON depot_products (id, version DESC);
+      )
     `);
+    await db.run(`CREATE INDEX IF NOT EXISTS idx_depot_id_version ON depot_products (id, version DESC)`);
     return { success: true };
   });
   return _initPromise;
@@ -39,7 +39,7 @@ export async function put(product) {
   try {
     const storedAt = new Date().toISOString();
     return withWrite(dbPath, async (db) => {
-      db.run(
+      await db.run(
         `INSERT OR REPLACE INTO depot_products (id, version, compiled_product_json, provenance_json, stored_at)
          VALUES (?, ?, ?, ?, ?)`,
         [
@@ -62,14 +62,14 @@ export async function get(id, options = {}) {
   try {
     return withRead(dbPath, async (db) => {
       const row = options.version
-        ? queryOne(
+        ? await queryOne(
             db,
             `SELECT id, version, compiled_product_json, provenance_json, stored_at
              FROM depot_products
              WHERE id = ? AND version = ?`,
             [id, options.version],
           )
-        : queryOne(
+        : await queryOne(
             db,
             `SELECT id, version, compiled_product_json, provenance_json, stored_at
              FROM depot_products
@@ -90,12 +90,12 @@ export async function del(id, options = {}) {
   try {
     return withWrite(dbPath, async (db) => {
       if (options.version) {
-        const row = queryOne(db, `SELECT id FROM depot_products WHERE id = ? AND version = ?`, [id, options.version]);
+        const row = await queryOne(db, `SELECT id FROM depot_products WHERE id = ? AND version = ?`, [id, options.version]);
         if (!row) return { success: false, error: 'DEPOT_NOT_FOUND' };
-        db.run(`DELETE FROM depot_products WHERE id = ? AND version = ?`, [id, options.version]);
+        await db.run(`DELETE FROM depot_products WHERE id = ? AND version = ?`, [id, options.version]);
         return { success: true };
       }
-      db.run(`DELETE FROM depot_products WHERE id = ?`, [id]);
+      await db.run(`DELETE FROM depot_products WHERE id = ?`, [id]);
       return { success: db.getRowsModified() > 0, deleted: db.getRowsModified() };
     });
   } catch (err) {
@@ -120,7 +120,7 @@ export async function query(filter = {}, options = {}) {
 
       const limit = options.limit ?? 50;
       const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
-      const rows = queryAll(
+      const rows = await queryAll(
         db,
         `SELECT id, version, compiled_product_json, provenance_json, stored_at
          FROM depot_products

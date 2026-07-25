@@ -14,15 +14,15 @@ let _initPromise = null;
 
 async function init() {
   if (_initPromise) return _initPromise;
-  _initPromise = withWrite(dbPath, (db) => {
-    db.run(`
+  _initPromise = withWrite(dbPath, async (db) => {
+    await db.run(`
       CREATE TABLE IF NOT EXISTS user_preferences (
         discord_id TEXT NOT NULL,
         guild_id   TEXT NOT NULL,
         timezone   TEXT,
         updated_at TEXT NOT NULL,
         PRIMARY KEY (discord_id, guild_id)
-      );
+      )
     `);
     return { success: true };
   });
@@ -35,8 +35,8 @@ async function init() {
 export async function setTimezone(discordId, guildId, timezone) {
   await init();
   const updatedAt = new Date().toISOString();
-  return withWrite(dbPath, (db) => {
-    db.run(
+  return withWrite(dbPath, async (db) => {
+    await db.run(
       `INSERT INTO user_preferences (discord_id, guild_id, timezone, updated_at)
        VALUES (?, ?, ?, ?)
        ON CONFLICT (discord_id, guild_id) DO UPDATE SET
@@ -53,8 +53,8 @@ export async function setTimezone(discordId, guildId, timezone) {
  */
 export async function getTimezone(discordId, guildId) {
   await init();
-  return withRead(dbPath, (db) => {
-    const row = queryOne(
+  return withRead(dbPath, async (db) => {
+    const row = await queryOne(
       db,
       `SELECT timezone FROM user_preferences WHERE discord_id = ? AND guild_id = ?`,
       [discordId, guildId],
