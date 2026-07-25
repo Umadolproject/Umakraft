@@ -8,23 +8,27 @@ let _initPromise = null;
 async function init() {
   if (_initPromise) return _initPromise;
   _initPromise = withWrite(dbPath, async (db) => {
-    db.run(`
+    await db.run(`
       CREATE TABLE IF NOT EXISTS vault_records (
         id TEXT PRIMARY KEY,
         data_json TEXT NOT NULL,
         metadata_json TEXT NOT NULL,
         stored_at TEXT NOT NULL,
         updated_at TEXT
-      );
+      )
+    `);
+    await db.run(`
       CREATE TABLE IF NOT EXISTS vault_snapshots (
         snapshot_id INTEGER PRIMARY KEY AUTOINCREMENT,
         id TEXT NOT NULL,
         data_json TEXT NOT NULL,
         metadata_json TEXT NOT NULL,
         stored_at TEXT NOT NULL
-      );
+      )
+    `);
+    await db.run(`
       CREATE INDEX IF NOT EXISTS idx_vault_snapshots_id_stored_at
-        ON vault_snapshots (id, stored_at DESC);
+        ON vault_snapshots (id, stored_at DESC)
     `);
     return { success: true };
   });
@@ -45,20 +49,17 @@ function hydrateRecord(row) {
   };
 }
 
-// ─── Snapshot pruning (Phase 4) ───────────────────────────────────────────────
+// ─── Snapshot pruning ─────────────────────────────────────────────────────────
 
 /**
  * Delete snapshots for `id` beyond the configured retain count.
- * Runs inside the same write transaction as the store/update that triggered it.
- *
- * @param {object} db   — sql.js Database (already open inside withWrite)
- * @param {string} id   — trainer ID
+ * Must be called with `await` inside a withWrite callback.
  */
-function _pruneSnapshots(db, id) {
+async function _pruneSnapshots(db, id) {
   const retain = pipelineRuntime.vaultSnapshotRetainCount;
   if (retain <= 0) return; // 0 = unlimited
 
-  db.run(
+  await db.run(
     `DELETE FROM vault_snapshots
      WHERE id = ?
        AND snapshot_id NOT IN (
@@ -87,7 +88,7 @@ export async function storeData(trustedEnvelope) {
     const metadataJson = JSON.stringify(trustedEnvelope.metadata ?? {});
 
     return withWrite(dbPath, async (db) => {
-      db.run(
+      await db.run(
         `INSERT INTO vault_records (id, data_json, metadata_json, stored_at, updated_at)
          VALUES (?, ?, ?, ?, NULL)
          ON CONFLICT(id) DO UPDATE SET
@@ -98,14 +99,13 @@ export async function storeData(trustedEnvelope) {
         [id, dataJson, metadataJson, storedAt],
       );
 
-      db.run(
+      await db.run(
         `INSERT INTO vault_snapshots (id, data_json, metadata_json, stored_at)
          VALUES (?, ?, ?, ?)`,
         [id, dataJson, metadataJson, storedAt],
       );
 
-      // Phase 4: prune old snapshots beyond the retention limit
-      _pruneSnapshots(db, id);
+      await _pruneSnapshots(db, id);
 
       return { success: true, id, storedAt };
     });
@@ -120,7 +120,7 @@ export async function retrieveData(query = {}) {
     return withRead(dbPath, async (db) => {
       if (query?.id) {
         const row = query.version === 'previous'
-          ? queryOne(
+          ? await queryOne(
               db,
               `SELECT data_json, metadata_json, stored_at, NULL AS updated_at
                FROM vault_snapshots
@@ -129,7 +129,7 @@ export async function retrieveData(query = {}) {
                LIMIT 1 OFFSET 1`,
               [query.id],
             )
-          : queryOne(
+          : await queryOne(
               db,
               `SELECT data_json, metadata_json, stored_at, updated_at
                FROM vault_records
@@ -143,7 +143,7 @@ export async function retrieveData(query = {}) {
         return { success: true, data: hydrateRecord(row) };
       }
 
-      const rows = queryAll(
+      const rows = await queryAll(
         db,
         `SELECT data_json, metadata_json, stored_at, updated_at
          FROM vault_records
@@ -160,7 +160,7 @@ export async function updateData(id, patch) {
   await init();
   try {
     return withWrite(dbPath, async (db) => {
-      const existing = queryOne(
+      const existing = await queryOne(
         db,
         `SELECT data_json, metadata_json, stored_at, updated_at FROM vault_records WHERE id = ?`,
         [id],
@@ -171,18 +171,17 @@ export async function updateData(id, patch) {
 
       const data      = { ...JSON.parse(existing.data_json), ...patch };
       const updatedAt = new Date().toISOString();
-      db.run(
+      await db.run(
         `UPDATE vault_records SET data_json = ?, updated_at = ? WHERE id = ?`,
         [JSON.stringify(data), updatedAt, id],
       );
-      db.run(
+      await db.run(
         `INSERT INTO vault_snapshots (id, data_json, metadata_json, stored_at)
          VALUES (?, ?, ?, ?)`,
         [id, JSON.stringify(data), existing.metadata_json, updatedAt],
       );
 
-      // Phase 4: prune after update as well
-      _pruneSnapshots(db, id);
+      await _pruneSnapshots(db, id);
 
       return { success: true, id, updatedAt };
     });
@@ -195,12 +194,12 @@ export async function deleteData(id) {
   await init();
   try {
     return withWrite(dbPath, async (db) => {
-      const existing = queryOne(db, `SELECT id FROM vault_records WHERE id = ?`, [id]);
+      const existing = await queryOne(db, `SELECT id FROM vault_records WHERE id = ?`, [id]);
       if (!existing) {
         return { success: false, error: 'VAULT_NOT_FOUND', message: `No record found for id=${id}` };
       }
-      db.run(`DELETE FROM vault_records  WHERE id = ?`, [id]);
-      db.run(`DELETE FROM vault_snapshots WHERE id = ?`, [id]);
+      await db.run(`DELETE FROM vault_records  WHERE id = ?`, [id]);
+      await db.run(`DELETE FROM vault_snapshots WHERE id = ?`, [id]);
       return { success: true, id };
     });
   } catch (err) {
