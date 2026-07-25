@@ -53,7 +53,11 @@ export const ENDPOINTS = {
   trainerVeteran: '/v4/user/profile/veterans/{id}',
 
   // ── Rankings ───────────────────────────────────────────────────────────────
-  rankings:        '/rankings',
+  // /rankings → 404 (does not exist on uma.moe)
+  // /v4/rankings → 404 (does not exist)
+  // /v4/rankings/gains → 200 ✓ — returns { rankings: [...], total, page, limit, sort_by }
+  // Use sort_by=gain_3d|gain_7d|gain_30d to control daily/weekly/monthly ordering.
+  rankings:        '/v4/rankings/gains',
   rankingsMonthly: '/v4/rankings/monthly',
   rankingsAllTime: '/v4/rankings/alltime',
   rankingsGains:   '/v4/rankings/gains',

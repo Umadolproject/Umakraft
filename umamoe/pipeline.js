@@ -510,14 +510,20 @@ export async function processRankings(params = {}) {
   // for fan-gain enrichment even when no explicit circle was requested.
   const circleId = params.circleId ?? params.circle ?? CONFIGURED_CIRCLES[0] ?? null;
 
-  // Only pass params that the /rankings API endpoint actually accepts.
-  // Internal pipeline params (circle, scope, top) must NOT be forwarded because
-  // they have no meaning to the rankings endpoint and `date: null` serialises
-  // to the string "null" which causes API errors.
-  const rankingsFetchParams = {};
+  // Only pass params the /v4/rankings/gains endpoint actually accepts.
+  // Internal pipeline params (circle, scope) must NOT be forwarded.
+  // `date: null` must be excluded — url.searchParams.set serialises null as "null".
+  //
+  // sort_by controls which gain period the API sorts by:
+  //   gain_3d  → daily ranking
+  //   gain_7d  → weekly ranking
+  //   gain_30d → monthly ranking
+  const scopeSortBy = params.scope === 'monthly' ? 'gain_30d'
+                    : params.scope === 'weekly'  ? 'gain_7d'
+                    :                              'gain_3d';
+  const rankingsFetchParams = { sort_by: scopeSortBy };
   if (params.top   != null) rankingsFetchParams.limit = params.top;
   if (params.limit != null) rankingsFetchParams.limit = params.limit;
-  if (params.date  != null) rankingsFetchParams.date  = params.date;
 
   const [minerResult, circleResult] = await Promise.all([
     runStage('Miner', Miner.fetchRankings, rankingsFetchParams),
@@ -538,10 +544,16 @@ export async function processRankings(params = {}) {
     });
   }
 
-  // Normalise each trainer item from the rankings response to a flat object
-  // that carries an `id` field (required by the Inspector). The /rankings
-  // endpoint returns raw objects whose primary key may be `account_id` or
-  // `viewer_id` rather than `id`, so we normalise here before inspection.
+  // Normalise each item from /v4/rankings/gains to the flat shape the
+  // Inspector and Refiner expect.
+  //
+  // API response shape (verified 2026-07-25):
+  //   { viewer_id, trainer_name, gain_3d, gain_7d, gain_30d,
+  //     rank_3d, rank_7d, rank_30d, circle_id, circle_name, shame_score }
+  //
+  // Inspector requires: id (string), name (string), fans (number ≥ 0), rank (number ≥ 1).
+  // fans is not in the rankings response — default to 0; circle enrichment
+  // (mergeCircleMemberGains) will override with the real value when available.
   function normalizeRankingItem(raw) {
     if (!raw || typeof raw !== 'object') return raw;
     // Already normalised (unit-test mocks or previous callers)
@@ -549,23 +561,34 @@ export async function processRankings(params = {}) {
     const id = String(
       raw.account_id ?? raw.viewer_id ?? raw.trainer_id ?? raw.id ?? '',
     );
+    // Map the API's period-gain fields to the canonical names used throughout
+    // the pipeline (Refiner, Compiler, Workshop sort/display).
+    const dailyFanGain   = raw.dailyFanGain   ?? raw.gain_3d  ?? raw.daily_gain   ?? null;
+    const weeklyFanGain  = raw.weeklyFanGain  ?? raw.gain_7d  ?? raw.weekly_gain  ?? null;
+    const monthlyFanGain = raw.monthlyFanGain ?? raw.gain_30d ?? raw.monthly_gain ?? null;
+    // Use the sort-period rank as the primary rank signal.
+    const rank = raw.rank
+      ?? (scopeSortBy === 'gain_30d' ? raw.rank_30d : scopeSortBy === 'gain_7d' ? raw.rank_7d : raw.rank_3d)
+      ?? raw.ranking ?? raw.team_class ?? raw.placement ?? 1;
     return {
+      // Preserve all raw fields first so nothing is lost for enrichment
+      ...raw,
+      // Override / add canonical fields the Inspector and downstream require
       id,
       name:  String(raw.name ?? raw.trainer_name ?? ''),
       fans:  typeof raw.fans === 'number' ? raw.fans : 0,
-      rank:  raw.rank ?? raw.ranking ?? raw.team_class ?? raw.placement ?? 1,
-      // Preserve all original fields for circle enrichment and downstream use
-      ...raw,
-      // Override with the canonical id so downstream code always gets it
-      id,
+      rank,
+      dailyFanGain,
+      weeklyFanGain,
+      monthlyFanGain,
     };
   }
 
   const rawTrainers = Array.isArray(minerResult.data)
     ? minerResult.data
-    : minerResult.data?.trainers
+    : minerResult.data?.rankings   // /v4/rankings/gains → { rankings: [...] }
+      ?? minerResult.data?.trainers
       ?? minerResult.data?.data
-      ?? minerResult.data?.rankings
       ?? [];
 
   const trainers = rawTrainers.map(normalizeRankingItem).filter(t => t?.id);

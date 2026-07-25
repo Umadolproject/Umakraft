@@ -68,7 +68,9 @@ async function fetchWithTimeout(url, options = {}) {
 
   const headers = { ...(options.headers ?? {}) };
   if (API_CONFIG.apiKey) {
-    headers['X-API-Key'] = API_CONFIG.apiKey;
+    // uma.moe is case-sensitive: the server rejects 'X-API-Key' with 403.
+    // Must be lowercase 'x-api-key'.
+    headers['x-api-key'] = API_CONFIG.apiKey;
   } else {
     log('warn', 'UMA_MOE_API_KEY is not set — requests will be unauthenticated', { url });
   }
