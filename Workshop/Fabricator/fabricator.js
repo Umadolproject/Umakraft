@@ -639,6 +639,85 @@ function tmplJoinDate(p, avatarDataUri, w) {
   `);
 }
 
+// ─── Leaderboard template ─────────────────────────────────────────────────────
+
+function tmplLeaderboard(p, w) {
+  const scope      = p.meta?.scope ?? p.presentationHints?.scope ?? 'daily';
+  const gainField  = p.presentationHints?.gainField
+                   ?? (scope === 'monthly' ? 'monthlyFanGain' : scope === 'weekly' ? 'weeklyFanGain' : 'dailyFanGain');
+  const scopeLabel = { daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly' }[scope] ?? scope;
+  const entries    = Array.isArray(p.entries) ? p.entries : [];
+  const total      = p.presentationHints?.total ?? entries.length;
+
+  const medal = ['🥇', '🥈', '🥉'];
+
+  const rows = entries.map((e, i) => {
+    const pos      = i + 1;
+    const posLabel = medal[i] ?? `#${pos}`;
+    const gain     = e[gainField];
+    const gainStr  = gain == null ? '—' : (gain >= 0 ? '+' : '−') + Math.abs(gain).toLocaleString('en-US');
+    const gainColor = gain > 0 ? '#55C271' : gain < 0 ? '#FF5AA5' : '#9E9E9E';
+    const isTop    = pos <= 3;
+
+    return `
+      <div style="
+        display:flex;
+        align-items:center;
+        padding:12px 16px;
+        border-radius:12px;
+        background:${isTop ? '#FFF8FB' : '#FFFFFF'};
+        border:1px solid ${isTop ? '#E7D8F5' : '#F0EAF8'};
+        margin-bottom:8px;
+        gap:16px;
+      ">
+        <div style="font-size:${pos <= 3 ? '24px' : '16px'};font-weight:700;color:#3A3552;min-width:40px;text-align:center;flex-shrink:0">${posLabel}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:16px;font-weight:700;color:#3A3552;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${e.name ?? e.id ?? '—'}</div>
+          <div style="font-size:12px;color:#9E9E9E;margin-top:2px">${e.fans != null ? fmt(e.fans) + ' fans total' : ''}</div>
+        </div>
+        <div style="text-align:right;flex-shrink:0">
+          <div style="font-size:20px;font-weight:700;color:${gainColor}">${gainStr}</div>
+          <div style="font-size:11px;color:#9E9E9E;text-transform:uppercase;letter-spacing:0.5px">${scopeLabel} gain</div>
+        </div>
+      </div>`;
+  }).join('');
+
+  const emptyRow = entries.length === 0
+    ? `<div style="text-align:center;padding:32px;color:#9E9E9E;font-size:15px">No data available for this period.</div>`
+    : '';
+
+  const circleLine = p.meta?.circle ? `Circle ${p.meta.circle}` : 'All Circles';
+  const dateLine   = p.meta?.date   ? ` · ${p.meta.date}` : '';
+
+  return wrapHtml(w, `
+    <div class="s-header" style="justify-content:space-between">
+      <div>
+        <div class="title">🏆 Fan Gain Leaderboard</div>
+        <div style="font-size:13px;opacity:0.88;margin-top:4px">${circleLine}${dateLine}</div>
+      </div>
+      <div style="text-align:right">
+        <div style="
+          background:rgba(255,255,255,0.2);
+          border-radius:8px;
+          padding:4px 12px;
+          font-size:13px;
+          font-weight:700;
+          letter-spacing:1px;
+          text-transform:uppercase
+        ">${scopeLabel}</div>
+        <div class="ts" style="margin-top:6px">${fmtTs(p.meta?.generatedAt)}</div>
+      </div>
+    </div>
+    <div class="s-body">
+      ${rows}${emptyRow}
+    </div>
+    <div class="s-footer" style="display:flex;justify-content:space-between;align-items:center">
+      <span class="footer-text">Top ${entries.length} of ${total} trainers</span>
+      <span class="attr">UmaKraft</span>
+    </div>
+  `);
+}
+
 // ─── Generic fallback template ────────────────────────────────────────────────
 // Used for any blueprint that does not yet have a dedicated template.
 // Renders the blueprint name, trigger, and all top-level product fields.
@@ -697,8 +776,9 @@ function buildHtml(blueprintKey, descriptor, product, avatarDataUri, canvasWidth
     case 'setFans':   return tmplSetFans(product, canvasWidth);
     case 'greeting':  return tmplGreeting(product, avatarDataUri, canvasWidth);
     case 'milestone': return tmplMilestone(product, avatarDataUri, canvasWidth);
-    case 'joinDate':  return tmplJoinDate(product, avatarDataUri, canvasWidth);
-    default:          return tmplGeneric(descriptor, product, canvasWidth);
+    case 'joinDate':     return tmplJoinDate(product, avatarDataUri, canvasWidth);
+    case 'leaderboard':  return tmplLeaderboard(product, canvasWidth);
+    default:             return tmplGeneric(descriptor, product, canvasWidth);
   }
 }
 
