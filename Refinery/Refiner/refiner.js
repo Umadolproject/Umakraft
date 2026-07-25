@@ -10,7 +10,7 @@
  * Never fetches external data, validates, stores, or presents.
  */
 
-const REFINER_VERSION = 'v1.0';
+const REFINER_VERSION = 'v1.1';
 
 // ─── Logging ─────────────────────────────────────────────────────────────────
 
@@ -61,8 +61,6 @@ function isTrustedRecord(record) {
 
 /**
  * Derive a simple trend from rank and fan count.
- * In production this would compare against prior Vault snapshots.
- * For now: deterministic derivation from available data.
  */
 function deriveTrend(fans, rank) {
   if (rank <= 10)  return 'elite';
@@ -73,13 +71,9 @@ function deriveTrend(fans, rank) {
 
 /**
  * Estimate daily / weekly / monthly fan gains.
- * Without historical snapshots the Refiner produces projections
- * from rank position. When historical data is available (via
- * a second Vault record), this is replaced by delta calculation.
+ * Used only when no cumulative or historical data is available.
  */
 function estimateGains(fans, rank) {
-  // Rank-weighted projection — will be replaced with real deltas
-  // once snapshot comparison is wired in.
   const dailyRate = Math.max(1000, Math.floor(fans * 0.0015 / Math.sqrt(rank)));
   return {
     dailyFanGain:   dailyRate,
@@ -89,14 +83,14 @@ function estimateGains(fans, rank) {
 }
 
 /**
- * Read fan gains that were supplied by an upstream API response.
+ * Read raw cumulative gain values that were supplied by the upstream API.
  *
- * The Miner/pipeline wire normalises circle-member responses to `apiGains`,
- * while this helper also accepts the common direct/nested API spellings so
- * Refiner remains compatible with already-trusted records.
+ * These are the CUMULATIVE values stored by UmaMoe (e.g. total fans gained
+ * this month). They are NOT used as display values — computeCumulativeGains()
+ * derives actual gains by delta comparison against the previous snapshot.
  *
  * @param {object} data — trusted trainer data
- * @returns {{dailyFanGain?: number, weeklyFanGain?: number, monthlyFanGain?: number}|null}
+ * @returns {{monthlyFanGain?: number, weeklyFanGain?: number, dailyFanGain?: number}|null}
  */
 export function extractApiGains(data = {}) {
   const sources = [
@@ -130,8 +124,108 @@ export function extractApiGains(data = {}) {
 }
 
 /**
- * Compute delta gains between two fan snapshots (current vs previous).
- * Returns null if previous is not provided.
+ * Compute accurate fan gain figures by treating UmaMoe's gain fields as
+ * cumulative counters and deriving actual gains from deltas.
+ *
+ * UmaMoe accumulates fan gains within each calendar period:
+ *   - fanGainMonthly: total fans gained since the 1st of the current month
+ *   - fanGainWeekly:  total fans gained since the start of the current week
+ *   - fanGainDaily:   total fans gained today
+ *
+ * All three reset at their respective period boundaries. This function detects
+ * resets (delta < 0 or month/week change) and handles them gracefully.
+ *
+ * Rule: on first detection of a member, all gains are set to 0 to avoid
+ * showing accumulated history as a single "daily gain" spike.
+ *
+ * @param {object} data         — current vault record data
+ * @param {object} previousData — previous snapshot's data (or null if first seen)
+ * @param {string} previousStoredAt — ISO timestamp of the previous snapshot
+ * @returns {{ dailyFanGain, weeklyFanGain, monthlyFanGain, gainsSource }|null}
+ *          null when no cumulative gain data is present in the current record.
+ */
+function computeCumulativeGains(data, previousData, previousStoredAt) {
+  const currentMonthly = data.monthlyFanGain ?? data.apiGains?.monthlyFanGain;
+  if (typeof currentMonthly !== 'number' || !Number.isFinite(currentMonthly)) {
+    return null; // No cumulative data — fall through to other strategies
+  }
+
+  const now = new Date();
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+  // ── First time this member has been seen ──────────────────────────────────
+  if (!previousData) {
+    log('info', 'cumulative-gains: first-seen, initialising to 0');
+    return {
+      dailyFanGain:   0,
+      weeklyFanGain:  0,
+      monthlyFanGain: currentMonthly,
+      gainsSource:    'first-seen',
+    };
+  }
+
+  const prevMonthly = previousData.monthlyFanGain ?? previousData.apiGains?.monthlyFanGain;
+  if (typeof prevMonthly !== 'number' || !Number.isFinite(prevMonthly)) {
+    // Previous snapshot predates cumulative tracking — treat as first seen
+    log('info', 'cumulative-gains: no previous cumulative, initialising to 0');
+    return {
+      dailyFanGain:   0,
+      weeklyFanGain:  0,
+      monthlyFanGain: currentMonthly,
+      gainsSource:    'first-seen',
+    };
+  }
+
+  // ── Determine the calendar month the previous snapshot was recorded in ────
+  const prevMonth = previousStoredAt
+    ? new Date(previousStoredAt).toISOString().slice(0, 7) // "YYYY-MM"
+    : null;
+
+  const monthlyDelta = currentMonthly - prevMonthly;
+
+  // ── Monthly reset detection ───────────────────────────────────────────────
+  // Reset occurs when the current month differs from the stored month,
+  // or when the counter has gone backwards (safety net for timezone edge-cases).
+  const monthReset = prevMonth !== null && prevMonth !== currentMonth;
+  const dailyFanGain = (monthReset || monthlyDelta < 0)
+    ? Math.max(currentMonthly, 0)   // Counter just reset; current value IS the gain
+    : Math.max(monthlyDelta, 0);    // Normal case: take the positive delta
+
+  // ── Weekly gain ───────────────────────────────────────────────────────────
+  // Apply same delta strategy to weeklyFanGain when available; otherwise
+  // approximate from the daily figure (7× daily is a reasonable upper bound).
+  const currentWeekly = data.weeklyFanGain ?? data.apiGains?.weeklyFanGain;
+  const prevWeekly    = previousData.weeklyFanGain ?? previousData.apiGains?.weeklyFanGain;
+
+  let weeklyFanGain;
+  if (typeof currentWeekly === 'number' && Number.isFinite(currentWeekly)) {
+    if (typeof prevWeekly === 'number' && Number.isFinite(prevWeekly)) {
+      const weeklyDelta = currentWeekly - prevWeekly;
+      // Negative delta signals a weekly reset
+      weeklyFanGain = weeklyDelta >= 0 ? weeklyDelta : currentWeekly;
+    } else {
+      // First time we have a weekly value — treat as first seen (use current;
+      // it's the fans gained so far this week, which is still meaningful)
+      weeklyFanGain = currentWeekly;
+    }
+  } else {
+    // No weekly API data — scale daily figure by 7
+    weeklyFanGain = dailyFanGain * 7;
+  }
+
+  log('info', `cumulative-gains: delta=${monthlyDelta} monthly=${currentMonthly} daily=${dailyFanGain} weekly=${weeklyFanGain}`, { monthReset });
+
+  return {
+    dailyFanGain,
+    weeklyFanGain,
+    monthlyFanGain: currentMonthly,   // Display the running month total as-is
+    gainsSource:    'cumulative-delta',
+  };
+}
+
+/**
+ * Compute delta gains between two fan snapshots (absolute fan counts).
+ * Used as a fallback when cumulative API counters are not available.
  */
 function computeDeltaGains(currentFans, previousFans, previousAt) {
   if (previousFans === undefined || previousFans === null) return null;
@@ -154,6 +248,14 @@ function computeDeltaGains(currentFans, previousFans, previousAt) {
 /**
  * Refine a trusted Vault record.
  *
+ * Gain computation priority:
+ *   1. Cumulative-delta  — UmaMoe stores running monthly/weekly/daily totals;
+ *                          the actual gain is the delta vs the previous snapshot.
+ *                          Handles first-seen (→ 0) and period resets cleanly.
+ *   2. Historical delta  — fan-count difference between two vault snapshots,
+ *                          when no cumulative API counter is present.
+ *   3. Projected         — rank-weighted estimate when no history exists.
+ *
  * @param {object} vaultRecord   — { data, metadata } from Vault.retrieve()
  * @param {object} [options]
  * @param {object} [options.previousRecord] — prior Vault snapshot for delta gains
@@ -175,37 +277,49 @@ export function refine(vaultRecord, options = {}) {
   log('info', `refining trainer id=${data.id}`);
 
   try {
-    // API gains are authoritative. Historical deltas are the next-best
-    // source, and rank-based projections are only used when neither exists.
-    const previousData = previousRecord?.data;
-    const deltas = computeDeltaGains(
-      data.fans,
-      previousData?.fans,
-      previousRecord?.metadata?.storedAt ?? previousRecord?.metadata?.inspectedAt
-    );
+    const previousData     = previousRecord?.data ?? null;
+    const previousStoredAt = previousRecord?.storedAt
+      ?? previousRecord?.metadata?.storedAt
+      ?? previousRecord?.metadata?.inspectedAt
+      ?? null;
 
-    const apiGains = extractApiGains(data);
+    // ── Strategy 1: Cumulative-delta (preferred) ──────────────────────────
+    // UmaMoe reports running totals per period. We derive the actual gain
+    // from the delta between the current and previous snapshot's cumulative.
+    const cumulativeGains = computeCumulativeGains(data, previousData, previousStoredAt);
+
+    // ── Strategy 2: Historical fan-count delta (fallback) ─────────────────
+    // Used when no cumulative API counter exists (e.g. legacy records, or
+    // a trainer whose circle data had no gain fields at all).
+    const deltas = !cumulativeGains
+      ? computeDeltaGains(
+          data.fans,
+          previousData?.fans,
+          previousStoredAt,
+        )
+      : null;
+
+    // ── Strategy 3: Projection ────────────────────────────────────────────
     const estimated = estimateGains(data.fans, data.rank);
+
+    // ── Merge gains in priority order ─────────────────────────────────────
     const gains = {
-      dailyFanGain:   apiGains?.dailyFanGain   ?? deltas?.dailyFanGain   ?? estimated.dailyFanGain,
-      weeklyFanGain:  apiGains?.weeklyFanGain  ?? deltas?.weeklyFanGain  ?? estimated.weeklyFanGain,
-      monthlyFanGain: apiGains?.monthlyFanGain ?? deltas?.monthlyFanGain ?? estimated.monthlyFanGain,
-      ...(deltas && apiGains?.dailyFanGain === undefined ? { fanDelta: deltas.fanDelta } : {}),
+      dailyFanGain: cumulativeGains?.dailyFanGain
+        ?? deltas?.dailyFanGain
+        ?? estimated.dailyFanGain,
+      weeklyFanGain: cumulativeGains?.weeklyFanGain
+        ?? deltas?.weeklyFanGain
+        ?? estimated.weeklyFanGain,
+      monthlyFanGain: cumulativeGains?.monthlyFanGain
+        ?? deltas?.monthlyFanGain
+        ?? estimated.monthlyFanGain,
+      // fanDelta from historical strategy only (useful for debug)
+      ...(deltas?.fanDelta !== undefined ? { fanDelta: deltas.fanDelta } : {}),
     };
-    // 'api' only when all three fields were supplied by the API.
-    // 'mixed' when the API provided some fields but deltas/estimates filled the rest.
-    // 'delta' / 'projected' when no API gains were present at all.
-    const apiFieldCount = apiGains
-      ? [apiGains.dailyFanGain, apiGains.weeklyFanGain, apiGains.monthlyFanGain]
-          .filter(v => v !== undefined).length
-      : 0;
-    const gainsSource = apiFieldCount === 3
-      ? 'api'
-      : apiFieldCount > 0
-        ? 'mixed'
-        : deltas
-          ? 'delta'
-          : 'projected';
+
+    const gainsSource = cumulativeGains?.gainsSource
+      ?? (deltas ? 'delta' : 'projected');
+
     const trend = deriveTrend(data.fans, data.rank);
 
     const refinedResult = {
@@ -223,16 +337,16 @@ export function refine(vaultRecord, options = {}) {
       gainsSource,
     };
 
-    log('info', `refined successfully — id=${data.id} trend=${trend}`);
+    log('info', `refined successfully — id=${data.id} trend=${trend} gainsSource=${gainsSource}`);
 
     return {
       success: true,
       refinedResult,
       metadata: {
-        source:         'Vault',
+        source:            'Vault',
         sourceInspectedAt: metadata.inspectedAt,
-        refinedAt:      new Date().toISOString(),
-        refinerVersion: REFINER_VERSION,
+        refinedAt:         new Date().toISOString(),
+        refinerVersion:    REFINER_VERSION,
       },
     };
 
