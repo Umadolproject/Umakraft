@@ -23,8 +23,8 @@ const MAX_STRING_OPTION = 100;
 export async function execute(interaction, coordinator) {
   // Option `member` is registered as USER. `getMember` returns the cached
   // GuildMember (nullable if uncached); `getUser` always resolves when the
-  // option was supplied. Read both so the coordinator can pick whichever it
-  // needs without a second Discord round-trip.
+  // option was supplied. Read both so the coordinator can pick whichever
+  // it needs without a second Discord round-trip.
   const memberOpt = interaction.options.getMember('member');
   const userOpt   = interaction.options.getUser('member');
 

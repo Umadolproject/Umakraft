@@ -1,0 +1,115 @@
+
+# UmaKraft Slash Command Isolated Fix Plan
+
+Written plan only. No files in this Lovable project will be edited. The plan describes work to be done inside the uploaded UmaKraft repo (`Distribution/Commands/handlers/*.js`).
+
+## Ground rules (non-negotiable)
+
+1. **One handler at a time.** Every fix touches exactly one file under `Distribution/Commands/handlers/`. Zero edits to `interactionCreate.js`, `Coordinator/*`, `Dispatcher/*`, `deploy-commands.js`, or `Commands/index.js`.
+2. **`/fan_gain` is the golden template.** It is the only command confirmed working. Every other handler must be shaped like `fanGain.js` (see contract below). Any deviation is the suspected bug.
+3. **No shared helpers introduced.** If a fix needs a helper, inline it inside the handler file. Shared code = shared blast radius = rule broken.
+4. **Verify per command, then move on.** Never batch-fix. A regression must be attributable to exactly one handler diff.
+5. **Rollback = revert one file.** If a fix breaks its own command or leaks, `git checkout -- Distribution/Commands/handlers/<file>.js` fully undoes it.
+
+## Handler contract (derived from working `fanGain.js`)
+
+```js
+export const name = '<exact-registered-name>';   // must match deploy-commands.js setName(...)
+export const defer = true;                        // event boundary owns defer; keep true
+export const ephemeral = <bool>;                  // visibility only; boundary reads this
+
+export async function execute(interaction, coordinator, client) {
+  // 1. Read options with the correct getter for their registered type
+  // 2. Do only lightweight validation (format/permission) — reply inline is OK,
+  //    proxy converts reply() -> editReply() after defer
+  // 3. Return coordinator.<action>({ commandName: name, interaction, options, guildId, userId, channelId })
+}
+```
+
+Any handler that (a) uses a wrong getter, (b) omits a field the coordinator action requires, (c) calls a coordinator method that does not exist on the object, (d) has a `name` string that does not match `deploy-commands.js`, or (e) throws inside `execute` before returning — will present as "did not respond" or a wrong-looking reply. All five are fixable inside the handler file alone.
+
+## Per-command procedure (run this loop 30 times)
+
+For each `<cmd>`:
+
+1. **Reproduce.** Invoke `/<cmd>` in the configured guild. Capture Railway log lines:
+   - `[discord/raw] interactionCreate received /<cmd>`
+   - `[interactionCreate] Received /<cmd>`
+   - `[interactionCreate] Completed /<cmd>` OR `Unhandled error in /<cmd>`
+2. **Classify** using the table below.
+3. **Diff against `fanGain.js`** and against the command's schema in `Distribution/Discord/deploy-commands.js`. List every difference.
+4. **Apply the smallest handler-only change** that makes the handler conform to the contract.
+5. **Redeploy, retest one command.** Confirm all three log lines appear and the Discord reply matches expectations.
+6. **Commit** with message `fix(commands/<cmd>): <one-line reason>` — one file per commit.
+
+### Classification table
+
+| Log pattern | Root cause class | Handler-only fix |
+|---|---|---|
+| Raw + Received + Completed, wrong content | Options mapping / coordinator payload shape | Correct getter and payload keys |
+| Raw + Received, no Completed, `Unhandled error` | Throw inside `execute` (missing option, wrong getter type, name mismatch) | Fix option reads and `name` constant |
+| Raw + Received, no Completed, no error | Handler returned a non-envelope value | Return `coordinator.<action>(...)` (never `void`) |
+| Raw only, no Received | Not a handler bug — do not touch handler | Out of scope; escalate to shared layer |
+| No raw at all | Not a handler bug — deployment/registration | Out of scope |
+
+## Per-command worksheet (all 30)
+
+Each row lists the working assumption to verify inside the handler file. `?` = suspected. Every fix is confined to the named handler file.
+
+Golden reference (do not modify):
+- `fanGain.js` → `/fan_gain` — working baseline.
+
+Highest-priority (user-reported):
+- `leaderboard.js` → `/leaderboard` — trainer name missing in output.
+  - Verify handler passes `userId` (already does) and does NOT drop a trainer option that `deploy-commands.js` may declare. If schema has `trainer`, add `trainer: interaction.options.getString('trainer') ?? null` to `options`. Do not touch the action.
+  - Verify `scope` allowed values match schema choices; wrong default masks records with null names.
+  - If schema has no `trainer` option, the fix is still handler-scoped: add `resolveTrainerFromMember: true` flag to `options` and let coordinator honor it (contract addition, not code edit outside handler).
+
+Remaining 28 (same 6-step procedure, expected diff points listed):
+
+- `profile.js` → `/profile` — confirm `getMember('member')` matches option type USER in schema (not STRING).
+- `status.js` → `/status` — must accept `client` as 3rd arg (does). Confirm `ephemeral=true` matches expectation.
+- `circleStatus.js` → `/circle_status` — verify `name` string exactly matches registered `circle_status`.
+- `clubGain.js` → `/club_gain` — `days` getter must be `getInteger`; ensure default 30 matches schema max/min.
+- `interCircleLeaderboard.js` → `/intercircleleaderboard` — name is one word, no underscores; must match schema exactly.
+- `joinDate.js` → `/joindate` — verify member vs. user option type; pass `member`/`userId` correctly.
+- `keep.js` → `/keep` — verify subcommand structure if schema uses subcommands; call correct coordinator action.
+- `link.js` → `/link` — permission guard inside handler; ensure inline `reply` uses `ephemeral: true` and returns.
+- `linkList.js` → `/link_list` — permission check present; confirm `ManageGuild` matches `.setDefaultMemberPermissions` in schema.
+- `memberList.js` → `/memberlist` — `include_former` boolean getter; schema option name must match key.
+- `searchTrainer.js` → `/search_trainer` — three-option guard is present; verify getter types match schema (rank/whiteskills = INTEGER).
+- `setFans.js` → `/set_fans` — admin permission check must be inside handler; do not rely on Discord's UI hide alone.
+- `setTimezone.js` → `/set_timezone` — timezone string validation belongs in handler (early inline reply on invalid).
+- `store.js` → `/store` — confirm coordinator action name matches (`storeCard` vs `store`) — handler must call `coordinator.storeCard`.
+- `testMilestone.js` → `/test_milestone` — dev-only guard; ensure it does not silently return undefined.
+- `timelinePost.js` → `/timeline_post` — verify option keys align with schema.
+- `timelineSetup.js` → `/timeline_setup` — same.
+- `totalCircleFanGain.js` → `/total_circlefan_gain` — unusual name; must match schema letter-for-letter.
+- `totalFan.js` → `/total_fan` — same option triad as fanGain; confirm parity.
+- `unlink.js` → `/unlink` — ensure inline confirmation replies use the proxy-safe form (plain `reply` after defer is OK).
+- `warningSettings.js` → `/warning_settings` — subcommand routing lives in handler; each branch must return a coordinator call.
+- `adminSetJoinDate.js` → `/admin_setjoindate` — admin permission check inside handler.
+- `adminSync.js` → `/admin_sync` — same.
+- `adminSyncCards.js` → `/admin_synccards` — same; verify coordinator method name `adminSyncCards`.
+- `circleMaster.js` → `/circle_master` — verify schema name exactly.
+- `deadLetterInspect.js` → `/dead_letter_inspect` — admin-gated; check name mapping.
+- `deadLetterReplay.js` → `/dead_letter_replay` — same.
+- `help.js` → `/help` — smallest handler; regression here usually = wrong `name` string.
+- `ai.js` → `/ai` — subcommand switch must cover every registered subcommand; unknown branch must throw with a clear message (still handler-scoped).
+- `ask.js` → `/ask` — `getString('question', true)` — schema option must be required.
+
+## Deliverable
+
+A single markdown document, e.g. `docs/slash-command-isolated-fix-plan.md`, containing this plan plus a per-commit checklist. No source files are edited by this plan.
+
+## Out of scope (explicit)
+
+- Fixes to `interactionCreate.js`, coordinator actions, dispatcher, deploy-commands, health server, Railway config.
+- Any fix that would require importing a new module into a handler.
+- The "no raw probe" and "raw only, no Received" log classes — the plan explicitly refuses to address these here because they cannot be fixed handler-side.
+
+## Technical notes
+
+- The event boundary already defers, wraps the interaction in a proxy that translates `reply()` → `editReply()`, and enforces a 10-minute timeout. Handlers can safely call `interaction.reply(...)` for early validation exits.
+- Handlers must return either the coordinator promise or the proxy sentinel from `interaction.reply(...)`. Returning `undefined` triggers `Command returned no response envelope` and looks like a silent failure.
+- Command `name` constants and `deploy-commands.js` `setName(...)` strings are the single most common handler-side mismatch. Every fix should re-verify this pair first.
