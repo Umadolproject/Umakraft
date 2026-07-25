@@ -283,15 +283,29 @@ export function refine(vaultRecord, options = {}) {
       ?? previousRecord?.metadata?.inspectedAt
       ?? null;
 
-    // ── Strategy 1: Cumulative-delta (preferred) ──────────────────────────
+    // ── Strategy 0: API-computed gains (highest priority) ────────────────
+    // When umamoe/pipeline.js has already computed correct day-over-day /
+    // 7-day / month-baseline deltas from daily_fans, they are stored in
+    // data.apiGains.  Use them directly — do NOT run computeCumulativeGains
+    // on top of them, which would produce a near-zero "delta of a delta".
+    const apiGainsData = (
+      data.apiGains &&
+      typeof data.apiGains === 'object' &&
+      typeof data.apiGains.dailyFanGain === 'number' &&
+      Number.isFinite(data.apiGains.dailyFanGain)
+    ) ? data.apiGains : null;
+
+    // ── Strategy 1: Cumulative-delta (when no pre-computed API gains) ──────
     // UmaMoe reports running totals per period. We derive the actual gain
     // from the delta between the current and previous snapshot's cumulative.
-    const cumulativeGains = computeCumulativeGains(data, previousData, previousStoredAt);
+    const cumulativeGains = !apiGainsData
+      ? computeCumulativeGains(data, previousData, previousStoredAt)
+      : null;
 
     // ── Strategy 2: Historical fan-count delta (fallback) ─────────────────
     // Used when no cumulative API counter exists (e.g. legacy records, or
     // a trainer whose circle data had no gain fields at all).
-    const deltas = !cumulativeGains
+    const deltas = !apiGainsData && !cumulativeGains
       ? computeDeltaGains(
           data.fans,
           previousData?.fans,
@@ -304,21 +318,26 @@ export function refine(vaultRecord, options = {}) {
 
     // ── Merge gains in priority order ─────────────────────────────────────
     const gains = {
-      dailyFanGain: cumulativeGains?.dailyFanGain
+      dailyFanGain: apiGainsData?.dailyFanGain
+        ?? cumulativeGains?.dailyFanGain
         ?? deltas?.dailyFanGain
         ?? estimated.dailyFanGain,
-      weeklyFanGain: cumulativeGains?.weeklyFanGain
+      weeklyFanGain: apiGainsData?.weeklyFanGain
+        ?? cumulativeGains?.weeklyFanGain
         ?? deltas?.weeklyFanGain
         ?? estimated.weeklyFanGain,
-      monthlyFanGain: cumulativeGains?.monthlyFanGain
+      monthlyFanGain: apiGainsData?.monthlyFanGain
+        ?? cumulativeGains?.monthlyFanGain
         ?? deltas?.monthlyFanGain
         ?? estimated.monthlyFanGain,
       // fanDelta from historical strategy only (useful for debug)
       ...(deltas?.fanDelta !== undefined ? { fanDelta: deltas.fanDelta } : {}),
     };
 
-    const gainsSource = cumulativeGains?.gainsSource
-      ?? (deltas ? 'delta' : 'projected');
+    const gainsSource = apiGainsData
+      ? 'api-computed'
+      : cumulativeGains?.gainsSource
+        ?? (deltas ? 'delta' : 'projected');
 
     const trend = deriveTrend(data.fans, data.rank);
 

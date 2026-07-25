@@ -67,17 +67,37 @@ const r2 = refine(validVaultRecord, { previousRecord });
 assert('fan-count delta used when no cumulative data',    r2.refinedResult?.gainsSource === 'delta');
 assert('delta fanDelta is positive',                      r2.refinedResult?.fanDelta > 0);
 
+// ── Strategy 0: API-computed gains from daily_fans deltas ─────────────────────
+// When umamoe/pipeline.js computes gains from daily_fans, it stores the true
+// day-over-day / 7-day / month-baseline deltas in data.apiGains.
+// The Refiner must use these directly without further delta computation.
+const apiComputedRecord = {
+  ...validVaultRecord,
+  data: {
+    ...validVaultRecord.data,
+    dailyFanGain:   239727,
+    weeklyFanGain:  1234567,
+    monthlyFanGain: 4567890,
+    apiGains: { dailyFanGain: 239727, weeklyFanGain: 1234567, monthlyFanGain: 4567890 },
+  },
+};
+const rApiComputed = refine(apiComputedRecord);
+assert('api-computed: gainsSource is api-computed',        rApiComputed.refinedResult?.gainsSource === 'api-computed');
+assert('api-computed: dailyFanGain used directly',         rApiComputed.refinedResult?.dailyFanGain === 239727);
+assert('api-computed: weeklyFanGain used directly',        rApiComputed.refinedResult?.weeklyFanGain === 1234567);
+assert('api-computed: monthlyFanGain used directly',       rApiComputed.refinedResult?.monthlyFanGain === 4567890);
+
 // ── Cumulative-delta: first time seen ─────────────────────────────────────────
-// UmaMoe provides monthlyFanGain (cumulative) but there is no previous snapshot.
-// dailyFanGain must be 0 to avoid a historical-accumulation spike.
+// UmaMoe provides monthlyFanGain (cumulative) but there is no previous snapshot
+// and no pre-computed apiGains. dailyFanGain must be 0 to avoid a spike.
 const cumulativeRecord = {
   ...validVaultRecord,
   data: {
     ...validVaultRecord.data,
     monthlyFanGain: 12540,
-    weeklyFanGain: 3200,
-    dailyFanGain: 12540,
-    apiGains: { monthlyFanGain: 12540, weeklyFanGain: 3200, dailyFanGain: 12540 },
+    weeklyFanGain:  3200,
+    dailyFanGain:   12540,
+    // No apiGains — let Refiner Strategy 1 handle cumulative values
   },
 };
 const rFirstSeen = refine(cumulativeRecord);
@@ -88,6 +108,7 @@ assert('first-seen: monthlyFanGain is preserved total',   rFirstSeen.refinedResu
 
 // ── Cumulative-delta: subsequent day ─────────────────────────────────────────
 // Previous snapshot: monthlyFanGain=12540. Today's: 12620. Delta = 80.
+// No apiGains — test Refiner's own cumulative-delta strategy (Strategy 1).
 const day2Record = {
   ...validVaultRecord,
   data: {
@@ -95,11 +116,11 @@ const day2Record = {
     monthlyFanGain: 12620,
     weeklyFanGain:  3280,
     dailyFanGain:   12620,
-    apiGains: { monthlyFanGain: 12620, weeklyFanGain: 3280, dailyFanGain: 12620 },
+    // No apiGains — let Refiner Strategy 1 compute the delta
   },
 };
 const prevCumulativeRecord = {
-  data: { ...validVaultRecord.data, monthlyFanGain: 12540, weeklyFanGain: 3200, apiGains: { monthlyFanGain: 12540, weeklyFanGain: 3200 } },
+  data: { ...validVaultRecord.data, monthlyFanGain: 12540, weeklyFanGain: 3200 },
   metadata: { ...validVaultRecord.metadata, inspectedAt: '2026-07-24T10:00:00.000Z' },
   storedAt: '2026-07-24T10:00:00.000Z',
 };
@@ -110,9 +131,9 @@ assert('cumulative-delta: monthlyFanGain is running total', rDelta.refinedResult
 
 // ── Cumulative-delta: monthly reset handling ──────────────────────────────────
 // Previous snapshot was last month (July); now it's the next month with a
-// lower cumulative (it just reset). The current value IS the gain since reset.
+// lower cumulative (it just reset). No apiGains — Refiner handles reset detection.
 const julyRecord = {
-  data: { ...validVaultRecord.data, monthlyFanGain: 18520, apiGains: { monthlyFanGain: 18520 } },
+  data: { ...validVaultRecord.data, monthlyFanGain: 18520 },
   metadata: { ...validVaultRecord.metadata, inspectedAt: '2026-07-31T23:59:00.000Z' },
   storedAt: '2026-07-31T23:59:00.000Z',
 };
@@ -121,7 +142,7 @@ const augustRecord = {
   data: {
     ...validVaultRecord.data,
     monthlyFanGain: 340,
-    apiGains: { monthlyFanGain: 340 },
+    // No apiGains — test Refiner's own reset detection
   },
 };
 // Patch the "current month" for this test by overriding storedAt of julyRecord

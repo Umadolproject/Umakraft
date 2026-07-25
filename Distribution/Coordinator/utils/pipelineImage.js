@@ -122,6 +122,8 @@ export async function runRankingsPipeline({ payload, rankingsParams, blueprintKe
   const { interaction } = payload;
 
   // ── 1. Umamoe + Refinery rankings pipeline ───────────────────────────────
+  // processRankings stores each trainer's compiled product individually in the
+  // Depot (keyed by trainer ID). There is no single unified "ranking" product.
   const pipelineResult = await processRankings(rankingsParams);
   if (!pipelineResult.success) {
     return {
@@ -134,22 +136,60 @@ export async function runRankingsPipeline({ payload, rankingsParams, blueprintKe
     };
   }
 
-  // ── 2. Retrieve compiled product ─────────────────────────────────────────
-  const rankingId = pipelineResult.rankingId ?? rankingsParams.circle ?? 'global';
-  const { product: depotProduct } = await retrieve(rankingId);
-  if (!depotProduct) {
+  // ── 2. Assemble leaderboard entries from individual Depot records ─────────
+  // pipelineResult.results is an array of { success, trainerId, version, error }.
+  const trainerResults = pipelineResult.results ?? [];
+  const successful = trainerResults.filter(r => r.success);
+
+  if (successful.length === 0) {
     return {
       success:   false,
       failedAt:  'Refinery',
-      error:     'DEPOT_NOT_FOUND',
-      message:   `No compiled ranking product in Depot for id ${rankingId}`,
+      error:     'RANKINGS_NO_DATA',
+      message:   'No trainer data was successfully processed for the leaderboard',
       retriable: false,
       interaction,
     };
   }
 
-  // ── 3. Map + produce + claim ──────────────────────────────────────────────
-  const fabricatorInput = mapToFabricator(depotProduct.compiledProduct, payload.options);
+  const entries = [];
+  for (const r of successful) {
+    const { product: depotProduct } = await retrieve(r.trainerId);
+    if (depotProduct?.compiledProduct) {
+      entries.push(depotProduct.compiledProduct);
+    }
+  }
+
+  if (entries.length === 0) {
+    return {
+      success:   false,
+      failedAt:  'Refinery',
+      error:     'DEPOT_NOT_FOUND',
+      message:   'No compiled trainer products found in Depot for the leaderboard',
+      retriable: false,
+      interaction,
+    };
+  }
+
+  // ── 3. Sort entries by scope gain and slice to top-N ─────────────────────
+  const scope     = rankingsParams.scope ?? 'daily';
+  const gainField = scope === 'monthly' ? 'monthlyFanGain'
+                  : scope === 'weekly'  ? 'weeklyFanGain'
+                  : 'dailyFanGain';
+  const top = rankingsParams.top ?? 10;
+
+  entries.sort((a, b) => (b[gainField] ?? 0) - (a[gainField] ?? 0));
+  const topEntries = entries.slice(0, top);
+
+  // ── 4. Build assembled product for the Fabricator ─────────────────────────
+  const assembledProduct = {
+    entries:           topEntries,
+    trend:             topEntries[0]?.trend ?? null,
+    presentationHints: { scope, gainField, total: entries.length },
+  };
+
+  // ── 5. Map + produce + claim ──────────────────────────────────────────────
+  const fabricatorInput = mapToFabricator(assembledProduct, payload.options ?? {});
   const produced = await produce(fabricatorInput);
   if (!produced.success) {
     return { success: false, failedAt: 'Workshop', error: produced.error ?? 'FABRICATOR_RENDER_ERROR', message: produced.message, retriable: false, interaction };
