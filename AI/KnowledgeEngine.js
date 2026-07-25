@@ -233,6 +233,262 @@ const MECHANIC_CATALOG = [
 ];
 
 // ---------------------------------------------------------------------------
+// Command Primer — bot commands, linking, and user guidance
+// ---------------------------------------------------------------------------
+
+/** @type {Array<{name:string, description:string, usage:string, permissions:string|null, examples:string[], relatedCommands:string[]}>} */
+const COMMAND_PRIMER = [
+  {
+    name: 'Linking (critical — must be linked to use most commands)',
+    description:
+      'Every Discord user must be linked to their uma.moe trainer ID before they can use ' +
+      'commands like /fan_gain, /profile, /search_trainer, or /leaderboard.  Without linking, ' +
+      'the bot cannot identify which trainer the user is on uma.moe.\n\n' +
+      'ONLY an admin (someone with Manage Guild permission) can link a user.  Users cannot link themselves.\n' +
+      'Admins use the /link command to connect a Discord user to a trainer ID.\n' +
+      'Users can check if they are linked by typing /fan_gain — if it works, they are linked.\n\n' +
+      'Linking is per-guild — a user linked in one server is NOT automatically linked in another.',
+    usage: '/link member:@User trainer:TrainerName  —  admin only',
+    permissions: 'ManageGuild (admin only)',
+    examples: [
+      'Admin types: /link member:@Alice trainer:DaJuicyKEBAB',
+      'User asks: "how do I get linked?" → Answer: Ask an admin to use /link for you.',
+      'User asks: "please link me" → Answer: I cannot link you — only an admin can. Ask @AdminName.',
+    ],
+    relatedCommands: ['link', 'unlink', 'link_list'],
+  },
+  {
+    name: 'Fan Gain (/fan_gain)',
+    description:
+      'Shows a trainer\'s daily, weekly, and monthly fan gain with a visual progress card. ' +
+      'Requires the user to be linked to a trainer ID.  If the user is not linked, ' +
+      'this command will fail with a message telling them to ask an admin to /link them.\n\n' +
+      'The command accepts an optional trainer name to look up another trainer. ' +
+      'If the trainer name does not match exactly (case-insensitive), the bot will not find them. ' +
+      'Use the autocomplete dropdown for accurate results.  Never guess trainer names.',
+    usage: '/fan_gain [trainer:TrainerName]',
+    permissions: null,
+    examples: [
+      '/fan_gain  →  shows YOUR fan gain (must be linked)',
+      '/fan_gain trainer:DaJuicyKEBAB  →  shows DaJuicyKEBAB\'s fan gain',
+      'User asks: "how many fans do I have?" → Use /fan_gain to check.',
+    ],
+    relatedCommands: ['profile', 'total_fan', 'fan_gain'],
+  },
+  {
+    name: 'Profile (/profile)',
+    description:
+      'Displays a full trainer profile card including fan gain history, personal records, ' +
+      'milestones, and monthly progress.  Can look up yourself or another linked member.',
+    usage: '/profile [member:@User] [trainer:TrainerName]',
+    permissions: null,
+    examples: [
+      '/profile  →  your own profile',
+      '/profile member:@Alice  →  Alice\'s profile (if linked)',
+    ],
+    relatedCommands: ['fan_gain', 'profile'],
+  },
+  {
+    name: 'Leaderboard (/leaderboard)',
+    description:
+      'Shows the top trainers in your circle by fan gain for a given period (daily, weekly, monthly). ' +
+      'The default circle is 974470619 (your configured circle).  Only trainers who are members of ' +
+      'that circle appear on the leaderboard.',
+    usage: '/leaderboard [scope:daily|weekly|monthly] [circle:CircleName] [date:YYYY-MM-DD]',
+    permissions: null,
+    examples: [
+      '/leaderboard scope:monthly  →  this month\'s top trainers',
+      'User asks: "who is winning this month?" → Check /leaderboard scope:monthly',
+    ],
+    relatedCommands: ['leaderboard', 'intercircleleaderboard', 'circle_master'],
+  },
+  {
+    name: 'Search Trainer (/search_trainer)',
+    description:
+      'Searches for a trainer by name across stored cards, the local trainer database, ' +
+      'and the live uma.moe API.  Returns trainer ID, fan count, rank, and white skills. ' +
+      'Use the autocomplete dropdown on the trainer field for best results.',
+    usage: '/search_trainer trainer:Name [rank:Number] [whiteskills:Number]',
+    permissions: null,
+    examples: [
+      '/search_trainer trainer:DaJuicyKEBAB  →  finds that trainer\'s data',
+      '/search_trainer trainer:Juicy rank:1  →  rank-1 trainers matching "Juicy"',
+    ],
+    relatedCommands: ['search_trainer', 'store', 'keep'],
+  },
+  {
+    name: 'Store Trainer Card (/store)',
+    description:
+      'Stores a trainer card in the local database for faster lookups and rank/skill filtering. ' +
+      'Stored cards are kept for 72 hours unless marked with /keep (permanent).',
+    usage: '/store trainer:TrainerNameOrId',
+    permissions: null,
+    examples: [
+      '/store trainer:DaJuicyKEBAB  →  stores card for 72h',
+      '/keep trainer:DaJuicyKEBAB  →  makes it permanent',
+    ],
+    relatedCommands: ['store', 'keep', 'link_list'],
+  },
+  {
+    name: 'AI Help (/ai help)',
+    description:
+      'Shows a list of available AI commands and what they do. ' +
+      'The AI can answer questions about the repository, explain Umamusume mechanics, ' +
+      'search documentation, and generate community messages.',
+    usage: '/ai help',
+    permissions: null,
+    examples: [
+      '/ai help  →  list all AI commands',
+    ],
+    relatedCommands: ['ask', 'ai'],
+  },
+  {
+    name: 'When a user is NOT linked — how the AI should respond',
+    description:
+      'IMPORTANT RULES for the AI:\n' +
+      '- If a user asks about their own fan gain / stats / profile and they are not linked, ' +
+      '  tell them: "You are not linked to a trainer yet. Ask a server admin to use /link for you."\n' +
+      '- If a user says "link me" or "please link" or "I want to link", ' +
+      '  respond: "I cannot link you — only a server admin can do that. Ask @AdminName or any admin to ' +
+      '  use /link member:@You trainer:YourTrainerName."\n' +
+      '- If a user asks "how do I get linked?" explain the process: an admin runs /link with their Discord ' +
+      '  username and their uma.moe trainer name.\n' +
+      '- NEVER claim that the user can link themselves.  Always direct them to an admin.\n' +
+      '- If the user tags a specific admin (e.g. "@RedHawk link me"), acknowledge the ping and ' +
+      '  explain that the tagged admin has the permission to use /link.\n' +
+      '- ALWAYS be helpful and encouraging.  Never scold the user for not being linked.',
+    usage: '(AI response rules — not a Discord command)',
+    permissions: null,
+    examples: [
+      'User: "how many fans do I have?" → AI: "Let me check... You need to be linked first! Ask an admin to use /link for you, then try /fan_gain."',
+      'User: "please link me @AdminUser" → AI: "@AdminUser has permission to link you! An admin just needs to run /link member:@You trainer:YourTrainerName."',
+      'User: "I want to check my profile" → AI: "First make sure you\'re linked. Try /profile — if it shows an error, ask an admin to /link you!"',
+    ],
+    relatedCommands: ['link', 'fan_gain', 'profile'],
+  },
+];
+
+// ---------------------------------------------------------------------------
+// Umamusume Reference Sites — trusted external resources
+// ---------------------------------------------------------------------------
+
+/**
+ * Curated registry of trusted Umamusume reference sites.
+ * Injected into context when a query matches a site's expertise area.
+ * The AI should proactively recommend the best site for the user's question.
+ *
+ * @type {Array<{name:string, url:string, description:string, bestFor:string[], keywords:string[]}>}
+ */
+const REFERENCES = [
+  {
+    name: 'uma.moe',
+    url: 'https://uma.moe/',
+    description:
+      'Comprehensive Umamusume database and API. The source of truth for trainer stats, ' +
+      'fan counts, rankings, skill data, and card information. Umakraft pulls all trainer ' +
+      'data from here. Best for: looking up a specific trainer, checking ranks, fan counts, ' +
+      'and detailed card/skill data.',
+    bestFor: ['trainer lookup', 'fan count', 'rankings', 'card data', 'skill data', 'trainer stats', 'trainer search'],
+    keywords: ['trainer', 'fan', 'rank', 'card', 'skill', 'stats', 'profile', 'search trainer', 'fan count'],
+  },
+  {
+    name: 'Gametora — Umamusume',
+    url: 'https://gametora.com/umamusume',
+    description:
+      'Well-organized game guides, tier lists, event guides, and training calculators. ' +
+      'Clean UI, regularly updated. Best for: tier lists, event strategies, training builds, ' +
+      'and character comparisons.',
+    bestFor: ['tier list', 'event guide', 'training build', 'character comparison', 'game guide'],
+    keywords: ['tier', 'event', 'training', 'build', 'comparison', 'guide', 'best', 'recommend'],
+  },
+  {
+    name: 'Uma.Guide',
+    url: 'https://uma.guide/',
+    description:
+      'Modern Umamusume wiki and guide hub. Covers game mechanics, scenarios, support cards, ' +
+      'and character-specific builds. Good companion to Gametora. Best for: detailed mechanics ' +
+      'explanations, scenario walkthroughs, and support card analysis.',
+    bestFor: ['mechanics', 'scenario guide', 'support card', 'character build', 'wiki'],
+    keywords: ['how does', 'mechanic', 'scenario', 'support card', 'build', 'guide', 'wiki', 'explain'],
+  },
+  {
+    name: 'Umamusume.com (Official)',
+    url: 'https://umamusume.com/',
+    description:
+      'Official Umamusume: Pretty Derby website. News, character profiles, media, and ' +
+      'official announcements. Best for: official news, character lore, anime/manga info, ' +
+      'and new release announcements.',
+    bestFor: ['official news', 'character lore', 'anime', 'manga', 'new release', 'announcement'],
+    keywords: ['official', 'news', 'character', 'anime', 'manga', 'release', 'lore', 'story'],
+  },
+  {
+    name: 'Game8 — Umamusume',
+    url: 'https://game8.co/games/Umamusume-Pretty-Derby',
+    description:
+      'Popular Japanese game strategy site. Detailed tier lists, reroll guides, event ' +
+      'walkthroughs, and character rankings. Frequently updated with JP server meta. ' +
+      'Best for: meta tier lists, reroll guides, step-by-step walkthroughs, and JP server info.',
+    bestFor: ['meta tier list', 'reroll guide', 'walkthrough', 'jp server', 'strategy', 'ranking'],
+    keywords: ['meta', 'reroll', 'jp', 'japan', 'walkthrough', 'strategy', 'best character', 'tier list'],
+  },
+];
+
+/**
+ * Match relevant reference sites for a user query.
+ * Returns sites that match the query's topic area.
+ *
+ * @param {string} query
+ * @returns {Array<{name:string, url:string, description:string, bestFor:string[], score:number}>}
+ */
+export function getReferences(query) {
+  const results = [];
+  const q = normalise(query);
+
+  for (const ref of REFERENCES) {
+    let score = 0;
+
+    // Check keyword matches
+    for (const kw of ref.keywords) {
+      if (q.includes(normalise(kw))) {
+        score += 0.25;
+      }
+    }
+
+    // Check bestFor matches (more specific = higher weight)
+    for (const bf of ref.bestFor) {
+      const s = fuzzyScore(q, bf);
+      if (s > 0.4) score += s * 0.5;
+    }
+
+    if (score > 0) {
+      results.push({
+        name: ref.name,
+        url: ref.url,
+        description: ref.description,
+        bestFor: ref.bestFor,
+        score: Math.min(score, 1.0),
+      });
+    }
+  }
+
+  results.sort((a, b) => b.score - a.score);
+  return results;
+}
+
+/**
+ * Return all reference sites — used for listing/reference commands.
+ * @returns {Array<{name:string, url:string, description:string, bestFor:string[]}>}
+ */
+export function getAllReferences() {
+  return REFERENCES.map(r => ({
+    name: r.name,
+    url: r.url,
+    description: r.description,
+    bestFor: r.bestFor,
+  }));
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -335,6 +591,42 @@ export function search(query) {
     }
   }
 
+  // Search reference sites — helps the AI recommend the right external resource
+  const refs = getReferences(query);
+  for (const ref of refs.slice(0, 3)) {
+    chunks.push({
+      filePath: `AI/KnowledgeEngine (references) — ${ref.url}`,
+      heading: `Umamusume Reference: ${ref.name}`,
+      content:
+        `🔗 **Recommended site: ${ref.name}**\n` +
+        `<${ref.url}>\n` +
+        `${ref.description}\n` +
+        `Best for: ${ref.bestFor.join(', ')}`,
+      score: ref.score,
+      source: 'knowledge',
+    });
+  }
+
+  // Search command primer — helps the AI answer "how do I..." questions
+  for (const cmd of COMMAND_PRIMER) {
+    const candidates = [cmd.name, cmd.description, cmd.usage, ...cmd.examples];
+    const maxScore = Math.max(...candidates.map(c => fuzzyScore(query, c)));
+    if (maxScore >= 0.25) {
+      chunks.push({
+        filePath: 'AI/KnowledgeEngine (commands)',
+        heading:  cmd.name,
+        content:
+          `**${cmd.name}**\n` +
+          `${cmd.description}\n` +
+          `Usage: ${cmd.usage}\n` +
+          (cmd.permissions ? `Permissions: ${cmd.permissions}\n` : '') +
+          (cmd.examples.length ? `Examples:\n${cmd.examples.map(e => '  - ' + e).join('\n')}` : ''),
+        score:  maxScore,
+        source: 'knowledge',
+      });
+    }
+  }
+
   // Sort descending by score
   chunks.sort((a, b) => b.score - a.score);
 
@@ -381,3 +673,9 @@ export function isUmamusumeTopic(query) {
 export function allTerms() {
   return GLOSSARY.map(e => ({ term: e.term, category: e.category, aliases: e.aliases }));
 }
+
+/**
+ * Return all reference sites — re-export for external use.
+ * @returns {Array<{name:string, url:string, description:string, bestFor:string[]}>}
+ */
+export { getAllReferences as references };

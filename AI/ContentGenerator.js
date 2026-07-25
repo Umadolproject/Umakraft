@@ -10,8 +10,9 @@
 import log from '../core/log.js';
 import config from './Configuration.js';
 import { assemble } from './PromptSystem.js';
-import { generate as apiGenerate } from './APIProvider.js';
-import { validate, hardRejectMessage } from './ResponseValidator.js';
+import { Router } from './router/Router.js';
+import { validate } from './ResponseValidator.js';
+import { getResponse, setResponse } from './Cache.js';
 
 // ---------------------------------------------------------------------------
 // Message type registry — prompt text and fallbacks
@@ -44,31 +45,94 @@ const MESSAGE_TYPES = {
   },
 
   milestone: {
-    required: ['trainerName', 'milestoneValue'],
-    optional: ['circleName', 'previousMilestone'],
-    buildPrompt: (v) =>
-      `You are writing a milestone announcement for the Umakraft Discord server.\n\n` +
-      `Trainer: ${v.trainerName}\n` +
-      `Milestone: ${Number(v.milestoneValue).toLocaleString()} fans\n` +
-      `Circle: ${v.circleName ?? 'the circle'}\n` +
-      `${v.previousMilestone ? `Previous milestone: ${Number(v.previousMilestone).toLocaleString()} fans\n` : ''}` +
-      `\nWrite a celebration message that:\n` +
-      `- Congratulates the trainer by name on their fan milestone\n` +
-      `- Acknowledges the effort and dedication this represents\n` +
-      `- Celebrates the achievement as a circle win, not just a personal one\n` +
-      `- Ends with an inspiring forward-looking statement\n\n` +
-      `Requirements:\n` +
-      `- Between 100 and 150 words\n` +
-      `- Use bold formatting for the trainer name and milestone value\n` +
-      `- May include 1–2 celebration emojis (🎉, 🏆, ⭐, ✨)\n` +
-      `- Warm, genuine, not over-the-top\n` +
-      `- Do not invent specific details not provided`,
-    fallback: (v) =>
-      `🎉 Congratulations to **${v.trainerName}** on reaching **${Number(v.milestoneValue).toLocaleString()} fans**! ` +
-      `This milestone is a true testament to your dedication and hard work. ` +
-      `The entire ${v.circleName ? `*${v.circleName}*` : 'circle'} celebrates with you today. ` +
-      `Keep pushing forward — the next milestone is already within reach, and we can't wait ` +
-      `to celebrate with you again. Well done! 🏆`,
+    required: ['trainerName', 'milestoneValue', 'milestoneType', 'tierLabel'],
+    optional: ['circleName', 'tierNumber', 'gainPeriod'],
+    buildPrompt: (v) => {
+      const isDaily = v.milestoneType === 'daily';
+      const period = v.gainPeriod ?? (isDaily ? 'TODAY' : 'THIS MONTH');
+      const tierNum = v.tierNumber != null ? ` (Tier ${v.tierNumber}${isDaily ? '' : ' of 10'})` : '';
+
+      if (isDaily) {
+        return (
+          `You are writing a DAILY milestone announcement for the Umakraft Discord server.\n\n` +
+          `Trainer: ${v.trainerName}\n` +
+          `Daily Gain: ${Number(v.milestoneValue).toLocaleString()} fans TODAY\n` +
+          `Tier: ${v.tierLabel}${tierNum}\n` +
+          `Circle: ${v.circleName ?? 'the circle'}\n\n` +
+          `Daily Milestone Tiers (only the highest achieved fires):\n` +
+          `  Tier 1 — 1M fans — ⏳ Minimum: "The grind begins"\n` +
+          `  Tier 2 — 3M fans — 👍 Good: "Building real momentum"\n` +
+          `  Tier 3 — 5M fans — ⭐ Excellent: "The leaderboard is noticing"\n` +
+          `  Tier 4 — 7M fans — 🔥 Competitive: "Setting the standard"\n` +
+          `  Tier 5 — 10M fans — 👑 Legend: "Redefining what's possible"\n\n` +
+          `Write a celebration message that:\n` +
+          `- Names the trainer and their tier (e.g. "Legend tier — 10M fans in a single day!")\n` +
+          `- Uses the correct tone for this specific tier (see tier list above)\n` +
+          `- Acknowledges the effort — 10M in one day is monumental\n` +
+          `- Celebrates as a circle-wide moment\n` +
+          `- Ends with "Tomorrow is another chance to climb higher"\n\n` +
+          `Requirements:\n` +
+          `- Between 100 and 150 words\n` +
+          `- Use bold for trainer name, tier label, and fan count\n` +
+          `- Include 1–2 celebration emojis appropriate to the tier\n` +
+          `- Do not mention leaderboard rankings\n` +
+          `- Do not invent details not provided`
+        );
+      }
+
+      // Monthly — competitive tone
+      return (
+        `You are writing a MONTHLY milestone announcement for the Umakraft Discord server.\n\n` +
+        `Trainer: ${v.trainerName}\n` +
+        `Monthly Gain: ${Number(v.milestoneValue).toLocaleString()} fans THIS MONTH\n` +
+        `Tier: ${v.tierLabel}${tierNum}\n` +
+        `Circle: ${v.circleName ?? 'the circle'}\n\n` +
+        `Monthly Milestone Tiers (only the highest fires — titles based on fan gain):\n` +
+        `  Tier 1  — 10M  — 😴 Unpopular Trainer: "wake up, the board is watching"\n` +
+        `  Tier 2  — 20M  — 🥱 Lazy Trainer: "you could do better, and you know it"\n` +
+        `  Tier 3  — 30M  — 📦 Minimum Fan Hoarder: "okay, you are stacking now"\n` +
+        `  Tier 4  — 40M  — 💪 Elite Trainer: "now we are talking — real gains"\n` +
+        `  Tier 5  — 50M  — ⚡ Super Elite Trainer: "elite among elites"\n` +
+        `  Tier 6  — 60M  — 🏆 Expert Hoarder: "this is a serious operation"\n` +
+        `  Tier 7  — 70M  — 🔥 Super Expert Hoarder: "nobody is catching you"\n` +
+        `  Tier 8  — 80M  — ⚔️ Competitive: "you are a threat to everyone"\n` +
+        `  Tier 9  — 90M  — 🔱 Super Competitive: "the circle fears your name"\n` +
+        `  Tier 10 — 100M — 👑 Legendary: "you ARE the standard. everyone else is chasing"\n\n` +
+        `Write a COMPETITIVE, high-energy announcement that:\n` +
+        `- Names the trainer and their NEW TITLE (e.g. "Expert Hoarder — Tier 6")\n` +
+        `- Makes the title MEAN something — if they are "Lazy Trainer" at 20M, tease them playfully\n` +
+        `- If they are "Elite Trainer" or above, sound genuinely impressed\n` +
+        `- If they are "Legendary" at 100M, they are basically untouchable — sound awestruck\n` +
+        `- The tone MUST match the title — each tier has its own personality\n` +
+        `- Frames the achievement in competitive terms\n` +
+        `- Ends with a forward-looking statement aimed at the NEXT tier up\n\n` +
+        `Requirements:\n` +
+        `- Between 100 and 150 words\n` +
+        `- COMPETITIVE tone — not just "congrats" but embody the title\n` +
+        `- Use bold for trainer name, tier title, and fan count\n` +
+        `- Include 1–2 emojis that match the tier\n` +
+        `- Frame as: the bar has been raised for the whole circle\n` +
+        `- Do not invent details not provided`
+      );
+    },
+    fallback: (v) => {
+      if (v.milestoneType === 'daily') {
+        return (
+          `👑 **${v.trainerName}** hit **${Number(v.milestoneValue).toLocaleString()} fans** ` +
+          `today — ${v.tierLabel ?? 'milestone'} tier! The circle celebrates this achievement ` +
+          `and the dedication it represents. Every fan earned today moves us all forward. ` +
+          `Tomorrow is another chance to climb higher. Well done, ${v.trainerName}! 🔥`
+        );
+      }
+      return (
+        `🏆 **${v.trainerName}** — you are now **${v.tierLabel ?? 'a milestone'}** ` +
+        `this month with **${Number(v.milestoneValue).toLocaleString()} fans**` +
+        `${v.tierNumber != null ? `, Tier ${v.tierNumber} of 10` : ''}. ` +
+        `The title says it all. The entire ` +
+        `${v.circleName ? `*${v.circleName}*` : 'circle'} sees what you are building. ` +
+        `The next tier is waiting. Keep going. 👑`
+      );
+    },
   },
 
   achievement: {
@@ -268,6 +332,15 @@ export async function generate(type, variables = {}) {
   }
 
   const messagePrompt = schema.buildPrompt(variables);
+
+  // ── 1. Check response cache first ────────────────────────────────────────
+  const cacheKey = `msg:${type}:${JSON.stringify(Object.entries(variables).sort(([a],[b])=>a.localeCompare(b)))}`;
+  const cached = getResponse(cacheKey, 'message', variables);
+  if (cached?.text) {
+    log.info(`[AI/ContentGenerator] Cache hit for "${type}" message.`);
+    return { message: cached.text, attempts: 0, usedFallback: false };
+  }
+
   let attempts = 0;
   let lastResponse = null;
   let extraInstruction = '';
@@ -286,10 +359,18 @@ export async function generate(type, variables = {}) {
 
     let responseText;
     try {
-      const result = await apiGenerate(prompt, { complexity: 'complex' });
+      const result = await Router.ai(prompt, { complexity: 'complex' });
       responseText = result.text ?? result;
     } catch (err) {
-      log.error(`[AI/ContentGenerator] API error on attempt ${attempt}: ${err.message}`);
+      log.error(`[AI/ContentGenerator] Router error on attempt ${attempt}: ${err.message}`);
+      // Try cache before falling back to hardcoded
+      if (attempt === 1) {
+        const stale = getResponse(cacheKey, 'message', variables);
+        if (stale?.text) {
+          log.info(`[AI/ContentGenerator] AI failed — serving stale cache for "${type}".`);
+          return { message: stale.text, attempts, usedFallback: true };
+        }
+      }
       break;
     }
 
@@ -303,6 +384,8 @@ export async function generate(type, variables = {}) {
         `[AI/ContentGenerator] type="${type}" attempt=${attempt} PASS ` +
         `wordCount=${validation.wordCount}`
       );
+      // ── Cache the successful response ───────────────────────────────────
+      setResponse(cacheKey, 'message', { text: responseText, model: 'ai', tokens: 0, citations: [] }, variables);
       return { message: responseText, attempts, usedFallback: false };
     }
 

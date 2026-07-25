@@ -9,15 +9,15 @@
 // For name-only searches, results from all three sources are merged and
 // deduplicated by trainer ID. Rank and white-skill filters are local-card-only.
 
-import { searchCards } from '../utils/trainerCards.js';
-import { searchByName } from '../utils/trainerDb.js';
+import { searchCards, getCard } from '../utils/trainerCards.js';
+import { searchByName, getById } from '../utils/trainerDb.js';
 import { searchTrainers } from '../../../umamoe/Miner/miner.js';
 
 export async function searchTrainer(payload) {
   const { interaction, options } = payload;
-  const { trainer, rank, whiteskills } = options;
+  const { trainer, trainerId, rank, whiteskills } = options;
 
-  if (!trainer && rank == null && whiteskills == null) {
+  if (!trainer && !trainerId && rank == null && whiteskills == null) {
     return {
       success:   false,
       failedAt:  'Commands',
@@ -26,6 +26,24 @@ export async function searchTrainer(payload) {
       retriable: false,
       interaction,
     };
+  }
+
+  // ── 0. Direct ID lookup (autocomplete selection or trainer_id parameter) ──
+  let idLookupResult = null;
+  if (trainerId) {
+    const card = await getCard(trainerId).catch(() => null);
+    const dbEntry = await getById(trainerId);
+    if (card || dbEntry) {
+      idLookupResult = {
+        trainerId,
+        name:        card?.name        ?? dbEntry?.trainer_name ?? trainerId,
+        fans:        card?.fans        ?? '?',
+        rank:        card?.rank        ?? null,
+        whiteSkills: card?.whiteSkills ?? 0,
+        kept:        card?.kept        ?? false,
+        source:      card ? 'card'     : 'db',
+      };
+    }
   }
 
   // ── 1. Local stored cards (has rich data: fans, rank, whiteSkills) ───────
@@ -37,6 +55,7 @@ export async function searchTrainer(payload) {
   });
 
   const cardIds = new Set(cardResults.map(c => c.trainerId));
+  if (idLookupResult) cardIds.add(idLookupResult.trainerId);
 
   // ── 2. Local trainer DB — fast name lookup seeded from circle members ────
   let dbResults = [];
@@ -74,8 +93,12 @@ export async function searchTrainer(payload) {
   }
 
   // ── 4. Assemble combined results ─────────────────────────────────────────
+  // Prefer the ID lookup at position 0; skip any duplicate from cardResults.
   const allResults = [
-    ...cardResults.map(c => ({
+    ...(idLookupResult ? [idLookupResult] : []),
+    ...cardResults
+      .filter(c => c.trainerId !== idLookupResult?.trainerId)
+      .map(c => ({
       trainerId:   c.trainerId,
       name:        c.name,
       fans:        typeof c.fans === 'number' ? c.fans.toLocaleString() : (c.fans ?? '?'),

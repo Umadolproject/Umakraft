@@ -6,6 +6,7 @@ import { Events } from 'discord.js';
 import { schedule, scheduleDailyAt, start } from '../../../tasks/index.js';
 import { runOperationCycle } from '../../../Operation/operation.js';
 import { runMinerCycle } from '../../../tasks/minerTask.js';
+import { runMilestoneCycle } from '../../../fantracking/milestone/milestones.js';
 import { seedTrainerDbFromCircles } from '../../Coordinator/utils/seedTrainerDb.js';
 
 export const name = Events.ClientReady;
@@ -30,6 +31,10 @@ export async function execute(client) {
   // Daily uma.moe data fetch — 18:00 and 18:30 Amsterdam (uma.moe finishes updating by then)
   scheduleDailyAt('miner-1800', 18, 0,  MINER_TIMEZONE, runMinerCycle);
   scheduleDailyAt('miner-1830', 18, 30, MINER_TIMEZONE, runMinerCycle);
+
+  // Milestone detection — every 10 minutes, checks all trainers' daily/monthly
+  // fan gains against configured tiers and broadcasts via Announcer
+  schedule('milestone', '*/10 * * * *', runMilestoneCycle);
 
   start(client);
 }

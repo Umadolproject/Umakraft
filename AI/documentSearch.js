@@ -1,7 +1,10 @@
 // AI/documentSearch.js
-// Text-based document search over the docs/ directory tree.
+// Text-based document search over the repository tree.
 // No embeddings or vector database required — purely lexical scoring so
 // this works with zero API keys.
+//
+// Searches: docs/, *.md, *.js, *.json, *.yaml, *.toml
+// Skips:    node_modules/, .git/, .data/
 
 import { readdir, readFile } from 'node:fs/promises';
 import { join, relative, extname } from 'node:path';
@@ -26,7 +29,11 @@ export function isOnTopic(query) {
 
 /** @type {{ file: string, content: string, tokens: Set<string> }[] | null} */
 let _index = null;
-const DOCS_ROOT = join(new URL('.', import.meta.url).pathname, '..', 'docs');
+const REPO_ROOT = join(new URL('.', import.meta.url).pathname, '..');
+
+const SEARCHABLE_EXTENSIONS = new Set(['.md', '.js', '.mjs', '.json', '.yaml', '.yml', '.toml', '.txt', '.csv']);
+const SKIP_DIRS = new Set(['node_modules', '.git', '.data', '.nexus', 'attached_assets']);
+const MAX_FILE_BYTES = 50_000;
 
 async function collectFiles(dir) {
   const results = [];
@@ -40,8 +47,9 @@ async function collectFiles(dir) {
   for (const entry of entries) {
     const full = join(dir, entry.name);
     if (entry.isDirectory()) {
+      if (SKIP_DIRS.has(entry.name)) continue;
       results.push(...await collectFiles(full));
-    } else if (['.md', '.json'].includes(extname(entry.name))) {
+    } else if (SEARCHABLE_EXTENSIONS.has(extname(entry.name))) {
       results.push(full);
     }
   }
@@ -60,7 +68,7 @@ export async function initialize() {
   if (_index) return;
 
   const startedAt = Date.now();
-  const files = await collectFiles(DOCS_ROOT);
+  const files = await collectFiles(REPO_ROOT);
   _index = [];
 
   for (const absPath of files) {
@@ -68,7 +76,7 @@ export async function initialize() {
       const content = await readFile(absPath, 'utf8');
       _index.push({
         file: relative(process.cwd(), absPath),
-        content: content.slice(0, 8000),
+        content: content.slice(0, MAX_FILE_BYTES),
         tokens: tokenise(content),
       });
     } catch {
@@ -150,6 +158,6 @@ export function stats() {
   return {
     indexed: Array.isArray(_index),
     documentCount: _index?.length ?? 0,
-    docsRoot: DOCS_ROOT,
+    repoRoot: REPO_ROOT,
   };
 }

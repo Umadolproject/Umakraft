@@ -2,14 +2,14 @@
 
 **Department:** Knowledge — AI
 **Type:** Community Message
-**Version:** 1.0.0
-**Last Updated:** 2026-07-22
+**Version:** 2.0.0
+**Last Updated:** 2026-07-25
 
 ---
 
 ## Purpose
 
-Generate a leaderboard announcement that celebrates top performers and motivates the broader circle to stay competitive. This message accompanies the weekly or monthly leaderboard embed posted by the Broadcast stage.
+Generate a leaderboard announcement that celebrates top performers and ignites competitive fire across the circle. This is not a polite list — it's a call to arms. The message must make podium trainers feel like champions while making everyone else want their spot.
 
 ---
 
@@ -17,59 +17,90 @@ Generate a leaderboard announcement that celebrates top performers and motivates
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `{{topTrainers}}` | **Yes** | — | Array of top trainer objects: `[{ name, rank, fans }]` (top 3–5) |
-| `{{period}}` | No | "this period" | Ranking period (e.g. "this week", "July 2026") |
+| `{{scope}}` | **Yes** | `daily` | One of: `daily`, `weekly`, `monthly` |
+| `{{topTrainers}}` | **Yes** | — | Array of top 5 trainers: `[{ name, rank, fans, gainField }]` |
 | `{{circleName}}` | No | "the circle" | Name of the circle |
-| `{{totalTrainers}}` | No | — | Total number of active trainers in the circle |
+| `{{totalTrainers}}` | No | — | Total active trainers in the circle |
+| `{{gainField}}` | No | `dailyFanGain` | Field used for ranking |
+
+---
+
+## Scope-Based Tone
+
+### Daily Leaderboard
+**Energy:** "Today belongs to you. Tomorrow it resets."
+**Focus:** Who dominated today. Quick hits. Daily grind energy.
+**Emojis:** 🔥 ⚡ 📊
+
+### Weekly Leaderboard
+**Energy:** "A week of consistency. Momentum is building."
+**Focus:** Who sustained performance. The consistent vs the flashy.
+**Emojis:** 🏆 📈 💪
+
+### Monthly Leaderboard
+**Energy:** "This is the big one. The month doesn't lie."
+**Focus:** Who ran the campaign. The long game. Respect the grind.
+**Emojis:** 👑 🏆 🔱
 
 ---
 
 ## Prompt Template
 
 ```text
-You are writing a leaderboard announcement for the Umakraft Discord server.
+You are writing a {{scope}} leaderboard announcement for the Umakraft Discord server.
 
 Circle: {{circleName}}
-Period: {{period}}
-Top Trainers: {{topTrainers}}
+Scope: {{scope}}
+Top Trainers (in order):
+{{topTrainers}}
+Total trainers: {{totalTrainers}}
 
 Write a message that:
-- Celebrates the top-ranked trainers by name
-- Acknowledges the competitive spirit of the whole circle
-- Encourages trainers outside the top spots to keep pushing
-- Ends with an energising forward-looking statement about the next period
+- Opens with the scope energy (see Scope-Based Tone above) — set the mood immediately
+- Names the top 3 trainers with their ranks and calls out what makes each impressive
+- For the podium trainers: make them feel UNSTOPPABLE — they earned this
+- For everyone else: light the competitive fire — "this could be you next {{scope}}"
+- Acknowledges that every trainer on the board contributed to the circle's strength
+- Ends with a forward-looking statement about the next period
 
 Requirements:
 - Between 100 and 150 words
-- Mention the top 3 trainers by name and rank
-- Use bold formatting for trainer names
-- Competitive but inclusive tone — everyone's effort matters
-- May include 1–2 appropriate emojis
-- Do not invent fan counts or ranks not provided in the variables
+- Competitive, energetic tone — this is sports commentary, not a report
+- Use bold for trainer names and their ranks
+- Include 1–2 emojis from the scope's approved set
+- Mention the gap between ranks if it's dramatic (e.g. "in first by a landslide")
+- Never understate the winners — don't be polite, be impressed
+- Do not invent fan counts or ranks not provided
 ```
 
 ---
 
-## Example Output
+## Example Output — Daily
 
-> 🏆 The {{period}} leaderboard results are in for *Rising Stars*, and what a competition it has been! Leading the way is **TrainerAkira** in first place, followed closely by **TrainerMiyuki** in second and **TrainerRen** rounding out the podium in third. The gap between the top spots was tighter than ever, showing just how strong and competitive this circle has become. To every trainer outside the top three — your progress has not gone unnoticed. Every fan earned, every sync completed, and every day you show up builds the foundation for your breakthrough. The next period starts fresh. Who will rise to the top? 🔥
+> 🔥 The daily leaderboard is locked for *Rising Stars*, and today belonged to **Akira**. First place, top of the board, and the trainer everyone will be chasing tomorrow. **Miyuki** held strong in second — close enough to taste first but not quite there — and **Ren** rounds out the podium in third with a performance that says "I'm not going anywhere." 42 trainers synced today. 42 trainers contributed to the circle's daily total. But only one name sits at the very top tonight. Tomorrow the board resets. The question isn't who won today — it's who wants it more tomorrow. See you on the leaderboard. ⚡
 
-*(Word count: 112 — passes validation)*
-
----
-
-## Leaderboard Tone Guidelines
-
-- Celebrate the winners genuinely — don't understate their performance
-- Be inclusive of non-podium trainers — they are the backbone of the circle
-- Keep competition friendly — this is a community, not a zero-sum game
-- Avoid exact fan count callouts in the message (they appear in the embed)
+*(Word count: 108 — passes validation)*
 
 ---
 
-## Fallback
+## Example Output — Monthly
 
-> 🏆 The {{period}} leaderboard is live for *{{circleName}}*! Congratulations to our top performers who set an incredible pace this period. Every trainer in this circle has contributed to our collective strength. Check the leaderboard embed above to see the full rankings, and let's get ready for the next period. The competition never stops — and neither do we! 🔥
+> 👑 The monthly leaderboard doesn't lie. Thirty days of data. Thirty chances to climb or fall. And after all of it, **Akira** stands alone at #1 in *Rising Stars* — the undisputed ruler of this month's campaign. **Miyuki** put up a fight worthy of the top spot but settled into a razor-thin second place. **Ren** claimed third after a late-month surge that knocked a contender off the podium entirely. This is the board that matters. Daily wins are sweet, but monthly dominance is legacy. The leaderboard resets tomorrow. Akira's crown is up for grabs. The only question: who's taking it? 🔱
+
+*(Word count: 106 — passes validation)*
+
+---
+
+## Fallback — Per Scope
+
+### Daily Fallback
+> 🔥 The daily leaderboard is in for {{circleName}}! Congratulations to our top trainers who owned today's rankings. Check the embed for full results. Remember: tomorrow the board resets, and every spot is up for grabs. Who's taking #1 next? See you on the leaderboard. ⚡
+
+### Weekly Fallback
+> 🏆 The weekly leaderboard results are live for {{circleName}}! A full week of grinding, syncing, and climbing — and our top performers have earned every bit of recognition. Check the full leaderboard above. Next week starts now. Who's making the podium? 💪
+
+### Monthly Fallback
+> 👑 The monthly leaderboard has spoken. {{circleName}}'s top trainers ran a campaign this month, and the numbers don't lie. Full rankings in the embed above. The crown resets tomorrow. New month, new board, new king. Who's taking it? 🔱
 
 ---
 

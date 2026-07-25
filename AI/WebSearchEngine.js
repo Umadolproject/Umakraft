@@ -23,16 +23,18 @@ import { getResponse, setResponse } from './Cache.js';
 // ---------------------------------------------------------------------------
 
 /**
- * Augment a user query with uma.moe domain context to improve result relevance.
+ * Augment a user query with Umamusume domain context to improve result relevance.
  * @param {string} query
  * @returns {string}
  */
 function scopeQuery(query) {
   const q = query.trim();
   if (!q) return q;
-  // Don't double-inject if already scoped
-  if (q.toLowerCase().includes('uma.moe') || q.toLowerCase().includes('umamusume')) return q;
-  return `${q} uma.moe Umamusume Pretty Derby`;
+  // Don't double-inject if already scoped to any of the 5 trusted domains
+  const UMA_DOMAINS = ['uma.moe', 'gametora.com/umamusume', 'uma.guide', 'umamusume.com', 'game8.co/games/umamusume'];
+  if (UMA_DOMAINS.some(d => q.toLowerCase().includes(d.toLowerCase()))) return q;
+  if (q.toLowerCase().includes('umamusume')) return q;
+  return `${q} Umamusume Pretty Derby`;
 }
 
 // ---------------------------------------------------------------------------
@@ -84,7 +86,7 @@ async function callTavily(query, maxResults) {
         query,
         search_depth:    'advanced',
         max_results:     maxResults,
-        include_domains: ['uma.moe'],
+        include_domains: ['uma.moe', 'gametora.com', 'uma.guide', 'umamusume.com', 'game8.co'],
         include_answer:  false,
       }),
       signal: AbortSignal.timeout(config.searchProviderTimeoutMs),

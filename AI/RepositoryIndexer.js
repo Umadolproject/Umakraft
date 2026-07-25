@@ -14,7 +14,7 @@ import { readdir, readFile, stat } from 'node:fs/promises';
 import { join, relative, extname, basename } from 'node:path';
 import log from '../core/log.js';
 import config from './Configuration.js';
-import { embed } from './APIProvider.js';
+import { Router } from './router/Router.js';
 import { upsert, getChecksum, deleteByFile, listAllFilePaths } from './VectorDatabase.js';
 import { deriveChunkId } from './VectorDatabase.js';
 
@@ -380,7 +380,7 @@ async function indexFile(absPath, rootDir, forceReindex = false) {
     const { content: chunkContent, heading } = rawChunks[i];
     let vector;
     try {
-      vector = await embed(chunkContent);
+      vector = (await Router.embed(chunkContent)).vector;
     } catch (err) {
       // Quota exhaustion is permanent — propagate so the caller aborts the run.
       if (err.isQuotaExhausted) throw err;

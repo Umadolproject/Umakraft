@@ -31,7 +31,7 @@ async function handleAutocomplete(interaction) {
 
 // ─── Slash commands ───────────────────────────────────────────────────────────
 
-function acknowledgedInteraction(interaction) {
+function acknowledgedInteraction(interaction, deferredEphemeral) {
   return new Proxy(interaction, {
     get(target, property) {
       if (property === '__originalInteraction') return target;
@@ -42,6 +42,20 @@ function acknowledgedInteraction(interaction) {
 
       if (property === 'reply') {
         return async (payload = {}) => {
+          // Ephemeral mismatch: handler asked for ephemeral but the boundary
+          // deferred publicly. Discord does not allow switching visibility after
+          // defer, so we use followUp to deliver the ephemeral message privately
+          // and replace the public placeholder with a brief notice.
+          if (!deferredEphemeral && payload.ephemeral) {
+            console.warn(
+              `[interactionCreate] Handler requested ephemeral reply but defer was public ` +
+              `— using followUp to preserve privacy.`
+            );
+            await target.editReply({ content: '⚠️ An error occurred — see the follow-up message below.' });
+            await target.followUp({ content: payload.content, ephemeral: true });
+            return { [INTERACTION_RESPONSE_HANDLED]: true };
+          }
+
           const { ephemeral: _ephemeral, ...editPayload } = payload;
           await target.editReply(editPayload);
           return { [INTERACTION_RESPONSE_HANDLED]: true };
@@ -106,7 +120,7 @@ export async function execute(interaction, client) {
       return;
     }
 
-    const executionInteraction = acknowledgedInteraction(interaction);
+    const executionInteraction = acknowledgedInteraction(interaction, ephemeral);
 
     // Race the handler against a timeout so a hung coordinator action never
     // leaves a deferred interaction waiting silently until the token expires.

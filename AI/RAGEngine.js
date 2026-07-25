@@ -9,7 +9,7 @@
 
 import log from '../core/log.js';
 import config from './Configuration.js';
-import { embed } from './APIProvider.js';
+import { Router } from './router/Router.js';
 import { search } from './VectorDatabase.js';
 
 // Config values for this module
@@ -61,8 +61,8 @@ export async function retrieve(query, options = {}) {
   const scope     = options.scope     ?? null;
   const filter    = buildFilter(options.filter ?? {}, scope);
 
-  // Step 1 — embed the query (cache-aware via APIProvider)
-  const queryVector = await embed(query);
+  // Step 1 — embed the query (cache-aware via EmbeddingManager)
+  const { vector: queryVector } = await Router.embed(query);
 
   // Step 2 — similarity search
   let results = await search(queryVector, { topK, minScore, filter });

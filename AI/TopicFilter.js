@@ -57,6 +57,17 @@ const OFF_TOPIC_INDICATORS = [
   'roblox', 'valorant', 'war', 'weapon', 'drug',
 ];
 
+const BOT_ASSIST_KEYWORDS = [
+  'link me', 'please link', 'how to link', 'get linked', 'am i linked',
+  'my link', 'i am not linked', 'i am linked', 'linking',
+  'how many fans', 'my fans', 'my fan gain', 'my profile', 'my rank',
+  'check my', 'show my', 'how do i', 'what command', 'help me with',
+  'link my', 'unlink me', 'who can link', 'can you link',
+  '/link', '/fan_gain', '/profile', '/leaderboard',
+  'how to use', 'how does the bot', 'bot command',
+  'who is the admin', 'ask admin', 'need admin',
+];
+
 const COMPLEXITY_KEYWORDS = [
   'explain', 'analyze', 'analyse', 'compare', 'strategy', 'why', 'how does',
   'difference between', 'best way', 'recommend', 'guide', 'optimize',
@@ -165,6 +176,19 @@ export function classify(query, commandOverride = null) {
 
 /** @private */
 function _keywordClassify(q) {
+  // ── Bot command assistance — always accept ─────────────────────────────
+  const botHits = countHits(q, BOT_ASSIST_KEYWORDS);
+  if (botHits > 0) {
+    return {
+      topic:            'umamusume',  // routes through KnowledgeEngine
+      complexity:       'simple',
+      confidence:       0.9,
+      method:           'keyword',
+      rejected:         false,
+      rejectionMessage: null,
+    };
+  }
+
   // Off-topic check first (fast reject)
   const offTopicHits = countHits(q, OFF_TOPIC_INDICATORS);
   if (offTopicHits > 0) {

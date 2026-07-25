@@ -90,19 +90,42 @@ class HuggingFaceModel {
 
     clearTimeout(this._idleTimer);
     this._idleTimer = null;
+
+    const memBefore = process.memoryUsage?.() ?? null;
+
+    // Drop the pipeline reference
     this._pipeline = null;
     this._ready = false;
     this._lastUsedAt = null;
 
-    log.info(`[AI] Model unloaded (${reason})`);
+    // Aggressive cache clearing for HuggingFace transformers
+    try {
+      const { env } = await import('@huggingface/transformers');
+      // Clear the model cache to free memory
+      if (env?.localModelPath) {
+        // Nothing to clear on disk — but the in-memory model is gone
+      }
+    } catch {
+      // @huggingface/transformers not imported — nothing to clear
+    }
 
+    // Force garbage collection (requires --expose-gc flag)
     if (global.gc) {
       try {
         global.gc();
+        // Second pass — some engines need two sweeps for large objects
+        global.gc();
       } catch {
-        // ignore — GC is optional
+        // ignore
       }
     }
+
+    const memAfter = process.memoryUsage?.() ?? null;
+    const freedMB = memBefore && memAfter
+      ? ((memBefore.heapUsed - memAfter.heapUsed) / 1024 / 1024).toFixed(1)
+      : 'unknown';
+
+    log.info(`[AI] Model unloaded (${reason}) — freed ~${freedMB} MB`);
   }
 
   _touch() {

@@ -11,10 +11,15 @@ const envInt = (name, fallback) => {
 };
 
 const config = {
-  aiProvider: 'local',
+  aiProvider: process.env.AI_PROVIDER
+    || (process.env.OPENAI_API_KEY  ? 'openai'  : null)
+    || (process.env.GEMINI_API_KEY ? 'gemini'   : null)
+    || (process.env.MISTRAL_API_KEY ? 'mistral' : null)
+    || (process.env.COHERE_API_KEY  ? 'cohere'  : null)
+    || 'local',
   localModelId: process.env.AI_LOCAL_MODEL || 'HuggingFaceTB/SmolLM2-135M-Instruct',
   localModelDevice: process.env.AI_LOCAL_DEVICE || 'cpu',
-  localModelIdleTimeoutMs: envInt('AI_LOCAL_IDLE_TIMEOUT_MS', 15 * 60 * 1000),
+  localModelIdleTimeoutMs: envInt('AI_LOCAL_IDLE_TIMEOUT_MS', 2 * 60 * 1000),
   localModelMaxConcurrency: envInt('AI_LOCAL_MAX_CONCURRENCY', 1),
   localModelGenerationTimeoutMs: envInt('AI_LOCAL_GENERATION_TIMEOUT_MS', 45 * 1000),
   localFailureThreshold: envInt('AI_LOCAL_FAILURE_THRESHOLD', 3),
@@ -51,7 +56,7 @@ const config = {
   cacheEnabled:       (process.env.CACHE_ENABLED ?? 'true') !== 'false',
   cacheEmbeddingTtlMs: envInt('CACHE_EMBEDDING_TTL_MS', 3_600_000),
   cacheEmbeddingMax:   envInt('CACHE_EMBEDDING_MAX',       1000),
-  cacheResponseTtlMs:  envInt('CACHE_RESPONSE_TTL_MS',  600_000),
+  cacheResponseTtlMs:  envInt('CACHE_RESPONSE_TTL_MS',  3_600_000),
   cacheResponseMax:    envInt('CACHE_RESPONSE_MAX',          500),
 
   tavilyApiKey:      process.env.TAVILY_API_KEY          || null,
@@ -65,6 +70,17 @@ const config = {
   searchProviderTimeoutMs:  envInt('SEARCH_PROVIDER_TIMEOUT_MS',  5_000),
   searchCacheTtlMs:         envInt('SEARCH_CACHE_TTL_MS',       600_000),
   searchConfidenceFallback: Number(process.env.SEARCH_CONFIDENCE_FALLBACK ?? '0.65'),
+
+  // ── New Provider + Manager architecture keys ────────────────────────────
+  mistralApiKey:  process.env.MISTRAL_API_KEY  || null,
+  mistralModel:   process.env.MISTRAL_MODEL    || 'mistral-small-latest',
+  cohereApiKey:   process.env.COHERE_API_KEY   || null,
+  cohereModel:    process.env.COHERE_MODEL     || 'command-r-plus',
+  cohereEmbedModel: process.env.COHERE_EMBED_MODEL || 'embed-english-v3.0',
+  firecrawlApiKey: process.env.FIRECRAWL_API_KEY || null,
+  serperApiKey:    process.env.SERPER_API_KEY    || null,
+  scrapeTimeoutMs:      envInt('SCRAPE_TIMEOUT_MS',      20_000),
+  embeddingTimeoutMs:   envInt('EMBEDDING_TIMEOUT_MS',   15_000),
 
   topicFilterConfidenceThreshold: Number(process.env.TOPIC_FILTER_CONFIDENCE_THRESHOLD ?? '0.70'),
   topicFilterAuditLog: (process.env.TOPIC_FILTER_AUDIT_LOG ?? 'true') !== 'false',
