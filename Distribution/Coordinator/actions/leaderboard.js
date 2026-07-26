@@ -132,7 +132,7 @@ export async function leaderboard(payload) {
   const top   = options.top   ?? 10;
   const date  = options.date  ?? null;
 
-  // ── Try fast path; fall back to old pipeline ───────────────────────────────
+  // ── Try fast path; fall back to old pipeline; final fallback: Member directory ──
   let result;
   try {
     result = await leaderboardFastPath({ circle: explicitCircle, scope, top, date, interaction });
@@ -143,14 +143,49 @@ export async function leaderboard(payload) {
     try {
       result = await leaderboardFallback(payload);
     } catch (fallbackErr) {
-      return {
-        success:   false,
-        failedAt:  'Commands',
-        error:     'UNEXPECTED_ERROR',
-        message:   `Leaderboard failed: ${fallbackErr.message}`,
-        retriable: false,
-        interaction,
-      };
+      // ── Final fallback: read from /Member/active/*.md files ────────────────
+      console.warn(
+        `[leaderboard] Pipeline fallback also failed (${fallbackErr.message}) — trying Member directory.`
+      );
+      try {
+        const { buildLeaderboardFromMembers } = await import(
+          '../../../Member/memberReader.js'
+        );
+        const memberData = buildLeaderboardFromMembers({ scope, top });
+
+        if (memberData.entries.length > 0) {
+          result = buildEmbed({
+            topEntries: memberData.entries.map(e => ({
+              ...e,
+              // buildEmbed expects entries to have [gainField] as a property
+              dailyFanGain:   e.dailyFanGain,
+              weeklyFanGain:  e.weeklyFanGain,
+              monthlyFanGain: e.monthlyFanGain,
+            })),
+            scope,
+            gainField:  memberData.gainField,
+            total:      memberData.total,
+            circleName: 'UmaKraft',
+            date,
+            interaction,
+          });
+          console.log(
+            `[leaderboard] Served from Member directory (${memberData.entries.length}/${memberData.total} members)`
+          );
+          result.success = true; // Ensure success flag
+        } else {
+          throw new Error('No members in Member directory');
+        }
+      } catch (memberErr) {
+        return {
+          success:   false,
+          failedAt:  'Commands',
+          error:     'ALL_SOURCES_EXHAUSTED',
+          message:   `Leaderboard failed — fast path, pipeline, and Member directory all unavailable: ${memberErr.message}`,
+          retriable: true,
+          interaction,
+        };
+      }
     }
   }
 

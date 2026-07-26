@@ -2,6 +2,7 @@
 // Sends a Discord response via the interaction object.
 // Handles deferred replies, follow-ups, and one retry on rate-limit.
 
+import { MessageFlags } from 'discord.js';
 import log from '../../core/log.js';
 
 export async function send(interaction, payload, { ephemeral = false, followUp = false } = {}) {
@@ -11,9 +12,13 @@ export async function send(interaction, payload, { ephemeral = false, followUp =
       ? 'editReply'
       : 'reply';
 
+  // editReply does not accept flags — visibility is set at deferReply time.
+  // For reply / followUp, use MessageFlags.Ephemeral (replaces deprecated `ephemeral`).
   const replyPayload = method === 'editReply'
     ? { ...payload }
-    : { ...payload, ephemeral };
+    : ephemeral
+      ? { ...payload, flags: MessageFlags.Ephemeral }
+      : { ...payload };
 
   const startedAt = Date.now();
 

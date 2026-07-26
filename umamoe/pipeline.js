@@ -21,6 +21,47 @@ import { failureEnvelope, successEnvelope }    from '../core/pipelineEnvelope.js
 import { stageTimeout }                        from '../core/pipelineRuntime.js';
 import { recordStageRun }                      from '../core/pipelineMetrics.js';
 
+// ── Member directory updater hook ────────────────────────────────────────
+// Debounced: only runs once per cooldown window even when multiple trainers
+// flow through the pipeline together (e.g. adminSync processes all linked
+// members sequentially).
+const MEMBER_UPDATE_COOLDOWN_MS = 30_000; // 30s
+let _memberUpdateTimer = null;
+let _memberUpdatePending = null;
+
+async function _maybeUpdateMemberDirectory(circleResult) {
+  if (!circleResult?.success) return;
+  _memberUpdatePending = circleResult;
+  if (_memberUpdateTimer !== null) return; // already scheduled
+
+  _memberUpdateTimer = setTimeout(async () => {
+    _memberUpdateTimer = null;
+    const payload = _memberUpdatePending;
+    _memberUpdatePending = null;
+    try {
+      // Lazy-import so the pipeline stays fast on first load
+      const { updateMemberDirectory } = await import(
+        '../Member/memberdataupdater.js'
+      );
+      const result = await updateMemberDirectory(payload);
+      if (result.success) {
+        logger.info('Member directory updated', {
+          active: result.active,
+          inactive: result.inactive,
+        });
+      } else {
+        logger.warn('Member directory update failed', {
+          errors: result.errors,
+        });
+      }
+    } catch (err) {
+      logger.warn('Member directory updater failed', {
+        error: err.message,
+      });
+    }
+  }, MEMBER_UPDATE_COOLDOWN_MS);
+}
+
 const logger = createLogger('umamoe-pipeline');
 
 // ─── Timeout-aware stage runner ───────────────────────────────────────────────
@@ -341,6 +382,11 @@ export async function processTrainer(trainerId, options = {}) {
     logger.warn('Circle fetch failed; will attempt trainer profile fallback', {
       trainerId, circleId, error: circleResult.error,
     });
+  } else if (circleResult?.success) {
+    // Signal the member directory to refresh from this circle data.
+    // Debounced: first call schedules, subsequent calls within the cooldown
+    // reuse the same pending payload.
+    _maybeUpdateMemberDirectory(circleResult);
   }
 
   // ── STEP 2: Try to build trainer envelope from circle member data ──────────
@@ -553,6 +599,8 @@ export async function processRankings(params = {}) {
       circleId,
       error: circleResult.error,
     });
+  } else if (circleResult?.success) {
+    _maybeUpdateMemberDirectory(circleResult);
   }
 
   // Normalise each item from /v4/rankings/gains to the flat shape the

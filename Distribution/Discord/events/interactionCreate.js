@@ -3,6 +3,7 @@
 // Owns acknowledgement timing, command routing, execution logging, and
 // user-facing fallback handling for uncaught failures.
 
+import { MessageFlags } from 'discord.js';
 import { dispatch }     from '../../Dispatcher/index.js';
 import { coordinator }  from '../../Coordinator/index.js';
 
@@ -46,17 +47,17 @@ function acknowledgedInteraction(interaction, deferredEphemeral) {
           // deferred publicly. Discord does not allow switching visibility after
           // defer, so we use followUp to deliver the ephemeral message privately
           // and replace the public placeholder with a brief notice.
-          if (!deferredEphemeral && payload.ephemeral) {
+          if (!deferredEphemeral && (payload.ephemeral || payload.flags)) {
             console.warn(
               `[interactionCreate] Handler requested ephemeral reply but defer was public ` +
               `— using followUp to preserve privacy.`
             );
             await target.editReply({ content: '⚠️ An error occurred — see the follow-up message below.' });
-            await target.followUp({ content: payload.content, ephemeral: true });
+            await target.followUp({ content: payload.content, flags: MessageFlags.Ephemeral });
             return { [INTERACTION_RESPONSE_HANDLED]: true };
           }
 
-          const { ephemeral: _ephemeral, ...editPayload } = payload;
+          const { ephemeral: _ephemeral, flags: _flags, ...editPayload } = payload;
           await target.editReply(editPayload);
           return { [INTERACTION_RESPONSE_HANDLED]: true };
         };
@@ -70,7 +71,7 @@ function acknowledgedInteraction(interaction, deferredEphemeral) {
 
 async function sendLastChanceFailure(interaction, message) {
   if (!interaction.deferred && !interaction.replied) {
-    return interaction.reply({ content: message, ephemeral: true });
+    return interaction.reply({ content: message, flags: MessageFlags.Ephemeral });
   }
   return interaction.editReply({ content: message });
 }
@@ -108,7 +109,7 @@ export async function execute(interaction, client) {
 
   try {
     if (!interaction.deferred && !interaction.replied) {
-      await interaction.deferReply({ ephemeral });
+      await interaction.deferReply(ephemeral ? { flags: MessageFlags.Ephemeral } : {});
       console.log(`[interactionCreate] Deferred /${commandName} (${ephemeral ? 'ephemeral' : 'public'})`);
     }
 
