@@ -144,8 +144,12 @@ export async function withWrite(dbPath, fn) {
     _dirty.add(dbPath);
     return result;
   };
-  const next = previous.catch(() => {}).then(op);
-  _writeQueues.set(dbPath, next.catch(() => {}));
+  const next = previous.catch((err) => {
+    console.error(`[sqlite] Write queue: previous operation failed for ${dbPath}: ${err.message}`);
+  }).then(op);
+  _writeQueues.set(dbPath, next.catch((err) => {
+    console.error(`[sqlite] Write queue: operation failed for ${dbPath}: ${err.message}`);
+  }));
   return next;
 }
 

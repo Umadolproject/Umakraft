@@ -34,7 +34,11 @@ export function formatEmbed(envelope) {
   }
 
   if (result.footer) {
-    embed.setFooter({ text: result.footer });
+    // Accept both a plain string and { text: string } object.
+    const footerText = typeof result.footer === 'object' && result.footer !== null
+      ? (result.footer.text ?? '')
+      : String(result.footer);
+    if (footerText) embed.setFooter({ text: footerText });
   }
 
   if (result.timestamp !== false) {

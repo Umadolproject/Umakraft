@@ -35,15 +35,11 @@ const ERROR_MESSAGES = {
     'A pipeline stage timed out. Please try again shortly.',
   // Leaderboard-specific
   RANKINGS_NO_DATA:
-    'No leaderboard data is available for this period. The daily sync may not have run yet — try again shortly.',
+    'No leaderboard data is available for this period. Try again after the next sync.',
+  RANKINGS_ALL_FAILED:
+    'The leaderboard pipeline failed to process trainer data. Please try again shortly.',
   RANKINGS_EMPTY:
     'No trainers qualified for the leaderboard this period.',
-  RANKINGS_CIRCLE_NOT_FOUND:
-    'The configured circle could not be found on Uma.moe. Check the circle ID in `botConfig.js`.',
-  RANKINGS_TIMEOUT:
-    'The leaderboard took too long to load. Uma.moe may be slow right now — please try again in a moment.',
-  RANKINGS_API_ERROR:
-    'Uma.moe returned an error for the leaderboard request. Please try again shortly.',
 
   // Workshop
   FABRICATOR_RENDER_ERROR:
@@ -82,9 +78,9 @@ const ERROR_MESSAGES = {
 export function formatError(envelope) {
   const message = ERROR_MESSAGES[envelope.error] ?? ERROR_MESSAGES.UNEXPECTED_ERROR;
 
-  // Always append the raw error code so users can report specific failures.
-  const suffix = envelope.error && envelope.error !== 'UNEXPECTED_ERROR'
-    ? `\n-# Error: \`${envelope.error}\` at \`${envelope.failedAt ?? 'unknown'}\``
+  // In development, append the raw error code for diagnostics.
+  const suffix = process.env.NODE_ENV === 'development'
+    ? `\n\`\`\`\nError: ${envelope.error} at ${envelope.failedAt}\n\`\`\``
     : '';
 
   return { content: message + suffix };
