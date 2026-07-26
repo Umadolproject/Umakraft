@@ -276,7 +276,17 @@ export async function runRankingsPipeline({ payload, rankingsParams, blueprintKe
         interaction,
       };
     }
-    throw err;
+    // Any non-timeout throw that escaped _runRankingsPipeline becomes a
+    // controlled failure envelope rather than propagating as UNEXPECTED_ERROR.
+    console.error('[pipelineImage] runRankingsPipeline unhandled error:', err);
+    return {
+      success:   false,
+      failedAt:  'Rankings',
+      error:     err.code ?? err.error ?? 'PIPELINE_STAGE_ERROR',
+      message:   err.message ?? 'An unexpected error occurred in the rankings pipeline',
+      retriable: true,
+      interaction,
+    };
   } finally {
     clearTimeout(_timeoutHandle);
   }

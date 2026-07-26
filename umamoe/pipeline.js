@@ -80,7 +80,19 @@ async function runParallel(items, fn, { concurrency = 5 } = {}) {
   async function worker() {
     while (nextIndex < items.length) {
       const i = nextIndex++;
-      results[i] = await fn(items[i]);
+      try {
+        results[i] = await fn(items[i]);
+      } catch (err) {
+        // Catch any unhandled throw from fn so a single bad trainer
+        // does not abort the entire parallel batch.
+        logger.error(`runParallel: fn threw for item[${i}]: ${err.message}`, { item: items[i]?.id });
+        results[i] = {
+          success:   false,
+          trainerId: items[i]?.id ?? String(i),
+          error:     'PIPELINE_STAGE_ERROR',
+          message:   err.message,
+        };
+      }
     }
   }
   await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, worker));
@@ -607,6 +619,14 @@ export async function processRankings(params = {}) {
     const rank = raw.rank
       ?? (scopeSortBy === 'gain_30d' ? raw.rank_30d : scopeSortBy === 'gain_7d' ? raw.rank_7d : raw.rank_3d)
       ?? raw.ranking ?? raw.team_class ?? raw.placement ?? 1;
+    // Build apiGains from the rankings API values so the Refiner can use
+    // them as the authoritative source on first-seen trainers (avoiding the
+    // first-seen zeroing of daily/weekly that would happen otherwise).
+    const apiGains = {};
+    if (typeof dailyFanGain   === 'number' && Number.isFinite(dailyFanGain))   apiGains.dailyFanGain   = dailyFanGain;
+    if (typeof weeklyFanGain  === 'number' && Number.isFinite(weeklyFanGain))  apiGains.weeklyFanGain  = weeklyFanGain;
+    if (typeof monthlyFanGain === 'number' && Number.isFinite(monthlyFanGain)) apiGains.monthlyFanGain = monthlyFanGain;
+
     return {
       // Preserve all raw fields first so nothing is lost for enrichment
       ...raw,
@@ -618,6 +638,9 @@ export async function processRankings(params = {}) {
       dailyFanGain,
       weeklyFanGain,
       monthlyFanGain,
+      // apiGains lets the Refiner bypass first-seen zeroing on the first
+      // leaderboard run — the rankings API already computed these values.
+      ...(Object.keys(apiGains).length > 0 ? { apiGains } : {}),
     };
   }
 

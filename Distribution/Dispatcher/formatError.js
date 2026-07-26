@@ -82,9 +82,9 @@ const ERROR_MESSAGES = {
 export function formatError(envelope) {
   const message = ERROR_MESSAGES[envelope.error] ?? ERROR_MESSAGES.UNEXPECTED_ERROR;
 
-  // In development, append the raw error code for diagnostics.
-  const suffix = process.env.NODE_ENV === 'development'
-    ? `\n\`\`\`\nError: ${envelope.error} at ${envelope.failedAt}\n\`\`\``
+  // Always append the raw error code so users can report specific failures.
+  const suffix = envelope.error && envelope.error !== 'UNEXPECTED_ERROR'
+    ? `\n-# Error: \`${envelope.error}\` at \`${envelope.failedAt ?? 'unknown'}\``
     : '';
 
   return { content: message + suffix };
