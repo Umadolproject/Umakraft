@@ -109,7 +109,7 @@ export async function execute(interaction, client) {
 
   try {
     if (!interaction.deferred && !interaction.replied) {
-      await interaction.deferReply({ ephemeral });
+      await interaction.deferReply(ephemeral ? { flags: MessageFlags.Ephemeral } : {});
       console.log(`[interactionCreate] Deferred /${commandName} (${ephemeral ? 'ephemeral' : 'public'})`);
     }
 
