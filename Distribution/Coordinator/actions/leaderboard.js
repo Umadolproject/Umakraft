@@ -1,12 +1,16 @@
 // Distribution/Coordinator/actions/leaderboard.js
-import { fetchLeaderboardEntries } from '../../../umamoe/rankingsQuick.js';
+//
+// Dynamic import strategy: tries the new fast-path (rankingsQuick) first.
+// If rankingsQuick.js is missing or fails to load, falls back to the
+// old runRankingsPipeline path.  This prevents a startup crash from
+// taking down the entire Coordinator module.
 import { parseCircleId } from '../utils/parseCircle.js';
 
 // ── Cooldown: 30 seconds per user (in-memory, resets on deploy) ──────────────
 const cooldowns = new Map();
 const COOLDOWN_MS = 30_000;
 
-// ── Embed builder (mirrors buildRankingsEmbed in pipelineImage.js) ─────────────
+// ── Embed builder ─────────────────────────────────────────────────────────────
 
 function buildEmbed({ topEntries, scope, gainField, total, circle, date, interaction }) {
   const scopeLabel = { daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly' }[scope] ?? scope;
@@ -40,6 +44,65 @@ function buildEmbed({ topEntries, scope, gainField, total, circle, date, interac
   };
 }
 
+// ─── Fast-path: fetch + enrich + sort directly (no Vault/Depot) ──────────────
+
+async function leaderboardFastPath({ circle, scope, top, date, interaction }) {
+  // Dynamic import — won't crash the Coordinator if rankingsQuick is missing
+  const { fetchLeaderboardEntries } = await import('../../../umamoe/rankingsQuick.js');
+  const result = await fetchLeaderboardEntries({ scope, top, circle, date });
+
+  if (!result.success) {
+    return {
+      success:   false,
+      failedAt:  'Umamoe',
+      error:     result.error ?? 'PIPELINE_STAGE_ERROR',
+      message:   result.message ?? 'Could not retrieve leaderboard data.',
+      retriable: true,
+      interaction,
+    };
+  }
+
+  return buildEmbed({
+    topEntries: result.entries,
+    scope,
+    gainField:  result.gainField,
+    total:      result.total,
+    circle,
+    date,
+    interaction,
+  });
+}
+
+// ─── Fallback: old runRankingsPipeline path ──────────────────────────────────
+
+async function leaderboardFallback(payload) {
+  const { runRankingsPipeline } = await import('../utils/pipelineImage.js');
+  const { options, guildId } = payload;
+  return runRankingsPipeline({
+    payload,
+    rankingsParams: {
+      circle: parseCircleId(options.circle) ?? null,
+      scope:  options.scope  ?? 'daily',
+      top:    options.top    ?? 10,
+      date:   options.date   ?? null,
+    },
+    blueprintKey: 'leaderboard',
+    mapToFabricator: (cp, opts) => ({
+      blueprintKey: 'leaderboard',
+      meta: {
+        circle:      parseCircleId(opts.circle) ?? null,
+        scope:       opts.scope  ?? 'daily',
+        top:         opts.top    ?? 10,
+        date:        opts.date   ?? null,
+        generatedAt: new Date().toISOString(),
+      },
+      entries: cp.entries ?? [],
+      trend:   cp.trend   ?? null,
+      presentationHints: cp.presentationHints ?? {},
+    }),
+  });
+}
+
 // ─── Public API ────────────────────────────────────────────────────────────────
 
 export async function leaderboard(payload) {
@@ -69,37 +132,38 @@ export async function leaderboard(payload) {
   const top    = options.top    ?? 10;
   const date   = options.date   ?? null;
 
-  // ── Fetch entries via the direct fast-path ──────────────────────────────────
-  const result = await fetchLeaderboardEntries({ scope, top, circle, date });
-
-  if (!result.success) {
-    return {
-      success:   false,
-      failedAt:  'Umamoe',
-      error:     result.error ?? 'PIPELINE_STAGE_ERROR',
-      message:   result.message ?? 'Could not retrieve leaderboard data.',
-      retriable: true,
-      interaction,
-    };
-  }
-
-  // ── Record cooldown (only on success — failed attempts are free) ────────────
-  cooldowns.set(userId, now);
-  // Prune stale cooldowns every 100 calls to avoid memory leak
-  if (cooldowns.size > 100) {
-    for (const [id, ts] of cooldowns) {
-      if (now - ts > COOLDOWN_MS) cooldowns.delete(id);
+  // ── Try fast path; fall back to old pipeline ───────────────────────────────
+  let result;
+  try {
+    result = await leaderboardFastPath({ circle, scope, top, date, interaction });
+  } catch (err) {
+    console.warn(
+      `[leaderboard] Fast path unavailable (${err.message}) — falling back to runRankingsPipeline.`
+    );
+    try {
+      result = await leaderboardFallback(payload);
+    } catch (fallbackErr) {
+      return {
+        success:   false,
+        failedAt:  'Commands',
+        error:     'UNEXPECTED_ERROR',
+        message:   `Leaderboard failed: ${fallbackErr.message}`,
+        retriable: false,
+        interaction,
+      };
     }
   }
 
-  // ── Build and return embed ─────────────────────────────────────────────────
-  return buildEmbed({
-    topEntries: result.entries,
-    scope,
-    gainField:  result.gainField,
-    total:      result.total,
-    circle,
-    date,
-    interaction,
-  });
+  // ── Record cooldown on success ─────────────────────────────────────────────
+  if (result.success !== false) {
+    cooldowns.set(userId, now);
+    // Prune stale entries every 100 calls
+    if (cooldowns.size > 100) {
+      for (const [id, ts] of cooldowns) {
+        if (now - ts > COOLDOWN_MS) cooldowns.delete(id);
+      }
+    }
+  }
+
+  return result;
 }
