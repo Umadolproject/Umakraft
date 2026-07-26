@@ -1,20 +1,17 @@
 /**
  * umamoe/rankingsQuick.js
- * Direct fast-path for leaderboard-type commands.
+ * Direct fast-path for circle leaderboard commands.
  *
- * Skips the full Vault → Refiner → Compiler → Depot chain. Instead:
- *   1. Fetch rankings from /v4/rankings/gains
- *   2. Fetch circle data for enrichment (fans, rank)
- *   3. Merge circle member data into each ranking item
- *   4. Sort by the requested gain field
- *   5. Return the top-N entries ready for embed display
+ * Builds the leaderboard DIRECTLY from circle member data — no rankings API,
+ * no ID-matching between rankings and circle.  This guarantees every entry
+ * is an actual circle member and eliminates the cross-API ID mismatch that
+ * caused the old pipeline (and the global rankings API) to show unrelated
+ * trainers.
  *
- * This avoids the SQLite write/read overhead that was causing ephemeral
- * file-system issues on Railway.  The old processRankings path is kept
- * untouched for scheduled / Broker runs that need Depot persistence.
+ * Gain computation reuses the same circleMemberGains logic already
+ * battle-tested in processTrainer (daily_fans deltas → day-over-day gain).
  *
- * Used by: leaderboard, interCircleLeaderboard, circleMaster, clubGain,
- *          totalCircleFanGain, memberList
+ * Used by: leaderboard (default), circleMaster, totalCircleFanGain
  */
 
 import * as Miner from './Miner/miner.js';
@@ -33,10 +30,6 @@ function firstNumber(...values) {
   return values.find(finiteNonNegative);
 }
 
-/**
- * Latest non-zero entry in a daily_fans array (calendar-month slots).
- * Works around pre-allocated 31-slot arrays where future days are 0.
- */
 function latestDailyFanCount(dailyFans) {
   if (!Array.isArray(dailyFans) || dailyFans.length === 0) return undefined;
   let idx = dailyFans.length - 1;
@@ -48,197 +41,250 @@ function latestDailyFanCount(dailyFans) {
   return undefined;
 }
 
-// ─── Normalisation ────────────────────────────────────────────────────────────
+/**
+ * How many consecutive trailing zeros are at the end of daily_fans.
+ * An active member always has a non-zero cumulative value at today's slot
+ * (the total fan count, even if growth is 0).  Trailing zeros mean the
+ * member left mid-month and the API zeroed out the remaining slots.
+ *
+ * Returns the count of trailing zero days.  > 3 means the member likely left.
+ */
+const LEFT_THRESHOLD_DAYS = 3;
 
-function normalizeRankingItem(raw, scopeSortBy) {
-  if (!raw || typeof raw !== 'object') return raw;
-  // Already normalised
-  if (typeof raw.id === 'string' && raw.id !== '') return raw;
+function trailingZeroDays(dailyFans) {
+  if (!Array.isArray(dailyFans) || dailyFans.length === 0) return 0;
+  let count = 0;
+  for (let i = dailyFans.length - 1; i >= 0; i--) {
+    const v = Number(dailyFans[i]);
+    if (!Number.isFinite(v) || v <= 0) {
+      count++;
+    } else {
+      break; // hit a real value — stop counting
+    }
+  }
+  return count;
+}
 
-  const id = String(
-    raw.account_id ?? raw.viewer_id ?? raw.trainer_id ?? raw.id ?? '',
-  );
-  const dailyFanGain   = raw.dailyFanGain   ?? raw.gain_3d  ?? raw.daily_gain   ?? null;
-  const weeklyFanGain  = raw.weeklyFanGain  ?? raw.gain_7d  ?? raw.weekly_gain  ?? null;
-  const monthlyFanGain = raw.monthlyFanGain ?? raw.gain_30d ?? raw.monthly_gain ?? null;
-  const rank = raw.rank
-    ?? (scopeSortBy === 'gain_30d' ? raw.rank_30d : scopeSortBy === 'gain_7d' ? raw.rank_7d : raw.rank_3d)
-    ?? raw.ranking ?? raw.team_class ?? raw.placement ?? 1;
+function hasMemberLeftThisMonth(member) {
+  const dailyFans = member?.daily_fans ?? member?.dailyFans;
+  const zeroDays = trailingZeroDays(dailyFans);
+  return zeroDays > LEFT_THRESHOLD_DAYS;
+}
 
-  return {
-    ...raw,
-    id,
-    name:  String(raw.name ?? raw.trainer_name ?? ''),
-    fans:  typeof raw.fans === 'number' ? raw.fans : 0,
-    rank,
-    dailyFanGain,
-    weeklyFanGain,
-    monthlyFanGain,
+// ─── Gain computation (mirrors pipeline.js circleMemberGains) ─────────────────
+
+function computeMemberGains(member) {
+  if (!member || typeof member !== 'object') return null;
+
+  // Try direct gain fields first (API may provide these).
+  const direct = {
+    dailyFanGain:   firstNumber(member.dailyFanGain, member.daily_gain, member.daily_fan_gain, member.dailyGain, member.fan_gain?.daily, member.fanGain?.daily),
+    weeklyFanGain:  firstNumber(member.weeklyFanGain, member.weekly_gain, member.weekly_fan_gain, member.weeklyGain, member.fan_gain?.weekly, member.fanGain?.weekly),
+    monthlyFanGain: firstNumber(member.monthlyFanGain, member.monthly_gain, member.monthly_fan_gain, member.monthlyGain, member.fan_gain?.monthly, member.fanGain?.monthly),
   };
-}
 
-// ─── Circle enrichment ────────────────────────────────────────────────────────
+  // Fall back to daily_fans deltas when direct fields are missing.
+  // daily_fans is a CUMULATIVE per-day array (e.g. [99234948, 99474675, …]).
+  const dailyFans = member.daily_fans ?? member.dailyFans;
+  if (Array.isArray(dailyFans) && dailyFans.length > 0) {
+    const lastSlot = dailyFans.length - 1;
 
-/**
- * Find a circle member by trainer ID, matching against all known ID fields.
- */
-function findCircleMember(circleResult, trainerId) {
-  const members = circleResult?.data?.members
-    ?? circleResult?.data?.circle?.members
-    ?? circleResult?.data?.data?.members
-    ?? [];
-  if (!Array.isArray(members) || members.length === 0) return null;
+    // Walk back to the most recent non-zero entry.
+    let todayIdx = Math.min(new Date().getDate() - 1, lastSlot);
+    while (todayIdx > 0 && !(finiteNonNegative(dailyFans[todayIdx]) && dailyFans[todayIdx] > 0)) todayIdx--;
 
-  const targetId = String(trainerId);
-  return members.find(m =>
-    String(m.viewer_id  ?? '') === targetId ||
-    String(m.account_id ?? '') === targetId ||
-    String(m.id         ?? '') === targetId ||
-    String(m.trainer_id ?? '') === targetId,
-  ) ?? null;
-}
+    const today = finiteNonNegative(dailyFans[todayIdx]) ? dailyFans[todayIdx] : undefined;
 
-/**
- * Extract the absolute fan count and rank from a circle member record.
- */
-function extractCircleFields(member) {
-  if (!member) return {};
+    if (today !== undefined) {
+      const prevDay   = todayIdx >= 1 ? dailyFans[todayIdx - 1] : undefined;
+      const weekAgo   = todayIdx >= 7 ? dailyFans[todayIdx - 7] : undefined;
 
-  const dailyFans  = member.daily_fans ?? member.dailyFans;
-  const latestFans = latestDailyFanCount(dailyFans);
+      let baselineIdx = 0;
+      while (baselineIdx < todayIdx && !(finiteNonNegative(dailyFans[baselineIdx]) && dailyFans[baselineIdx] > 0)) {
+        baselineIdx++;
+      }
+      const baseline = finiteNonNegative(dailyFans[baselineIdx]) ? dailyFans[baselineIdx] : undefined;
 
-  const memberRank = firstNumber(
-    member.rank, member.placement, member.ranking, member.daily_rank, member.dailyRank,
-  );
+      if (direct.dailyFanGain === undefined) {
+        direct.dailyFanGain = finiteNonNegative(prevDay) && prevDay > 0
+          ? Math.max(0, today - prevDay)
+          : 0;
+      }
 
-  const result = {};
-  if (typeof latestFans === 'number') result.fans = latestFans;
-  if (memberRank !== undefined)       result.rank = memberRank;
+      if (direct.weeklyFanGain === undefined) {
+        if (finiteNonNegative(weekAgo) && weekAgo > 0) {
+          direct.weeklyFanGain = Math.max(0, today - weekAgo);
+        } else if (baseline !== undefined && baselineIdx < todayIdx) {
+          direct.weeklyFanGain = Math.max(0, today - baseline);
+        } else {
+          direct.weeklyFanGain = 0;
+        }
+      }
 
-  return result;
-}
+      if (direct.monthlyFanGain === undefined) {
+        direct.monthlyFanGain = baseline !== undefined && baselineIdx < todayIdx
+          ? Math.max(0, today - baseline)
+          : 0;
+      }
+    }
+  }
 
-/**
- * Merge circle member data (fans, rank) into a normalised ranking item.
- * Circle data wins for fans/rank; API gains remain untouched.
- */
-function enrichWithCircle(trainer, circleResult) {
-  if (!circleResult?.success) return trainer;
-
-  const member = findCircleMember(circleResult, trainer.id);
-  if (!member) return trainer;
-
-  const circleFields = extractCircleFields(member);
-
-  // Only override fans if the circle actually provides a real value (> 0);
-  // the rankings API always returns fans: 0 which is a placeholder.
-  const enriched = { ...trainer };
-  if (circleFields.fans && circleFields.fans > 0) enriched.fans = circleFields.fans;
-  if (circleFields.rank !== undefined)             enriched.rank = circleFields.rank;
-
-  return enriched;
+  const result = Object.fromEntries(Object.entries(direct).filter(([, v]) => v !== undefined));
+  return Object.keys(result).length > 0 ? result : null;
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 /**
- * Fetch and prepare leaderboard entries directly from the uma.moe API.
+ * Build a leaderboard directly from circle member data.
+ *
+ * Fetches the circle, extracts every member, computes gains from daily_fans
+ * (or direct gain fields), sorts by the requested scope, and returns the
+ * top-N entries.
  *
  * @param {object} params
  * @param {'daily'|'weekly'|'monthly'} [params.scope='daily']
  * @param {number}                     [params.top=10]
- * @param {string|null}                [params.circle]  — circle ID for filtering & enrichment
- * @param {string|null}                [params.date]    — ISO date for historical rankings
- * @param {number|null}                [params.day]     — day-of-month (for circleMaster)
+ * @param {string|null}                [params.circle] — uma.moe circle ID
  * @returns {Promise<{
  *   success: boolean,
- *   entries: Array<{id, name, fans, rank, dailyFanGain, weeklyFanGain, monthlyFanGain}>,
+ *   entries: Array,
  *   total: number,
  *   gainField: string,
+ *   circleName?: string,
+ *   circleId?: string,
  *   error?: string,
  *   message?: string,
  * }>}
  */
 export async function fetchLeaderboardEntries(params = {}) {
-  const scope     = params.scope  ?? 'daily';
+  const scope    = params.scope  ?? 'daily';
   const top      = params.top    ?? 10;
   const circleId = params.circle ?? CONFIGURED_CIRCLES[0] ?? null;
 
-  // ── 1. Fetch rankings + circle in parallel ──────────────────────────────────
-  const sortBy = scope === 'monthly' ? 'gain_30d'
-               : scope === 'weekly'  ? 'gain_7d'
-               : 'gain_3d';
-
-  const rankingsParams = { sort_by: sortBy, limit: top };
-  if (params.date) rankingsParams.date = params.date;
-  if (params.day)  rankingsParams.day  = params.day;
-
-  let rankingsResult;
-  let circleResult = null;
-
-  try {
-    const promises = [Miner.fetchRankings(rankingsParams)];
-    if (circleId) promises.push(Miner.fetchCircle(circleId));
-
-    const results = await Promise.allSettled(promises);
-    rankingsResult = results[0].status === 'fulfilled' ? results[0].value : null;
-    circleResult   = results[1]?.status === 'fulfilled' ? results[1].value : null;
-  } catch (err) {
-    logger.error('rankings fetch failed', { error: err.message });
-    return { success: false, entries: [], total: 0, gainField: sortBy,
-             error: 'API_FETCH_FAILED', message: err.message };
-  }
-
-  if (!rankingsResult?.success) {
+  if (!circleId) {
     return {
       success: false,
       entries: [],
       total: 0,
-      gainField: sortBy,
-      error: rankingsResult?.error ?? 'RANKINGS_API_ERROR',
-      message: rankingsResult?.message ?? 'Failed to fetch rankings from uma.moe',
+      gainField: 'dailyFanGain',
+      error: 'NO_CIRCLE',
+      message: 'No circle configured. Set CONFIGURED_CIRCLES or pass a circle option.',
     };
   }
 
-  // ── 2. Extract & normalise raw trainer list ────────────────────────────────
-  const rawData = rankingsResult.data;
-  const rawTrainers = Array.isArray(rawData)
-    ? rawData
-    : rawData?.rankings
-      ?? rawData?.trainers
-      ?? rawData?.data
-      ?? [];
+  // ── 1. Fetch circle ────────────────────────────────────────────────────────
+  let circleResult;
+  try {
+    circleResult = await Miner.fetchCircle(circleId);
+  } catch (err) {
+    logger.error('circle fetch failed', { circleId, error: err.message });
+    return {
+      success: false,
+      entries: [],
+      total: 0,
+      gainField: 'dailyFanGain',
+      error: 'CIRCLE_FETCH_FAILED',
+      message: `Failed to fetch circle ${circleId}: ${err.message}`,
+    };
+  }
 
-  const trainers = rawTrainers
-    .map(r => normalizeRankingItem(r, sortBy))
-    .filter(t => t?.id && typeof t.id === 'string' && t.id !== '');
+  if (!circleResult?.success) {
+    return {
+      success: false,
+      entries: [],
+      total: 0,
+      gainField: 'dailyFanGain',
+      error: circleResult?.error ?? 'CIRCLE_API_ERROR',
+      message: circleResult?.message ?? `Circle ${circleId} returned an error.`,
+    };
+  }
 
-  // ── 3. Enrich with circle data ─────────────────────────────────────────────
-  const enriched = circleResult?.success
-    ? trainers.map(t => enrichWithCircle(t, circleResult))
-    : trainers;
+  // ── 2. Extract members ─────────────────────────────────────────────────────
+  const members =
+    circleResult?.data?.members
+    ?? circleResult?.data?.circle?.members
+    ?? circleResult?.data?.data?.members
+    ?? [];
 
-  // ── 4. Sort by gain field ──────────────────────────────────────────────────
-  const gainField = scope === 'monthly' ? 'monthlyFanGain'
-                  : scope === 'weekly'  ? 'weeklyFanGain'
-                  : 'dailyFanGain';
+  if (!Array.isArray(members) || members.length === 0) {
+    return {
+      success: false,
+      entries: [],
+      total: 0,
+      gainField: 'dailyFanGain',
+      error: 'CIRCLE_EMPTY',
+      message: `Circle ${circleId} has no members.`,
+    };
+  }
 
-  enriched.sort((a, b) => (b[gainField] ?? 0) - (a[gainField] ?? 0));
+  // ── 3. Build entries from circle members ───────────────────────────────────
+  const entries = [];
+  let leftMembers = 0;
 
-  const topEntries = enriched.slice(0, top);
+  for (const m of members) {
+    // Skip members who left this month (trailing zeros in daily_fans).
+    if (hasMemberLeftThisMonth(m)) { leftMembers++; continue; }
 
-  logger.info('rankings quick fetch complete', {
-    total: enriched.length,
+    const gains = computeMemberGains(m);
+
+    const id = String(
+      m.viewer_id ?? m.account_id ?? m.trainer_id ?? m.id ?? '',
+    );
+    if (!id) continue;
+
+    const name = String(m.name ?? m.trainer_name ?? m.trainerName ?? id);
+
+    const dailyFans = m.daily_fans ?? m.dailyFans;
+    const fans      = latestDailyFanCount(dailyFans) ?? 0;
+
+    const rank = firstNumber(
+      m.rank, m.placement, m.ranking, m.daily_rank, m.dailyRank,
+    ) ?? 1;
+
+    entries.push({
+      id,
+      name,
+      fans,
+      rank,
+      dailyFanGain:    gains?.dailyFanGain   ?? 0,
+      weeklyFanGain:   gains?.weeklyFanGain  ?? 0,
+      monthlyFanGain:  gains?.monthlyFanGain ?? 0,
+    });
+  }
+
+  // ── 4. Sort by scope gain field ────────────────────────────────────────────
+  const gainField =
+    scope === 'monthly' ? 'monthlyFanGain'
+  : scope === 'weekly'  ? 'weeklyFanGain'
+  :                        'dailyFanGain';
+
+  entries.sort((a, b) => (b[gainField] ?? 0) - (a[gainField] ?? 0));
+
+  const topEntries = entries.slice(0, top);
+
+  // ── 5. Circle name for the embed ───────────────────────────────────────────
+  const circleName =
+    circleResult?.data?.circle?.name
+    ?? circleResult?.data?.name
+    ?? `Circle ${circleId}`;
+
+  logger.info('leaderboard built from circle', {
+    circleId,
+    totalMembers: members.length,
+    leftMembers,
+    activeMembers: entries.length,
     top: topEntries.length,
     scope,
     gainField,
-    circleEnriched: circleResult?.success ?? false,
   });
 
   return {
     success: true,
     entries: topEntries,
-    total: enriched.length,
+    total: entries.length,
     gainField,
+    circleName,
+    circleId,
   };
 }

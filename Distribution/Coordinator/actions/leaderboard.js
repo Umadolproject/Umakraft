@@ -1,9 +1,7 @@
 // Distribution/Coordinator/actions/leaderboard.js
 //
-// Dynamic import strategy: tries the new fast-path (rankingsQuick) first.
-// If rankingsQuick.js is missing or fails to load, falls back to the
-// old runRankingsPipeline path.  This prevents a startup crash from
-// taking down the entire Coordinator module.
+// Dynamic import with fallback: tries fast-path (rankingsQuick) first.
+// Falls back to runRankingsPipeline on any error.
 import { parseCircleId } from '../utils/parseCircle.js';
 
 // ── Cooldown: 30 seconds per user (in-memory, resets on deploy) ──────────────
@@ -12,10 +10,10 @@ const COOLDOWN_MS = 30_000;
 
 // ── Embed builder ─────────────────────────────────────────────────────────────
 
-function buildEmbed({ topEntries, scope, gainField, total, circle, date, interaction }) {
+function buildEmbed({ topEntries, scope, gainField, total, circleName, date, interaction }) {
   const scopeLabel = { daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly' }[scope] ?? scope;
   const dateLabel = date ? ` \u00b7 ${date}` : '';
-  const circleLabel = circle ? `Circle ${circle}` : 'All Circles';
+  const circleLabel = circleName ?? 'All Circles';
   const medal = ['\uD83E\uDD47', '\uD83E\uDD48', '\uD83E\uDD49'];
 
   const description = topEntries.length === 0
@@ -44,10 +42,9 @@ function buildEmbed({ topEntries, scope, gainField, total, circle, date, interac
   };
 }
 
-// ─── Fast-path: fetch + enrich + sort directly (no Vault/Depot) ──────────────
+// ─── Fast-path: build leaderboard directly from circle members ───────────────
 
 async function leaderboardFastPath({ circle, scope, top, date, interaction }) {
-  // Dynamic import — won't crash the Coordinator if rankingsQuick is missing
   const { fetchLeaderboardEntries } = await import('../../../umamoe/rankingsQuick.js');
   const result = await fetchLeaderboardEntries({ scope, top, circle, date });
 
@@ -67,7 +64,7 @@ async function leaderboardFastPath({ circle, scope, top, date, interaction }) {
     scope,
     gainField:  result.gainField,
     total:      result.total,
-    circle,
+    circleName: result.circleName,
     date,
     interaction,
   });
@@ -77,7 +74,7 @@ async function leaderboardFastPath({ circle, scope, top, date, interaction }) {
 
 async function leaderboardFallback(payload) {
   const { runRankingsPipeline } = await import('../utils/pipelineImage.js');
-  const { options, guildId } = payload;
+  const { options } = payload;
   return runRankingsPipeline({
     payload,
     rankingsParams: {
@@ -127,15 +124,18 @@ export async function leaderboard(payload) {
     };
   }
 
-  const circle = parseCircleId(options.circle) ?? null;
-  const scope  = options.scope  ?? 'daily';
-  const top    = options.top    ?? 10;
-  const date   = options.date   ?? null;
+  // The user may pass an explicit circle, or we use the configured default.
+  // parseCircleId returns null for empty/undefined, so we DON'T null-coalesce
+  // here — fetchLeaderboardEntries will apply CONFIGURED_CIRCLES[0] as default.
+  const explicitCircle = parseCircleId(options.circle);
+  const scope = options.scope ?? 'daily';
+  const top   = options.top   ?? 10;
+  const date  = options.date  ?? null;
 
   // ── Try fast path; fall back to old pipeline ───────────────────────────────
   let result;
   try {
-    result = await leaderboardFastPath({ circle, scope, top, date, interaction });
+    result = await leaderboardFastPath({ circle: explicitCircle, scope, top, date, interaction });
   } catch (err) {
     console.warn(
       `[leaderboard] Fast path unavailable (${err.message}) — falling back to runRankingsPipeline.`
@@ -154,10 +154,9 @@ export async function leaderboard(payload) {
     }
   }
 
-  // ── Record cooldown on success ─────────────────────────────────────────────
+  // ── Record cooldown ────────────────────────────────────────────────────────
   if (result.success !== false) {
     cooldowns.set(userId, now);
-    // Prune stale entries every 100 calls
     if (cooldowns.size > 100) {
       for (const [id, ts] of cooldowns) {
         if (now - ts > COOLDOWN_MS) cooldowns.delete(id);
