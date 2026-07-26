@@ -360,7 +360,7 @@ export async function embed(text) {
   const cached = getEmbedding(normalised);
   if (cached !== undefined) {
     log.debug(`[AI/APIProvider] Embedding cache hit for "${normalised.slice(0, 40)}..."`);
-    return cached;
+    return { vector: cached, model: config.embeddingModel, tokens: 0 };
   }
 
   // Generate via OpenAI — rotate to backup key on 429
@@ -371,7 +371,7 @@ export async function embed(text) {
 
   setEmbedding(normalised, vector);
   log.debug(`[AI/APIProvider] Embedding generated and cached (dim: ${vector.length})`);
-  return vector;
+  return { vector, model: config.embeddingModel, tokens: 0 };
 }
 
 /**

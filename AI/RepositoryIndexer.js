@@ -17,6 +17,7 @@ import config from './Configuration.js';
 import { Router } from './router/Router.js';
 import { upsert, getChecksum, deleteByFile, listAllFilePaths } from './VectorDatabase.js';
 import { deriveChunkId } from './VectorDatabase.js';
+import { recordIndexerRun } from './AIObserver.js';
 
 // ---------------------------------------------------------------------------
 // Exclusion rules
@@ -457,6 +458,9 @@ export async function fullIndex(rootDir) {
     `duration=${(durationMs / 1000).toFixed(1)}s`
   );
 
+  // Notify AIObserver for Operation health tracking
+  recordIndexerRun({ status: errorCount > 0 ? 'error' : 'ok', durationMs });
+
   return { total: files.length, indexed: indexedCount, skipped: skippedCount, errors: errorCount, durationMs };
 }
 
@@ -511,6 +515,9 @@ export async function incrementalIndex(rootDir) {
     `${indexedCount} changed, ${skippedCount} unchanged, ${errorCount} errors, ` +
     `duration=${(durationMs / 1000).toFixed(1)}s`
   );
+
+  // Notify AIObserver for Operation health tracking
+  recordIndexerRun({ status: errorCount > 0 ? 'error' : 'ok', durationMs });
 
   return { total: files.length, indexed: indexedCount, skipped: skippedCount, errors: errorCount, durationMs };
 }

@@ -14,14 +14,14 @@ import { buildSafePrompt } from './Security.js';
 // Token budget (chars ÷ 4 ≈ tokens; conservative estimate)
 // ---------------------------------------------------------------------------
 
-const MAX_PROMPT_CHARS = 400_000; // ~100k tokens — well under any provider limit
+const MAX_PROMPT_CHARS = 32_000; // ~8k tokens — safe for all providers (8K–128K windows)
 
 // ---------------------------------------------------------------------------
 // Inline prompt templates by mode
 // ---------------------------------------------------------------------------
 // Each template uses {{context}} and {{question}} placeholders plus optional
-// mode-specific variables. Security.buildSafePrompt() prepends the system
-// constraint block and sanitises {{question}} before injection.
+// mode-specific variables (e.g. {{messagePrompt}}).
+// Security.buildSafePrompt() prepends the system constraint block.
 
 const TEMPLATES = {
   repository: `You are answering a question about the Umakraft repository.
@@ -46,9 +46,7 @@ Question: {{question}}
 
 Answer clearly and accurately. Define any technical terms you use.`,
 
-  message: `{{messagePrompt}}
-
-Question / Context: {{question}}`,
+  message: `{{messagePrompt}}`,
 
   search: `You are searching the Umakraft repository for content relevant to the query below.
 Summarise the most relevant findings from the provided context, citing file paths.
@@ -70,7 +68,7 @@ Context:
 
 Topic to explain: {{question}}
 
-Structure your explanation with: Definition → How it works → Examples (if relevant) → Related concepts.`,
+Structure your explanation with: Definition -> How it works -> Examples (if relevant) -> Related concepts.`,
 
   docs: `You are documenting a file or component from the Umakraft repository.
 Use the provided context to produce a clear technical summary.
@@ -96,16 +94,16 @@ Provide: Definition, category, related terms, and source.`,
   assistant: `You are the Umakraft Discord bot assistant. A user needs help using the bot.
 
 CRITICAL RULES:
-- If the user is asking about linking, fan gain, profile, or anything that requires linking — FIRST check if they are linked. If they are NOT linked, explain they need an admin to /link them. NEVER claim the user can link themselves.
-- If the user says "link me", "please link", or tags an admin for linking — acknowledge the request warmly but explain only admins can run /link.
-- If the user asks about their own stats (fans, profile, rank) and they are not linked — tell them to ask an admin to link them first.
+- If the user is asking about linking, fan gain, profile, or anything that requires linking: FIRST check if they are linked. If they are NOT linked, explain they need an admin to /link them. NEVER claim the user can link themselves.
+- If the user says "link me", "please link", or tags an admin for linking: acknowledge the request warmly but explain only admins can run /link.
+- If the user asks about their own stats (fans, profile, rank) and they are not linked: tell them to ask an admin to link them first.
 - Always be helpful, encouraging, and concise. Never scold.
-- If you don\'t know something specific about the user (like their trainer ID), say so — don\'t make it up.
+- If you do not know something specific about the user (like their trainer ID), say so — do not make it up.
 
 Knowledge Context (bot commands and linking info):
 {{context}}
 
-User\'s question: {{question}}
+User question: {{question}}
 
 Respond helpfully, tagging any mentioned users as needed. Keep it under 200 words.`,
 };
@@ -117,9 +115,9 @@ Respond helpfully, tagging any mentioned users as needed. Keep it under 200 word
 /**
  * Assemble the full prompt for a given mode.
  *
- * @param {'repository'|'knowledge'|'message'|'search'|'explain'|'docs'|'glossary'} mode
+ * @param {'repository'|'knowledge'|'message'|'search'|'explain'|'docs'|'glossary'|'assistant'} mode
  * @param {string} context  — assembled context block from ContextBuilder.build()
- * @param {string} question — original user question (will be sanitised)
+ * @param {string} question — original user question (not used for message mode)
  * @param {Record<string, string>} [variables] — additional template variables
  * @returns {string} fully assembled, safe prompt
  */
@@ -130,28 +128,39 @@ export function assemble(mode, context, question, variables = {}) {
     return assemble('repository', context, question, variables);
   }
 
-  // Inject context into the template first (context is trusted — from our own pipeline)
-  const withContext = template.replace(/\{\{context\}\}/g, context || '(no context available)');
+  // Step 1: Inject context into the template
+  let withVars = template.replace(/\{\{context\}\}/g, context || '(no context available)');
 
-  // Inject any extra variables (messagePrompt, etc.) before handing to buildSafePrompt
-  let withVars = withContext;
+  // Step 2: Inject any extra variables (e.g. messagePrompt)
   for (const [key, value] of Object.entries(variables)) {
-    if (key === 'question') continue; // handled by buildSafePrompt
     withVars = withVars.replace(
       new RegExp(`\\{\\{${key}\\}\\}`, 'g'),
       String(value ?? '')
     );
   }
 
-  // buildSafePrompt prepends the system constraint block and sanitises {{question}}
-  const prompt = buildSafePrompt(withVars, question, {});
+  // Step 3: Assemble via buildSafePrompt
+  //   - message mode: no user question — the entire prompt IS the instruction
+  //   - all other modes: sanitize and inject the user question
+  let prompt;
+  if (mode === 'message') {
+    // Message mode does NOT use the read-only assistant system constraint.
+    // ContentGenerator builds the full persona prompt internally — the constraint
+    // block's "read-only knowledge service" identity would contradict the persona.
+    prompt = withVars;
+  } else {
+    prompt = buildSafePrompt(withVars, question || '', {});
+  }
 
-  // Token budget guard
+  // Step 4: Token budget guard with actual truncation
   if (prompt.length > MAX_PROMPT_CHARS) {
+    const truncated = prompt.slice(0, MAX_PROMPT_CHARS);
     log.warn(
-      `[AI/PromptSystem] Assembled prompt (${prompt.length} chars) exceeds budget ` +
-      `(${MAX_PROMPT_CHARS} chars). Context may be truncated.`
+      `[AI/PromptSystem] Prompt (${prompt.length} chars) exceeds budget ` +
+      `(${MAX_PROMPT_CHARS} chars) — TRUNCATED. ` +
+      `Estimated tokens: ${Math.ceil(truncated.length / 4)}`
     );
+    prompt = truncated;
   }
 
   log.info(

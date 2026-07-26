@@ -239,16 +239,12 @@ await test('rateLimiterStats returns expected shape', () => {
 });
 
 await test('generate() throws a clear error when keys are missing', async () => {
-  // Keys are hardcoded to null in local mode — always throws
   await assert.rejects(
     () => generate('test prompt', { complexity: 'complex' }),
     (err) => {
-      // Should mention the key or unavailability — not a cryptic internal error
       assert.ok(
-        err.message.includes('ApiKey') ||
-        err.message.includes('API_KEY') ||
-        err.message.includes('unavailable') ||
-        err.message.includes('temporarily'),
+        err.message.includes('temporarily unavailable') ||
+        err.message.includes('No API key'),
         `Unexpected error message: ${err.message}`
       );
       return true;
@@ -262,7 +258,9 @@ await test('embed() returns cached vector without calling API', async () => {
   setEmbedding('cached embed test', cachedVector);
 
   const result = await embed('cached embed test');
-  assert.deepEqual(result, cachedVector);
+  assert.ok(result.vector, 'Should have .vector property');
+  assert.deepEqual(result.vector, cachedVector);
+  assert.ok(result.model, 'Should include model name');
 });
 
 // ── Summary ──────────────────────────────────────────────────────────────────

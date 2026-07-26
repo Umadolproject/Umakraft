@@ -56,7 +56,7 @@ const config = {
   cacheEnabled:       (process.env.CACHE_ENABLED ?? 'true') !== 'false',
   cacheEmbeddingTtlMs: envInt('CACHE_EMBEDDING_TTL_MS', 3_600_000),
   cacheEmbeddingMax:   envInt('CACHE_EMBEDDING_MAX',       1000),
-  cacheResponseTtlMs:  envInt('CACHE_RESPONSE_TTL_MS',  3_600_000),
+  cacheResponseTtlMs:  envInt('CACHE_RESPONSE_TTL_MS',    600_000),
   cacheResponseMax:    envInt('CACHE_RESPONSE_MAX',          500),
 
   tavilyApiKey:      process.env.TAVILY_API_KEY          || null,
@@ -99,6 +99,10 @@ const config = {
   confidenceScore:    (process.env.AI_CONFIDENCE_SCORE    ?? 'false') === 'true',
   conversationMemory: (process.env.AI_CONVERSATION_MEMORY ?? 'false') === 'true',
   reindexOnStartup:   (process.env.AI_REINDEX_ON_STARTUP  ?? 'false') === 'true',
+
+  // Agent Layer — opt-in. When enabled, aiGateway routes through Agent.orchestrate()
+  // instead of the classic hardcoded pipeline.
+  aiAgentEnabled:     (process.env.AI_AGENT_ENABLED       ?? 'false') === 'true',
 };
 
 export function validate() {

@@ -266,6 +266,11 @@ const deadLetterReplay = new SlashCommandBuilder()
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
   .addStringOption(o => o.setName('notification_key').setDescription('Notification key to replay').setRequired(true));
 
+const adminGreet = new SlashCommandBuilder()
+  .setName('admin-greet')
+  .setDescription('Generate and post an AI greeting to this channel (admin only)')
+  .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild);
+
 // ─── AI Commands ──────────────────────────────────────────────────────────────
 
 const ask = new SlashCommandBuilder()
@@ -308,39 +313,6 @@ const ai = new SlashCommandBuilder()
       .setDescription('Term to look up (e.g. MANT, Fan Deficit, Trend Tier)')
       .setRequired(true)))
   .addSubcommand(sub => sub
-    .setName('message')
-    .setDescription('Generate a community message (greeting, milestone, warning, etc.)')
-    .addStringOption(o => o
-      .setName('type')
-      .setDescription('Message type')
-      .setRequired(true)
-      .addChoices(
-        { name: 'Greeting',      value: 'greeting'      },
-        { name: 'Milestone',     value: 'milestone'     },
-        { name: 'Achievement',   value: 'achievement'   },
-        { name: 'Leaderboard',   value: 'leaderboard'   },
-        { name: 'Warning',       value: 'warning'       },
-        { name: 'Reminder',      value: 'reminder'      },
-        { name: 'Documentation', value: 'documentation' },
-      ))
-    .addStringOption(o => o
-      .setName('trainer_name')
-      .setDescription('Trainer name — required for milestone, achievement, and warning messages')
-      .setAutocomplete(true))
-    .addIntegerOption(o => o
-      .setName('milestone_value')
-      .setDescription('Fan count milestone (e.g. 1000000) — required for milestone messages')
-      .setMinValue(1))
-    .addStringOption(o => o
-      .setName('achievement_name')
-      .setDescription('Achievement name — required for achievement messages'))
-    .addStringOption(o => o
-      .setName('event_name')
-      .setDescription('Event name — required for reminder messages'))
-    .addStringOption(o => o
-      .setName('event_date')
-      .setDescription('Event date — YYYY-MM-DD, used for reminder messages')))
-  .addSubcommand(sub => sub
     .setName('live')
     .setDescription('Search live uma.moe data and current rankings via web')
     .addStringOption(o => o
@@ -357,6 +329,7 @@ const commands = [
   link, unlink, linkList, setFans, adminSync, adminSetJoinDate,
   testMilestone, timelineSetup, timelinePost, adminSyncCards, warningSettings,
   deadLetterInspect, deadLetterReplay,
+  adminGreet,
   ask, ai,
 ].map(c => c.toJSON());
 

@@ -27,15 +27,6 @@ export async function execute(interaction, coordinator) {
       options.term = interaction.options.getString('term', true);
       break;
 
-    case 'message':
-      options.type             = interaction.options.getString('type', true);
-      options.trainer_name     = interaction.options.getString('trainer_name')     ?? undefined;
-      options.milestone_value  = interaction.options.getInteger('milestone_value') ?? undefined;
-      options.achievement_name = interaction.options.getString('achievement_name') ?? undefined;
-      options.event_name       = interaction.options.getString('event_name')       ?? undefined;
-      options.event_date       = interaction.options.getString('event_date')       ?? undefined;
-      break;
-
     case 'live':
       options.query = interaction.options.getString('query', true);
       break;

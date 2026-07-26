@@ -14,9 +14,33 @@ import { getResponse, setResponse } from '../../../AI/Cache.js';
 import config from '../../../AI/Configuration.js';
 import { log as logQuestion } from '../../../Operation/AskLogger.js';
 import log from '../../../core/log.js';
+import { recordRequestStart, recordRequestEnd } from '../../../AI/AIObserver.js';
+import {
+  addConversationTurn,
+  getConversationContext,
+  formatWithCitations,
+  formatConfidence,
+  detectLanguage,
+  instructionForLanguage,
+} from '../../../AI/AdvancedFeatures.js';
+
+// Agent Layer — opt-in via AI_AGENT_ENABLED=true
+let _agent = null;
+async function _getAgent() {
+  if (!_agent) {
+    try {
+      const mod = await import('../../../AI/Agent.js');
+      _agent = mod.orchestrate;
+    } catch { /* Agent not available */ }
+  }
+  return _agent;
+}
 
 const DISCORD_MAX = 2000;
 const LOW_CONFIDENCE_THRESHOLD = 0.65;
+
+/** Track latest classification confidence for display in responses */
+let _latestConfidence = null;
 
 function resolvePromptMode(subcommand, topic, query) {
   switch (subcommand) {
@@ -59,11 +83,15 @@ function extractQuery(subcommand, options) {
   }
 }
 
-function formatResponse(text, citations) {
-  let content = text;
-  if (citations && citations.length > 0) {
-    content += '\n\n**Sources:** ' + citations.slice(0, 5).map(citation => `\`${citation}\``).join(', ');
+function formatResponse(text, citations, topic, userId) {
+  // Apply citation formatting (considers citation mode per-user)
+  let content = formatWithCitations(text, citations ?? [], topic, userId);
+
+  // Apply confidence score
+  if (_latestConfidence != null) {
+    content += formatConfidence(_latestConfidence, topic);
   }
+
   if (content.length > DISCORD_MAX) {
     content = `${content.slice(0, DISCORD_MAX - 3)}...`;
   }
@@ -83,11 +111,21 @@ function errorEnvelope(message, interaction) {
 
 export async function aiCommand(payload) {
   const startTime = Date.now();
+  const requestCtx = recordRequestStart();
   const { subcommand, options, interaction } = payload;
   const query = extractQuery(subcommand, options);
 
   // Helper: log the question outcome before returning
   const finalize = (result) => {
+    // Record latency in AIObserver for health monitoring
+    recordRequestEnd(requestCtx, {
+      topic:     result._topic ?? 'unknown',
+      cacheHit:  false,
+      aiCalled:  false,
+      aiFailed:  result.success === false,
+      rejected:  result._topic === 'rejected',
+    });
+
     logQuestion({
       userId:          payload.userId,
       username:        interaction?.user?.username ?? null,
@@ -119,6 +157,9 @@ export async function aiCommand(payload) {
 
   const commandOverride = subcommand === 'ask' ? '/ask' : `/ai ${subcommand}`;
   const classification = classify(query, commandOverride);
+
+  // Track confidence for display in responses
+  _latestConfidence = classification.confidence;
 
   log.info(
     `[AI/Gateway] user=${payload.userId} cmd=${commandOverride} ` +
@@ -162,6 +203,42 @@ export async function aiCommand(payload) {
     return finalize({ ...localResult, _topic: classification.topic, _complexity: classification.complexity });
   }
 
+  // ── Agent Layer path (opt-in via AI_AGENT_ENABLED=true) ────────────────
+  if (config.aiAgentEnabled) {
+    try {
+      const orchestrate = await _getAgent();
+      if (orchestrate) {
+        log.info(`[AI/Gateway] Agent path — topic=${classification.topic} complexity=${classification.complexity}`);
+
+        const agentResult = await orchestrate({
+          query,
+          subcommand,
+          userId: payload.userId,
+          channelId: payload.channelId,
+          guildId: payload.guildId,
+        });
+
+        // Store in conversation memory
+        if (payload.userId && payload.channelId && agentResult.success && agentResult.content) {
+          addConversationTurn(payload.userId, payload.channelId, query, agentResult.content);
+        }
+
+        return finalize({
+          success: agentResult.success,
+          content: agentResult.content ?? 'I was unable to process that request.',
+          ephemeral: false,
+          interaction,
+          _topic: agentResult.topic ?? classification.topic,
+          _complexity: agentResult.complexity ?? classification.complexity,
+          _citations: agentResult.citations ?? [],
+        });
+      }
+    } catch (err) {
+      log.error(`[AI/Gateway] Agent path failed — falling back to classic: ${err.message}`);
+    }
+  }
+
+  // ── Classic pipeline path (default) ────────────────────────────────────
   // ── Response cache check — same question = instant answer, no API calls ──
   const cached = getResponse(query, classification.topic, { subcommand });
   if (cached) {
@@ -171,7 +248,7 @@ export async function aiCommand(payload) {
     );
     return finalize({
       success: true,
-      content: formatResponse(cached.text, cached.citations ?? []),
+      content: formatResponse(cached.text, cached.citations ?? [], classification.topic, payload.userId),
       ephemeral: false,
       interaction,
       _topic: classification.topic,
@@ -207,7 +284,24 @@ export async function aiCommand(payload) {
   }
 
   const { context, citations } = buildContext([chunks]);
-  const prompt = assemblePrompt(promptMode, context, query);
+
+  // ── Inject conversation memory from previous turns ──────────────────────
+  let memoryContext = '';
+  if (payload.userId && payload.channelId) {
+    memoryContext = getConversationContext(payload.userId, payload.channelId);
+  }
+  const mergedContext = memoryContext
+    ? `${memoryContext}\n\n---\n\n${context}`
+    : context;
+
+  // ── Detect user language for multi-language response ────────────────────
+  const { lang: userLang } = detectLanguage(query);
+  const langInstruction = instructionForLanguage(userLang);
+
+  let prompt = assemblePrompt(promptMode, mergedContext, query);
+  if (langInstruction) {
+    prompt += langInstruction;
+  }
 
   let text;
   try {
@@ -235,13 +329,18 @@ export async function aiCommand(payload) {
     `[AI/Gateway] Cache STORE topic=${classification.topic} query="${query.slice(0, 60)}"`
   );
 
+  // ── Store this turn in conversation memory ──────────────────────────────
+  if (payload.userId && payload.channelId) {
+    addConversationTurn(payload.userId, payload.channelId, query, text);
+  }
+
   return finalize({
     success: true,
-    content: formatResponse(text, showCitations ? citations : []),
+    content: formatResponse(text, citations, classification.topic, payload.userId),
     ephemeral: false,
     interaction,
     _topic: classification.topic,
     _complexity: classification.complexity,
-    _citations: showCitations ? citations : [],
+    _citations: citations,
   });
 }

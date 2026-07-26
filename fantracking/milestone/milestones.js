@@ -3,15 +3,24 @@
 //
 // Schedule: every 10 minutes (cron: */10 * * * *)
 // Flow:     Fetch all trainers from Depot → evaluate against tiers →
-//           dedup via Archive → deliver via Announcer
+//           generate AI message (with bank fallback) → dedup via Archive →
+//           deliver via Announcer
 //
 // Daily tiers:  1M / 3M / 5M / 7M / 10M  (reset at midnight by periodKey)
 // Monthly tiers: 10M → 100M (10 tiers)     (reset on 1st by periodKey)
 //
+// Message bank:  data/milestoneBank.json — separate from greeting bank.
+//                Stores AI-generated messages per type+tier; recycled with
+//                trainer name/fan count substitution when the AI is down.
+//
 // Authority: Broadcast/Announcer/task/milestone.md
-// Calls:     fantracking/milestone/tiers.js, fantracking/milestone/eval.js,
-//            Refinery/Depot, Broadcast/Archive, Broadcast/Announcer
+// Calls:     AI/ContentGenerator.js, fantracking/milestone/tiers.js,
+//            fantracking/milestone/eval.js, Refinery/Depot,
+//            Broadcast/Archive, Broadcast/Announcer
 
+import { readFile, writeFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 import { retrieve, search } from '../../Refinery/Depot/depot.js';
 import * as archive from '../../Broadcast/Archive/archive.js';
 import { deliver } from '../../Broadcast/Announcer/announcer.js';
@@ -20,7 +29,54 @@ import { alreadyFired, claimKey, periodKey } from './eval.js';
 import * as botConfig from '../../core/botConfig.js';
 import { createLogger } from '../../core/pipelineLogger.js';
 
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const BANK_PATH = join(__dirname, '..', '..', 'data', 'milestoneBank.json');
+const MAX_BANK_SIZE = 20;
+
 const logger = createLogger('milestone');
+
+// ---------------------------------------------------------------------------
+// Milestone message bank helpers (separate from greeting bank)
+// Bank path:  /Umakraft/data/milestoneBank.json
+// Structure:  { "daily": { "Legend": [msg1, ...], ... }, "monthly": { ... } }
+// Cap:        20 messages per type+tier key
+// ---------------------------------------------------------------------------
+
+async function loadMilestoneBank() {
+  try {
+    const raw = await readFile(BANK_PATH, 'utf-8');
+    return JSON.parse(raw);
+  } catch (err) {
+    logger.warn(`Could not load milestone bank: ${err.message} — using empty bank`);
+    return { daily: {}, monthly: {} };
+  }
+}
+
+async function saveToMilestoneBank(type, tierLabel, message) {
+  const bank = await loadMilestoneBank();
+  const bucket = bank[type] ?? {};
+  const slot = bucket[tierLabel] ?? [];
+
+  if (slot.includes(message)) {
+    logger.info(`Bank — duplicate "${type}/${tierLabel}" milestone skipped`);
+    return;
+  }
+
+  slot.push(message);
+  if (slot.length > MAX_BANK_SIZE) {
+    slot.splice(0, slot.length - MAX_BANK_SIZE);
+  }
+  bucket[tierLabel] = slot;
+  bank[type] = bucket;
+  await writeFile(BANK_PATH, JSON.stringify(bank, null, 2), 'utf-8');
+  logger.info(`Bank — saved "${type}/${tierLabel}" milestone (now ${slot.length}/${MAX_BANK_SIZE})`);
+}
+
+function randomFromMilestoneBank(bank, type, tierLabel) {
+  const slot = bank[type]?.[tierLabel];
+  if (!slot || slot.length === 0) return null;
+  return slot[Math.floor(Math.random() * slot.length)];
+}
 
 // ---------------------------------------------------------------------------
 // Reset logic — handled implicitly by periodKey
@@ -139,21 +195,98 @@ async function isAlreadyFired(circleId, trainerId, type, tierLabel) {
 
 /**
  * Build the Archive record payload for a milestone notification.
+ * Calls ContentGenerator for AI-generated celebration text with its own
+ * message bank (data/milestoneBank.json) for fallback variety.
  *
- * @param {object} milestone  — { type, label, emoji, threshold, tierNumber, trainerId, trainerName, fanGain, circleId, discordUserId }
+ * @param {object} milestone
  * @param {string} circleId
- * @returns {object}
+ * @returns {Promise<object>}
  */
-function buildMilestonePayload(milestone, circleId) {
+async function buildMilestonePayload(milestone, circleId) {
   const isDaily = milestone.type === 'daily';
   const period  = periodKey(milestone.type);
   const label   = isDaily
     ? `${milestone.emoji} ${milestone.label}`
     : `${milestone.emoji} ${milestone.label} (Tier ${milestone.tierNumber})`;
 
-  const message = isDaily
-    ? `**${milestone.trainerName}** hit **${milestone.fanGain.toLocaleString()} fans TODAY** — ${milestone.emoji} ${milestone.label} tier!`
-    : `**${milestone.trainerName}** reached **${milestone.fanGain.toLocaleString()} fans THIS MONTH** — ${milestone.emoji} ${milestone.label}, Tier ${milestone.tierNumber} of 10!`;
+  let message;
+  let source = 'unknown';
+
+  // ── 1. Try AI generation ──────────────────────────────────────────────
+  try {
+    const { generate } = await import('../../AI/ContentGenerator.js');
+    const result = await generate('milestone', {
+      trainerName:    milestone.trainerName,
+      milestoneValue: milestone.fanGain,
+      milestoneType:  milestone.type,
+      tierLabel:      milestone.label,
+      tierNumber:     milestone.tierNumber ?? undefined,
+    });
+
+    if (result.usedFallback) {
+      source = 'ai-fallback';
+      message = result.message;
+      logger.warn(
+        `Milestone AI returned fallback for ${milestone.type}/${milestone.label} ` +
+        `(attempts=${result.attempts}). Will try bank next.`
+      );
+    } else {
+      source = 'ai';
+      message = result.message;
+      await saveToMilestoneBank(milestone.type, milestone.label, message).catch(err =>
+        logger.warn(`Failed to save milestone to bank: ${err.message}`)
+      );
+    }
+  } catch (err) {
+    logger.error(`ContentGenerator crashed for milestone: ${err.message}`);
+    source = 'crash';
+    message = null;
+  }
+
+  // ── 2. If AI didn't produce fresh, try the bank ──────────────────────
+  if (source !== 'ai') {
+    const bank = await loadMilestoneBank();
+    const banked = randomFromMilestoneBank(bank, milestone.type, milestone.label);
+
+    if (banked) {
+      // Substitute trainer name and fan count from the banked message
+      // so the recycled message matches the current trainer.
+      // Both patterns use global replace — trainer name may appear in
+      // bold tags in multiple places (heading + closing line).
+      const fanStr = Number(milestone.fanGain).toLocaleString();
+      const oldNameMatch = banked.match(/\*\*([^*]+)\*\*/);
+
+      let recycled = banked
+        .replace(/\*\*([^*]+)\*\*/g, `**${milestone.trainerName}**`)
+        .replace(/\b[\d,]{5,20}\b/g, fanStr);
+
+      if (!oldNameMatch) {
+        logger.warn(
+          `Milestone bank substitution failed — no **name** pattern found ` +
+          `in banked ${milestone.type}/${milestone.label} message`
+        );
+      }
+
+      message = recycled;
+      source  = 'bank';
+      logger.info(
+        `Bank — using stored ${milestone.type}/${milestone.label} message ` +
+        `(bank size: ${bank[milestone.type]?.[milestone.label]?.length ?? 0}, ` +
+        `substituted: **${milestone.trainerName}** / ${fanStr})`
+      );
+    } else {
+      // Use the ContentGenerator fallback if available, or hardcoded safety net
+      if (!message) {
+        message = isDaily
+          ? `**${milestone.trainerName}**~! You just hit **${milestone.fanGain.toLocaleString()} fans TODAY** — ${milestone.emoji} ${milestone.label} tier!! ✨ I've been watching you work so hard and my heart is just so full right now. Every single fan you earned today is proof of your dedication. Tomorrow is a brand new day, and I'll be right here cheering for you~! You're doing amazing. 💕`
+          : `🏆 **${milestone.trainerName}**... **${milestone.label}** — **${milestone.fanGain.toLocaleString()} fans** this month${milestone.tierNumber != null ? `, Tier ${milestone.tierNumber} of 10` : ''}. 🥺 I've watched every step of this journey and I'm just overwhelmed with pride. Seeing everything you've built... you inspire me, you really do. Please take care of yourself too, okay? Next month is coming and I'll be cheering just as loud~ 💕`;
+        source = 'safety';
+      }
+      logger.warn(`Milestone bank empty for ${milestone.type}/${milestone.label} — using ${source}`);
+    }
+  }
+
+  logger.info(`Milestone message source=${source} type=${milestone.type} tier=${milestone.label}`);
 
   return {
     type:           'milestone',
@@ -252,8 +385,8 @@ export async function runMilestoneCycle(client) {
         continue;
       }
 
-      // ── 4. Build payload ──────────────────────────────────────────────
-      const payload = buildMilestonePayload(hit, trainer.circleId);
+      // ── 4. Build payload (async — calls AI) ─────────────────────────
+      const payload = await buildMilestonePayload(hit, trainer.circleId);
       const recipients = resolveRecipients(hit, trainer.circleId);
 
       // ── 5. Write to Archive ───────────────────────────────────────────

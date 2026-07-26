@@ -178,5 +178,15 @@ export async function investigate() {
     },
   });
 
+  // ── AI subsystem subjects ─────────────────────────────────────────────
+  try {
+    const { investigate: aiInvestigate } = await import('../../AI/AIObserver.js');
+    const aiRecords = await aiInvestigate();
+    records.push(...aiRecords);
+  } catch (err) {
+    // AI subsystem may not be initialized yet (e.g., in test or early startup).
+    // This is non-fatal — Operation continues with other records.
+  }
+
   return records;
 }
