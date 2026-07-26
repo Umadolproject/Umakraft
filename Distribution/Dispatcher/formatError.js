@@ -35,9 +35,15 @@ const ERROR_MESSAGES = {
     'A pipeline stage timed out. Please try again shortly.',
   // Leaderboard-specific
   RANKINGS_NO_DATA:
-    'No leaderboard data is available for this period. Try again after the next sync.',
+    'No leaderboard data is available for this period. The daily sync may not have run yet — try again shortly.',
   RANKINGS_EMPTY:
     'No trainers qualified for the leaderboard this period.',
+  RANKINGS_CIRCLE_NOT_FOUND:
+    'The configured circle could not be found on Uma.moe. Check the circle ID in `botConfig.js`.',
+  RANKINGS_TIMEOUT:
+    'The leaderboard took too long to load. Uma.moe may be slow right now — please try again in a moment.',
+  RANKINGS_API_ERROR:
+    'Uma.moe returned an error for the leaderboard request. Please try again shortly.',
 
   // Workshop
   FABRICATOR_RENDER_ERROR:

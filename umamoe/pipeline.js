@@ -61,6 +61,32 @@ async function runStage(stageName, fn, ...args) {
   }
 }
 
+// ─── Concurrency-limited parallel runner ──────────────────────────────────────
+
+/**
+ * Run fn over all items with at most `concurrency` items in-flight at once.
+ * Preserves result order. Safe for shared mutation (JS is single-threaded).
+ *
+ * @template T, R
+ * @param {T[]} items
+ * @param {(item: T) => Promise<R>} fn
+ * @param {{ concurrency?: number }} [options]
+ * @returns {Promise<R[]>}
+ */
+async function runParallel(items, fn, { concurrency = 5 } = {}) {
+  if (items.length === 0) return [];
+  const results = new Array(items.length);
+  let nextIndex = 0;
+  async function worker() {
+    while (nextIndex < items.length) {
+      const i = nextIndex++;
+      results[i] = await fn(items[i]);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, worker));
+  return results;
+}
+
 // ─── Numeric helpers ──────────────────────────────────────────────────────────
 
 function finiteNonNegative(value) {
@@ -604,36 +630,62 @@ export async function processRankings(params = {}) {
 
   const trainers = rawTrainers.map(normalizeRankingItem).filter(t => t?.id);
 
-  // When a specific circle is configured (non-interCircle), filter rankings to
-  // only include members of that circle.  The /v4/rankings/gains endpoint
-  // returns global results; circle_id on each item tells us which circle they
-  // belong to.  Without this filter, trainers from other circles appear in the
-  // leaderboard with 0 fans (circle enrichment fails for non-members).
-  const circleFiltered = circleId
-    ? trainers.filter(t => String(t.circle_id ?? t.circleId ?? '') === String(circleId))
-    : trainers;
-
-  if (circleId && circleFiltered.length < trainers.length) {
-    logger.info(
-      `filtered ${trainers.length - circleFiltered.length} non-circle trainers from rankings`,
-      { circleId, before: trainers.length, after: circleFiltered.length },
+  // Filter rankings to circle members when a specific circle is configured.
+  // The /v4/rankings/gains endpoint returns global results; circle_id on each
+  // item identifies which circle they belong to.
+  //
+  // FALLBACK: if circle_id is absent from the API response for this endpoint
+  // version, the strict filter would produce 0 results and the leaderboard
+  // would silently fail. In that case we keep the full list and rely on
+  // circle enrichment (mergeCircleMemberGains) to supply correct fan counts
+  // for members while non-members show fans: 0 and naturally sort to the bottom.
+  let circleFiltered = trainers;
+  if (circleId) {
+    const matched = trainers.filter(
+      t => String(t.circle_id ?? t.circleId ?? '') === String(circleId),
     );
+    if (matched.length === 0 && trainers.length > 0) {
+      logger.warn(
+        `circle_id filter matched 0 of ${trainers.length} trainers — ` +
+        `circle_id field may be absent from rankings API response; ` +
+        `falling back to full global list (circle enrichment will prioritise members)`,
+        {
+          circleId,
+          sampleFields: trainers.slice(0, 3).map(t => ({
+            id: t.id, circle_id: t.circle_id, circleId: t.circleId,
+          })),
+        },
+      );
+      // circleFiltered stays as trainers (full list)
+    } else {
+      circleFiltered = matched;
+      if (matched.length < trainers.length) {
+        logger.info(
+          `filtered ${trainers.length - matched.length} non-circle trainers from rankings`,
+          { circleId, before: trainers.length, after: matched.length },
+        );
+      }
+    }
   }
 
   logger.info('processing rankings', { trainerCount: circleFiltered.length });
 
-  const results = [];
   let enrichedCount = 0;
-  for (const trainer of circleFiltered) {
-    // Apply circle enrichment per trainer so rankings gain numbers match
-    // the authoritative API values used by processTrainer.
+
+  /**
+   * Process one trainer through the full pipeline stage chain.
+   * Extracted so runParallel can run multiple trainers concurrently.
+   */
+  const processOneTrainer = async (trainer) => {
+    // Apply circle enrichment so gain numbers match the authoritative API
+    // values used by processTrainer. fans: 0 is overridden with real total.
     const enrichedTrainerData = circleResult?.success
       ? mergeCircleMemberGains(trainer, circleResult, trainer.id)
       : trainer;
 
-    // Track whether circle enrichment actually supplied fan counts — when
-    // mergeCircleMemberGains can't find the member in the circle, fans stays
-    // at 0 (the rankings API does not include absolute fan counts).
+    // Track how many trainers received real fan counts from circle enrichment.
+    // JS is single-threaded so this shared-counter increment is safe across
+    // concurrent async workers.
     if (circleResult?.success && (enrichedTrainerData.fans ?? 0) > (trainer.fans ?? 0)) {
       enrichedCount++;
     }
@@ -651,20 +703,17 @@ export async function processRankings(params = {}) {
 
     const inspectorResult = await runStage('Courier', transport, syntheticEnvelope);
     if (!inspectorResult.success || !inspectorResult.accepted) {
-      results.push({ success: false, trainerId: trainer.id, error: inspectorResult.error });
-      continue;
+      return { success: false, trainerId: trainer.id, error: inspectorResult.error };
     }
 
     const vaultResult = await runStage('Vault', receive, inspectorResult);
     if (!vaultResult.success) {
-      results.push({ success: false, trainerId: trainer.id, error: vaultResult.error });
-      continue;
+      return { success: false, trainerId: trainer.id, error: vaultResult.error };
     }
 
     const vaultRecord = await runStage('Vault.retrieve', retrieve, { id: trainer.id });
     if (!vaultRecord.success) {
-      results.push({ success: false, trainerId: trainer.id, error: vaultRecord.error });
-      continue;
+      return { success: false, trainerId: trainer.id, error: vaultRecord.error };
     }
 
     let previousRecord = null;
@@ -683,23 +732,23 @@ export async function processRankings(params = {}) {
       vaultRecord.data,
       { previousRecord },
     );
-    if (refinedResult.failedAt) {
-      results.push({ success: false, trainerId: trainer.id, error: refinedResult.error });
-      continue;
-    }
-    if (!refinedResult.success) {
-      results.push({ success: false, trainerId: trainer.id, error: refinedResult.error });
-      continue;
+    if (refinedResult.failedAt || !refinedResult.success) {
+      return { success: false, trainerId: trainer.id, error: refinedResult.error };
     }
 
     const compileResult = await runStage('Compiler', compile, refinedResult);
-    results.push({
+    return {
       success:   compileResult.success,
       trainerId: trainer.id,
       version:   compileResult.version,
       error:     compileResult.error,
-    });
-  }
+    };
+  };
+
+  // Process all trainers in parallel (up to 5 concurrent) instead of serially.
+  // Before: 10 trainers × 6 sequential stages ≈ 12 s+.
+  // After:  ceil(10/5) rounds × 6 stages ≈ 2–3 s.
+  const results = await runParallel(circleFiltered, processOneTrainer, { concurrency: 5 });
 
   const succeeded = results.filter(r => r.success).length;
   logger.info('rankings pipeline complete', {

@@ -239,9 +239,50 @@ export async function runImagePipeline({ payload, blueprintKey, mapToFabricator 
  * @param {string}   opts.blueprintKey
  * @param {Function} opts.mapToFabricator — (compiledProduct) => fabricator input
  */
+// Abort rankings after this many ms and return a friendly timeout error.
+// Keeps well within Discord's 15-minute interaction window while giving
+// users a clear signal instead of a silent hang.
+const RANKINGS_PIPELINE_TIMEOUT_MS = 25_000;
+
 export async function runRankingsPipeline({ payload, rankingsParams, blueprintKey, mapToFabricator }) {
   const { interaction } = payload;
 
+  // ── 0. Top-level timeout guard ───────────────────────────────────────────
+  let _timeoutHandle;
+  const timeoutPromise = new Promise((_, reject) => {
+    _timeoutHandle = setTimeout(
+      () => reject(Object.assign(new Error('RANKINGS_TIMEOUT'), { isRankingsTimeout: true })),
+      RANKINGS_PIPELINE_TIMEOUT_MS,
+    );
+  });
+
+  try {
+    return await Promise.race([
+      _runRankingsPipeline({ payload, rankingsParams, blueprintKey, mapToFabricator, interaction }),
+      timeoutPromise,
+    ]);
+  } catch (err) {
+    if (err.isRankingsTimeout) {
+      console.error(
+        `[pipelineImage] runRankingsPipeline timed out after ${RANKINGS_PIPELINE_TIMEOUT_MS}ms ` +
+        `(blueprintKey=${blueprintKey}, scope=${rankingsParams?.scope}, top=${rankingsParams?.top})`,
+      );
+      return {
+        success:   false,
+        failedAt:  'Rankings',
+        error:     'RANKINGS_TIMEOUT',
+        message:   `Leaderboard timed out after ${RANKINGS_PIPELINE_TIMEOUT_MS / 1000}s`,
+        retriable: true,
+        interaction,
+      };
+    }
+    throw err;
+  } finally {
+    clearTimeout(_timeoutHandle);
+  }
+}
+
+async function _runRankingsPipeline({ payload, rankingsParams, blueprintKey, mapToFabricator, interaction }) {
   // ── 1. Umamoe + Refinery rankings pipeline ───────────────────────────────
   // processRankings stores each trainer's compiled product individually in the
   // Depot (keyed by trainer ID). There is no single unified "ranking" product.
