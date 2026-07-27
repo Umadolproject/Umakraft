@@ -2,9 +2,50 @@
 import { runImagePipeline } from '../utils/pipelineImage.js';
 import { parseCircleId } from '../utils/parseCircle.js';
 
+// ── Helpers ──────────────────────────────────────────────────────────────────
+function fmtGain(n) {
+  if (n == null) return '—';
+  const v = Number(n);
+  return (v >= 0 ? '+' : '') + v.toLocaleString('en-US');
+}
+
 /**
- * Build a Discord embed from Member directory data (fallback).
- * Mirrors the structure of buildTrainerEmbed in pipelineImage.js.
+ * Fan Gain embed matching blueprint:
+ *   Avatar + Lifetime fans → Daily/Weekly/Monthly gains → Rank
+ */
+function buildFanGainEmbed(fabricatorInput, blueprintKey, interaction) {
+  const meta = fabricatorInput.meta ?? {};
+  const fans = fabricatorInput.fans ?? {};
+  const trainerName = meta.trainerName ?? meta.trainerId ?? 'Unknown';
+
+  const avatarUrl = interaction.user?.displayAvatarURL({ dynamic: true, size: 256 }) ?? null;
+
+  const fields = [];
+  if (fans.daily != null)   fields.push({ name: '📈 Daily Gain',   value: fmtGain(fans.daily),   inline: true });
+  if (fans.weekly != null)  fields.push({ name: '📈 Weekly Gain',  value: fmtGain(fans.weekly),  inline: true });
+  if (fans.monthly != null) fields.push({ name: '📈 Monthly Gain', value: fmtGain(fans.monthly), inline: true });
+  if (fabricatorInput.rank != null) fields.push({ name: '📊 Rank', value: `#${fabricatorInput.rank}`, inline: true });
+
+  return {
+    success:   true,
+    type:      'embed',
+    ephemeral: false,
+    result: {
+      title:       `🏇 ${trainerName}`,
+      description: fans.lifetime != null
+        ? `**Lifetime Fangain:** ${fans.lifetime.toLocaleString('en-US')}`
+        : '',
+      thumbnail:   avatarUrl ? { url: avatarUrl } : undefined,
+      fields:      fields.length > 0 ? fields : [{ name: 'Status', value: 'No data available.' }],
+      footer:      { text: `${blueprintKey} · UmaKraft` },
+      timestamp:   meta.generatedAt ?? new Date().toISOString(),
+    },
+    interaction,
+  };
+}
+
+/**
+ * Fallback from Member directory when pipeline is down.
  */
 function buildMemberFallbackEmbed(member, payload) {
   const { interaction } = payload;
@@ -31,13 +72,15 @@ function buildMemberFallbackEmbed(member, payload) {
   };
 }
 
+// ── Public API ────────────────────────────────────────────────────────────────
+
 export async function fanGain(payload) {
-  // ── Try main pipeline ───────────────────────────────────────────────────
   let result;
   try {
     result = await runImagePipeline({
       payload,
       blueprintKey: 'fanGain',
+      embedBuilder: buildFanGainEmbed,
       mapToFabricator: (cp, options) => ({
         blueprintKey: 'fanGain',
         meta: {
@@ -54,12 +97,12 @@ export async function fanGain(payload) {
           weekly:   cp.weeklyFanGain ?? 0,
           monthly:  cp.monthlyFanGain ?? 0,
         },
+        rank: cp.rank ?? null,
         trend: cp.trend ?? null,
         presentationHints: cp.presentationHints ?? {},
       }),
     });
   } catch (_pipelineErr) {
-    // Preserve interaction so the Dispatcher can reply to the user.
     result = { success: false, interaction: payload.interaction };
   }
 

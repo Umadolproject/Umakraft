@@ -151,8 +151,30 @@ export async function link(payload) {
     type:     'embed',
     ephemeral: true,
     result: {
-      title:       '✅ Link created',
-      description: `<@${targetDiscordId}> has been linked to **${trainerName}** (ID: \`${resolvedId}\`).`,
+      title:       '🔗 Account Linked',
+      description: `✓ Trainer account linked successfully`,
+      fields: [
+        {
+          name: '💬 Discord',
+          value: `**User:** <@${targetDiscordId}>
+**ID:** \`${targetDiscordId}\``,
+          inline: true,
+        },
+        {
+          name: '🐴 Trainer',
+          value: `**Name:** ${trainerName}
+**ID:** \`${resolvedId}\`
+**Status:** Linked`,
+          inline: true,
+        },
+        {
+          name: '📝 Note',
+          value: `Your Discord account is now linked to this trainer profile.\nCommands that require a linked account are now available.`,
+          inline: false,
+        },
+      ],
+      footer:    { text: 'link · UmaKraft' },
+      timestamp: new Date().toISOString(),
     },
     interaction,
   };

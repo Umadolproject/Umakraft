@@ -3,11 +3,42 @@ import { PermissionFlagsBits } from 'discord.js';
 import { runRankingsPipeline } from '../utils/pipelineImage.js';
 import { parseCircleId } from '../utils/parseCircle.js';
 
+/**
+ * Circle Master embed matching blueprint:
+ *   Circle + Month + Day → Top 3 per day table
+ */
+function buildCircleMasterEmbed({ topEntries, scope, gainField, total: _, blueprintKey, rankingsParams, interaction }) {
+  const meta = rankingsParams ?? {};
+  const fields = [];
+
+  if (Array.isArray(topEntries) && topEntries.length > 0) {
+    const lines = topEntries.slice(0, 31).map((entry, i) => {
+      const name = (entry.name ?? entry.trainerName ?? `#${entry.id}`).slice(0, 18);
+      const gain = (entry[gainField] ?? 0).toLocaleString('en-US');
+      const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`;
+      return `${medal} **${name}** — +${gain}`;
+    });
+    fields.push({ name: `📅 Day ${meta.day ?? '—'} Top Contributors`, value: lines.join('\n'), inline: false });
+  }
+
+  return {
+    success:   true,
+    type:      'embed',
+    ephemeral: false,
+    result: {
+      title:       `👑 Circle Master — Day ${meta.day ?? '—'}`,
+      description: meta.circle ? `**Circle:** ${meta.circle}` : '',
+      fields:      fields.length > 0 ? fields : [{ name: 'Status', value: 'No data available for this day.' }],
+      footer:      { text: 'circleMaster · UmaKraft · uma.moe data' },
+      timestamp:   new Date().toISOString(),
+    },
+    interaction,
+  };
+}
+
 export async function circleMaster(payload) {
   const { options, guildId, interaction } = payload;
 
-  // trigger_milestones requires Manage Guild — enforced here, not just in Commands,
-  // so the Coordinator remains the authoritative permission gate for this feature flag.
   if (options.triggerMilestones && !interaction.memberPermissions.has(PermissionFlagsBits.ManageGuild)) {
     return {
       success:   false,
@@ -28,6 +59,7 @@ export async function circleMaster(payload) {
       type:   'circleMaster',
     },
     blueprintKey: 'circleMaster',
+    embedBuilder: buildCircleMasterEmbed,
     mapToFabricator: (cp, opts) => ({
       blueprintKey: 'circleMaster',
       meta: {

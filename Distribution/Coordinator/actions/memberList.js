@@ -3,6 +3,36 @@ import { runRankingsPipeline } from '../utils/pipelineImage.js';
 import { parseCircleId } from '../utils/parseCircle.js';
 
 /**
+ * Member List embed matching blueprint (via pipeline).
+ */
+function buildMemberListEmbed({ topEntries, scope: _, gainField, total, blueprintKey, rankingsParams, interaction }) {
+  const fields = [];
+
+  if (Array.isArray(topEntries) && topEntries.length > 0) {
+    const activeLines = topEntries.map((e, i) => {
+      const name = (e.name ?? e.trainerName ?? `#${e.id}`).slice(0, 24);
+      const gain = (e[gainField] ?? 0).toLocaleString('en-US');
+      return `**${i + 1}.** ${name} — +${gain}`;
+    });
+    fields.push({ name: `👥 Active Members (${topEntries.length})`, value: activeLines.join('\n'), inline: false });
+  }
+
+  return {
+    success:   true,
+    type:      'embed',
+    ephemeral: false,
+    result: {
+      title:       `👥 Circle Members — UmaKraft`,
+      description: rankingsParams?.circle ? `**Circle:** ${rankingsParams.circle}` : '',
+      fields:      fields.length > 0 ? fields : [{ name: 'Status', value: 'No members found.' }],
+      footer:      { text: 'memberList · UmaKraft · uma.moe data' },
+      timestamp:   new Date().toISOString(),
+    },
+    interaction,
+  };
+}
+
+/**
  * Build a Discord embed from Member directory data (fallback).
  * Reads all active/ and inactive/ .md files and returns a member list.
  */
@@ -55,6 +85,7 @@ export async function memberList(payload) {
         includeFormer,
       },
       blueprintKey: 'memberList',
+      embedBuilder: buildMemberListEmbed,
       mapToFabricator: (cp, opts) => ({
         blueprintKey: 'memberList',
         meta: {

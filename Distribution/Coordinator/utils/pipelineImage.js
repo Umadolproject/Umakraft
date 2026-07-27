@@ -257,7 +257,7 @@ export async function runImagePipeline({ payload, blueprintKey, mapToFabricator,
 // users a clear signal instead of a silent hang.
 const RANKINGS_PIPELINE_TIMEOUT_MS = 25_000;
 
-export async function runRankingsPipeline({ payload, rankingsParams, blueprintKey, mapToFabricator }) {
+export async function runRankingsPipeline({ payload, rankingsParams, blueprintKey, mapToFabricator, embedBuilder }) {
   const { interaction } = payload;
 
   // ── 0. Top-level timeout guard ───────────────────────────────────────────
@@ -271,7 +271,7 @@ export async function runRankingsPipeline({ payload, rankingsParams, blueprintKe
 
   try {
     return await Promise.race([
-      _runRankingsPipeline({ payload, rankingsParams, blueprintKey, mapToFabricator, interaction }),
+      _runRankingsPipeline({ payload, rankingsParams, blueprintKey, mapToFabricator, embedBuilder, interaction }),
       timeoutPromise,
     ]);
   } catch (err) {
@@ -305,7 +305,7 @@ export async function runRankingsPipeline({ payload, rankingsParams, blueprintKe
   }
 }
 
-async function _runRankingsPipeline({ payload, rankingsParams, blueprintKey, mapToFabricator, interaction }) {
+async function _runRankingsPipeline({ payload, rankingsParams, blueprintKey, mapToFabricator, embedBuilder, interaction }) {
   // ── 1. Umamoe + Refinery rankings pipeline ───────────────────────────────
   // processRankings stores each trainer's compiled product individually in the
   // Depot (keyed by trainer ID). There is no single unified "ranking" product.
@@ -378,7 +378,8 @@ async function _runRankingsPipeline({ payload, rankingsParams, blueprintKey, map
   // Text mode — skip Puppeteer entirely for low-RAM environments (Railway).
   // Returns a native Discord embed with formatted leaderboard fields.
   if (PUPPETEER_DISABLED) {
-    return buildRankingsEmbed({
+    const builder = embedBuilder ?? buildRankingsEmbed;
+    return builder({
       topEntries,
       scope,
       gainField,
@@ -399,7 +400,7 @@ async function _runRankingsPipeline({ payload, rankingsParams, blueprintKey, map
       `[pipelineImage] Fabricator failed for ${blueprintKey} — ` +
       `falling back to text embed. Error: ${produced.message}`
     );
-    return buildRankingsEmbed({
+    return (embedBuilder ?? buildRankingsEmbed)({
       topEntries,
       scope,
       gainField,

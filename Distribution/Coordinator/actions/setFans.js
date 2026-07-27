@@ -72,8 +72,27 @@ export async function setFans(payload) {
     type:     'embed',
     ephemeral: true,
     result: {
-      title:       `✅ Quota updated`,
-      description: `**${scope.charAt(0).toUpperCase() + scope.slice(1)}** fan quota for circle **${targetCircle}** set to **${finalAmount.toLocaleString()}**.`,
+      title:       `✅ Fan Quota Updated`,
+      description: `Quota for circle **${targetCircle}** has been updated.`,
+      fields: [
+        {
+          name: '📊 Scope',
+          value: scope.charAt(0).toUpperCase() + scope.slice(1),
+          inline: true,
+        },
+        {
+          name: '🎯 New Quota',
+          value: finalAmount.toLocaleString(),
+          inline: true,
+        },
+        {
+          name: '👤 Set By',
+          value: `<@${interaction.user.id}>`,
+          inline: true,
+        },
+      ],
+      footer:    { text: 'setFans · UmaKraft' },
+      timestamp: new Date().toISOString(),
     },
     interaction,
   };
