@@ -7,7 +7,7 @@
     { "field": "answer", "type": "string", "required": true },
     { "field": "askedAt", "type": "string", "required": true },
     { "field": "repliedAt", "type": "string" },
-    { "field": "feedback", "type": "enum", "enums": ["pending", "yes", "no", "unknown", "timeout"] },
+    { "field": "feedback", "type": "enum", "enums": ["pending", "correction_requested", "corrected", "yes", "no", "unknown", "timeout"] },
     { "field": "userReply", "type": "string" }
   ],
   "data": []

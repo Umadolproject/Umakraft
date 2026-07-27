@@ -16,7 +16,7 @@ import { coordinator } from '../../Coordinator/index.js';
 import { createLogger } from '../../../core/pipelineLogger.js';
 import { CHAT_CHANNEL_ID } from '../../../core/botConfig.js';
 import { isPersonalStatsQuery, isComparisonQuery, isMultiComparison, isLeaderboardQuery, getStats, compareStats, compareMulti, getLeaderboard } from '../../../AI/personalStats.js';
-import { hasPending, processReply, requestFeedback } from '../../../AI/FeedbackManager.js';
+import { hasPending, hasPendingCorrection, processReply, processCorrection, requestFeedback } from '../../../AI/FeedbackManager.js';
 
 const logger = createLogger('messageCreate');
 
@@ -131,6 +131,34 @@ export async function execute(message, client) {
 
   // ── Gate 2: Ignore bots (including self) ─────────────────────────────────
   if (message.author.bot) return;
+
+  // ── Gate 2.4: Correction reply check ──────────────────────────────────────
+  // If the user said "no" to feedback, the bot asks for the correct answer.
+  // The user's next message (no @mention needed) is treated as the correction.
+  if (hasPendingCorrection(message.author.id, message.channelId)) {
+    const corrResult = processCorrection(message.author.id, message.channelId, message.content);
+
+    // ── Feed correction into LearningManager ──────────────────────────────
+    try {
+      const lm = global.__learningManager;
+      if (lm && corrResult.question && corrResult.answer && corrResult.action === 'corrected') {
+        lm.process({
+          userId:   message.author.id,
+          query:    `CORRECTION: ${corrResult.question}`,
+          response: corrResult.answer,
+          metadata: { interactionId: message.id, domain: 'correction', feedback: -1 },
+        }).catch(() => {});
+      }
+    } catch { /* learning is additive */ }
+
+    if (corrResult.action !== 'none') {
+      await message.reply({
+        content: corrResult.message,
+        allowedMentions: { repliedUser: true },
+      });
+      return; // Correction handled — don't process as new question
+    }
+  }
 
   // ── Gate 2.5: Feedback reply check ─────────────────────────────────────────
   // If the user has a pending feedback request, their next message might be
@@ -346,14 +374,16 @@ export async function execute(message, client) {
         allowedMentions: { repliedUser: true },
       });
 
-      // ── Request feedback ──────────────────────────────────────────────────
+      // ── Request feedback (skipped if question was already resolved) ────
       try {
         const fbPrompt = requestFeedback(message.author.id, message.channelId, query, result.content);
-        await message.channel.send({
-          content: fbPrompt,
-          allowedMentions: { repliedUser: false },
-        });
-        logger.info(`messageCreate: feedback requested from ${userTag}`);
+        if (fbPrompt) {
+          await message.channel.send({
+            content: fbPrompt,
+            allowedMentions: { repliedUser: false },
+          });
+          logger.info(`messageCreate: feedback requested from ${userTag}`);
+        }
       } catch { /* feedback is best-effort */ }
 
       // LearningManager.process() is already handled inside aiCommand() —

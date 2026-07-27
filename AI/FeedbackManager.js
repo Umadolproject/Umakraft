@@ -7,8 +7,10 @@
 //
 // Public API:
 //   requestFeedback(userId, channelId, question, answer) → feedback prompt string
-//   processReply(userId, channelId, replyText)           → { action, message }
+//   processReply(userId, channelId, replyText)           → { action, message, question, answer }
+//   processCorrection(userId, channelId, text)           → { action, message, question, answer }
 //   hasPending(userId, channelId)                         → boolean
+//   hasPendingCorrection(userId, channelId)               → boolean
 //   getPendingQuestion(userId, channelId)                 → { question, answer }
 //   expireOld(minutes)                                    → expire stale requests
 //   isAffirmative(text)                                   → boolean
@@ -238,6 +240,20 @@ const PENDING_TIMEOUT_MINUTES = 5;
 export function requestFeedback(userId, channelId, question, answer) {
   expireOldForUser(userId, channelId);
   const table = loadTable();
+
+  // ── Dedup: skip if this exact Q&A was already resolved ──
+  // Once a user confirms ('yes') or corrects ('corrected') a question,
+  // don't re-prompt them for feedback on the same question again.
+  const alreadyResolved = table.data.some(r =>
+    r.userId === userId &&
+    r.question === question.slice(0, 500) &&
+    (r.feedback === 'yes' || r.feedback === 'corrected')
+  );
+  if (alreadyResolved) {
+    log.info(`[FeedbackManager] Skipping feedback for ${userId} — question already resolved`);
+    return '';  // no prompt — question already answered + confirmed
+  }
+
   const id = feedbackId(userId, question);
 
   table.data.push({
@@ -273,22 +289,26 @@ export function processReply(userId, channelId, replyText) {
   saveTable(table);
 
   if (isYes) {
-    log.info(`[FeedbackManager] User ${userId} said YES`);
+    log.info(`[FeedbackManager] User ${userId} said YES — storing confirmed Q&A`);
     return {
       action: 'yes',
       question: pending.question,
       answer: pending.answer,
-      message: `yay~! glad i got it right! 🎉 thanks for letting me know, <@${userId}>~! 💕`,
+      message: `yay~! glad i got it right! 🎉 i'll remember this for next time~! thanks, <@${userId}>~! 💕`,
     };
   }
 
   if (isNo) {
-    log.info(`[FeedbackManager] User ${userId} said NO`);
+    log.info(`[FeedbackManager] User ${userId} said NO — requesting correction`);
+    // Don't mark as 'no' yet — set to 'correction_requested' to await the correct answer
+    pending.feedback = 'correction_requested';
+    pending.userReply = `NO: ${replyText.slice(0, 200)}`;
+    saveTable(table);
     return {
       action: 'no',
       question: pending.question,
       answer: pending.answer,
-      message: `aww, i got it wrong... 😣 thanks for telling me, <@${userId}>! i'll try to do better next time~! what was the right answer? i'd love to learn! 💕`,
+      message: `aww, i got it wrong... 😣 thanks for telling me, <@${userId}>! what **was** the right answer? just type it below (no need to @mention me~!) 💕`,
     };
   }
 
@@ -308,6 +328,53 @@ export function hasPending(userId, channelId) {
   });
 }
 
+/**
+ * Check if the user has a pending correction request — i.e. they said "no"
+ * and the bot is waiting for them to type the correct answer.
+ */
+export function hasPendingCorrection(userId, channelId) {
+  const table = loadTable();
+  const now = Date.now();
+  return table.data.some(r => {
+    if (r.userId !== userId || r.channelId !== channelId || r.feedback !== 'correction_requested') return false;
+    return (now - new Date(r.askedAt).getTime()) < (PENDING_TIMEOUT_MINUTES + 3) * 60 * 1000;
+  });
+}
+
+/**
+ * Process a user's correction response after they said "no" to feedback.
+ * The user's entire message is treated as the correct answer.
+ */
+export function processCorrection(userId, channelId, correctionText) {
+  const table = loadTable();
+  const pending = table.data
+    .filter(r => r.userId === userId && r.channelId === channelId && r.feedback === 'correction_requested')
+    .sort((a, b) => new Date(b.askedAt) - new Date(a.askedAt))[0];
+
+  if (!pending) return { action: 'none', message: null };
+
+  const cleanCorrection = correctionText.trim();
+  if (!cleanCorrection || cleanCorrection.length < 2) {
+    return {
+      action: 'ask_again',
+      message: `ehe~ could you type a bit more for the correct answer, <@${userId}>? i really want to learn! 💕`,
+    };
+  }
+
+  pending.feedback = 'corrected';
+  pending.userReply = `CORRECTION: ${cleanCorrection.slice(0, 500)}`;
+  pending.answer = cleanCorrection.slice(0, 1000);  // replace the wrong answer with the correct one
+  saveTable(table);
+
+  log.info(`[FeedbackManager] User ${userId} provided correction: "${cleanCorrection.slice(0, 60)}"`);
+  return {
+    action: 'corrected',
+    question: pending.question,
+    answer: pending.answer,
+    message: `ahh, i see! thank you so much for teaching me, <@${userId}>~! 🎓 i'll remember that. 💕`,
+  };
+}
+
 export function getPendingQuestion(userId, channelId) {
   const table = loadTable();
   const pending = table.data
@@ -321,7 +388,7 @@ function expireOldForUser(userId, channelId) {
   const now = Date.now();
   let changed = false;
   for (const row of table.data) {
-    if (row.userId === userId && row.channelId === channelId && row.feedback === 'pending') {
+    if (row.userId === userId && row.channelId === channelId && (row.feedback === 'pending' || row.feedback === 'correction_requested')) {
       if ((now - new Date(row.askedAt).getTime()) > PENDING_TIMEOUT_MINUTES * 60 * 1000) {
         row.feedback = 'timeout';
         row.repliedAt = new Date().toISOString();
@@ -337,7 +404,7 @@ export function expireOld(minutes = PENDING_TIMEOUT_MINUTES) {
   const now = Date.now();
   let changed = false;
   for (const row of table.data) {
-    if (row.feedback === 'pending') {
+    if (row.feedback === 'pending' || row.feedback === 'correction_requested') {
       if ((now - new Date(row.askedAt).getTime()) > minutes * 60 * 1000) {
         row.feedback = 'timeout';
         row.repliedAt = new Date().toISOString();
