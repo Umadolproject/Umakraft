@@ -7,6 +7,7 @@ import { build as buildPrompt } from './promptBuilder.js';
 import { get as cacheGet, set as cacheSet, stats as cacheStats, prewarm as cachePrewarm } from './cache.js';
 import { validate, hardRejectMessage } from './ResponseValidator.js';
 import { classify, offTopicMessage } from './TopicFilter.js';
+import { search as searchWeb, isConfigured as webSearchConfigured, stats as webSearchStats } from './webSearch.js';
 import config from './Configuration.js';
 import log from '../core/log.js';
 
@@ -269,37 +270,131 @@ export async function answer({ query, subcommand, interaction, userId, mode = 'c
     return successEnvelope(offTopicMessage(), interaction, true);
   }
 
-  const retrievalMode = 'local_docs';
-  const cacheKey = buildCacheContext(query, subcommand, retrievalMode, mode);
+  const effectiveMode = webSearchConfigured() ? config.aiRetrievalMode : 'local-only';
+  const cacheKey = buildCacheContext(query, subcommand, effectiveMode, mode);
   const cached = cacheGet(cacheKey);
   if (cached) {
     _runtime.cacheHits += 1;
     registerSuccess();
-    log.info(`[AI/LocalService] Cache hit cmd=${subcommand} mode=${mode} retrieval=${retrievalMode}`);
+    log.info(`[AI/LocalService] Cache hit cmd=${subcommand} mode=${mode} retrieval=${effectiveMode}`);
     return successEnvelope(formatText(cached), interaction, false);
   }
   _runtime.cacheMisses += 1;
 
   let docs = [];
+  let retrievalMode = effectiveMode;
   const retrievalStartedAt = Date.now();
-  try {
-    const result = await search(query);
-    docs = result.docs;
-    _runtime.retrievalCount += 1;
-    _runtime.lastRetrievalMs = Date.now() - retrievalStartedAt;
-    _runtime.totalRetrievalMs += _runtime.lastRetrievalMs;
-    log.info(`[AI/LocalService] Retrieval completed mode=${retrievalMode} docs=${docs.length} duration_ms=${_runtime.lastRetrievalMs}`);
+  let webDocs = [];
+  let localDocs = [];
 
-    if (!result.relevant && docs.length === 0) {
-      const noDoc = 'That information is not documented in the UmaKraft knowledge base.';
-      cacheSet(cacheKey, noDoc);
-      registerSuccess();
-      return successEnvelope(noDoc, interaction, false);
+  // ── Run searches based on configured mode ────────────────────────
+  switch (config.aiRetrievalMode) {
+    case 'web-first': {
+      // Web → local fallback
+      if (webSearchConfigured()) {
+        try {
+          const wr = await searchWeb(query);
+          if (wr?.docs?.length) webDocs = wr.docs;
+          log.info(`[AI] web-first: web=${webDocs.length} docs (provider=${wr?.provider})`);
+        } catch (e) { log.warn(`[AI] web-first: web error — ${e.message}`); }
+      }
+      docs = webDocs.length ? webDocs : [];
+      if (!docs.length) {
+        retrievalMode = 'local_docs';
+        try {
+          const lr = await search(query);
+          localDocs = lr.docs;
+          docs = localDocs;
+          log.info(`[AI] web-first: web empty, local=${localDocs.length}`);
+        } catch (e) { log.error(`[AI] web-first: local error — ${e.message}`); }
+      }
+      break;
     }
-  } catch (err) {
-    _runtime.retrievalErrors += 1;
-    _runtime.lastRetrievalMs = Date.now() - retrievalStartedAt;
-    log.error(`[AI/LocalService] Document search failed after ${_runtime.lastRetrievalMs}ms: ${err.message}`);
+
+    case 'local-first': {
+      // Local → web fallback
+      try {
+        const lr = await search(query);
+        localDocs = lr.docs;
+        log.info(`[AI] local-first: local=${localDocs.length}`);
+      } catch (e) { log.error(`[AI] local-first: local error — ${e.message}`); }
+      docs = localDocs.length ? localDocs : [];
+      if (!docs.length && webSearchConfigured()) {
+        retrievalMode = 'web';
+        try {
+          const wr = await searchWeb(query);
+          if (wr?.docs?.length) { webDocs = wr.docs; docs = webDocs; }
+          log.info(`[AI] local-first: local empty, web=${webDocs.length}`);
+        } catch (e) { log.warn(`[AI] local-first: web error — ${e.message}`); }
+      }
+      break;
+    }
+
+    case 'hybrid': {
+      // Both in parallel → merge & deduplicate
+      const promises = [];
+      if (webSearchConfigured()) {
+        promises.push(
+          searchWeb(query).then(wr => {
+            webDocs = wr?.docs || [];
+            return { source: 'web', count: webDocs.length };
+          }).catch(e => {
+            log.warn(`[AI] hybrid: web error — ${e.message}`);
+            return { source: 'web', count: 0 };
+          })
+        );
+      }
+      promises.push(
+        search(query).then(lr => {
+          localDocs = lr.docs || [];
+          return { source: 'local', count: localDocs.length };
+        }).catch(e => {
+          log.error(`[AI] hybrid: local error — ${e.message}`);
+          return { source: 'local', count: 0 };
+        })
+      );
+      const results = await Promise.all(promises);
+      results.forEach(r => log.info(`[AI] hybrid: ${r.source}=${r.count}`));
+
+      // Merge: web docs first (richer context), then local, deduplicate by excerpt overlap
+      const seenHashes = new Set();
+      const merged = [];
+      for (const d of [...(webDocs || []), ...(localDocs || [])]) {
+        const hash = (d.excerpt || d.content || '').slice(0, 80).replace(/\s+/g, ' ').trim();
+        if (!seenHashes.has(hash)) {
+          seenHashes.add(hash);
+          merged.push(d);
+        }
+      }
+      docs = merged;
+      retrievalMode = 'hybrid';
+      log.info(`[AI] hybrid: merged=${docs.length} (web=${webDocs.length} + local=${localDocs.length})`);
+      break;
+    }
+
+    case 'local-only':
+    default: {
+      retrievalMode = 'local_docs';
+      try {
+        const lr = await search(query);
+        localDocs = lr.docs;
+        docs = localDocs;
+        log.info(`[AI] local-only: local=${localDocs.length}`);
+      } catch (e) { log.error(`[AI] local-only: error — ${e.message}`); }
+      break;
+    }
+  }
+
+  _runtime.retrievalCount += 1;
+  _runtime.lastRetrievalMs = Date.now() - retrievalStartedAt;
+  _runtime.totalRetrievalMs += _runtime.lastRetrievalMs;
+
+  // ── Nothing found anywhere ───────────────────────────────────────
+  if (docs.length === 0) {
+    const noDoc = 'That information could not be found — not in my knowledge base nor online. Sorry~! 💦';
+    cacheSet(cacheKey, noDoc);
+    registerSuccess();
+    return successEnvelope(noDoc, interaction, false);
   }
 
   if (isDegraded()) {
@@ -352,6 +447,8 @@ export function getServiceStatus() {
     cache,
     docs,
     model,
+    webSearch: { configured: webSearchConfigured(), ...webSearchStats() },
+    retrievalMode: config.aiRetrievalMode,
     lastRequestAt: _runtime.lastRequestAt,
     lastSuccessAt: _runtime.lastSuccessAt,
     lastError: _runtime.lastError,

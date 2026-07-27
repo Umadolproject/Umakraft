@@ -49,6 +49,19 @@ export async function status(payload) {
         .join('\n')
     : 'No pipeline runs since last restart';
 
+  const wsConfigured = aiStatus.webSearch?.configured ?? false;
+  const retrievalMode = aiStatus.retrievalMode || 'web-first';
+  const retrievalLabel = {
+    'web-first':   '🌐 Web → Local fallback',
+    'local-first': '📁 Local → Web fallback',
+    'hybrid':      '🔀 Hybrid (both merged)',
+    'local-only':  '📁 Local only',
+  }[retrievalMode] || retrievalMode;
+
+  const webSearchSummary = wsConfigured
+    ? `✅ Configured (cache: ${aiStatus.webSearch?.cacheSize ?? 0} entries)`
+    : '❌ No API key set (web disabled)';
+
   return {
     success: true,
     type: 'embed',
@@ -62,6 +75,8 @@ export async function status(payload) {
         { name: 'AI Provider', value: config.aiProvider,       inline: true },
         { name: 'AI Health',   value: aiHealth,                inline: true },
         { name: 'AI Model',    value: aiStatus.model?.modelId ?? 'n/a', inline: false },
+        { name: '🔍 Retrieval Mode', value: retrievalLabel, inline: false },
+        { name: '🌐 Web Search',     value: webSearchSummary, inline: false },
         { name: 'AI Cache',       value: cacheSummary,                    inline: false },
         { name: 'AI Performance', value: perfSummary || 'No AI requests yet', inline: false },
         {

@@ -103,6 +103,14 @@ const config = {
   // Agent Layer — opt-in. When enabled, aiGateway routes through Agent.orchestrate()
   // instead of the classic hardcoded pipeline.
   aiAgentEnabled:     (process.env.AI_AGENT_ENABLED       ?? 'false') === 'true',
+
+  // Retrieval order — controls which sources the AI uses and in what order.
+  //   web-first   (default) — web search → local docs fallback
+  //   local-first            — local docs → web search fallback
+  //   hybrid                 — both in parallel, merged & deduplicated (richest context)
+  //   local-only             — only local document search, never hits the web
+  // Falls back to 'local-only' if no web search API key is configured.
+  aiRetrievalMode: process.env.AI_RETRIEVAL_MODE || 'web-first',
 };
 
 export function validate() {
@@ -156,6 +164,15 @@ export function validate() {
     ].join('\n');
     log.error(message);
     throw new Error(message);
+  }
+
+  const VALID_RETRIEVAL_MODES = ['web-first', 'local-first', 'hybrid', 'local-only'];
+  if (!VALID_RETRIEVAL_MODES.includes(config.aiRetrievalMode)) {
+    log.warn(
+      `[AI/Configuration] AI_RETRIEVAL_MODE="${config.aiRetrievalMode}" is invalid. ` +
+      `Falling back to "web-first". Valid: ${VALID_RETRIEVAL_MODES.join(', ')}`
+    );
+    config.aiRetrievalMode = 'web-first';
   }
 
   log.info('[AI/Configuration] Configuration validated successfully.');
