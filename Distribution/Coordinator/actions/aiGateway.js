@@ -49,7 +49,8 @@ function resolvePromptMode(subcommand, topic, query) {
     case 'docs': return 'docs';
     case 'glossary': return 'glossary';
     case 'live': return 'knowledge';
-    default:
+    case 'browse': return 'knowledge';
+    case 'search': return 'knowledge';
       // Detect command-help intents for /ask
       if (isCommandHelpQuery(query)) return 'assistant';
       return topic === 'umamusume' ? 'knowledge' : 'repository';
@@ -79,6 +80,8 @@ function extractQuery(subcommand, options) {
     case 'glossary': return options.term ?? '';
     case 'message': return options.type ?? '';
     case 'live': return options.query ?? '';
+    case 'browse': return options.query ?? '';
+    case 'search': return options.query ?? '';
     default: return options.question ?? options.query ?? '';
   }
 }
@@ -155,7 +158,9 @@ export async function aiCommand(payload) {
     });
   }
 
-  const commandOverride = subcommand === 'ask' ? '/ask' : `/ai ${subcommand}`;
+  const commandOverride = subcommand === 'ask' ? '/ask'
+    : subcommand === 'web-search' ? '/ask'
+    : `/ai ${subcommand}`;
   const classification = classify(query, commandOverride);
 
   // Track confidence for display in responses
@@ -199,7 +204,8 @@ export async function aiCommand(payload) {
   }
 
   if (config.aiProvider === 'local') {
-    const localResult = await localAnswer({ query, subcommand, interaction, userId: payload.userId });
+    const retrievalOverride = (subcommand === 'browse' || subcommand === 'search') ? 'web-only' : undefined;
+    const localResult = await localAnswer({ query, subcommand, interaction, userId: payload.userId, retrievalOverride });
     return finalize({ ...localResult, _topic: classification.topic, _complexity: classification.complexity });
   }
 
@@ -261,7 +267,10 @@ export async function aiCommand(payload) {
   const promptMode = resolvePromptMode(subcommand, classification.topic, query);
 
   try {
-    if (classification.topic === 'live') {
+    // /browse and /search force web-only search
+    if (subcommand === 'browse' || subcommand === 'search') {
+      chunks = await Router.search(query);
+    } else if (classification.topic === 'live') {
       chunks = await Router.search(query);
     } else if (promptMode === 'assistant') {
       // Command-help query — use Knowledge Engine (includes Command Primer)

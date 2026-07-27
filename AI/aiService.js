@@ -97,6 +97,7 @@ function resolveClassification(subcommand, query) {
     ask: '/ask',
     explain: '/ai explain',
     search: '/ai search',
+    'web-search': '/ask',
     docs: '/ai docs',
     glossary: '/ai glossary',
     message: '/ai message',
@@ -256,7 +257,7 @@ async function generateValidatedResponse({ messages, classification, docs, inter
   };
 }
 
-export async function answer({ query, subcommand, interaction, userId, mode = 'command' }) {
+export async function answer({ query, subcommand, interaction, userId, mode = 'command', retrievalOverride = null }) {
   clearDegradedIfExpired();
   _runtime.requests += 1;
   _runtime.lastRequestAt = new Date().toISOString();
@@ -288,7 +289,30 @@ export async function answer({ query, subcommand, interaction, userId, mode = 'c
   let localDocs = [];
 
   // ── Run searches based on configured mode ────────────────────────
-  switch (config.aiRetrievalMode) {
+  const activeMode = retrievalOverride === 'web-only' ? 'web-only' : config.aiRetrievalMode;
+
+  switch (activeMode) {
+    // ── Web-only: explicit /search command — skip local docs ──────
+    case 'web-only': {
+      retrievalMode = 'web';
+      if (webSearchConfigured()) {
+        try {
+          const wr = await searchWeb(query);
+          if (wr?.docs?.length) docs = wr.docs;
+          log.info(`[AI] web-only: web=${docs.length} (provider=${wr?.provider ?? 'none'})`);
+        } catch (e) { log.warn(`[AI] web-only: error — ${e.message}`); }
+      }
+      if (!docs.length) {
+        const noDoc = webSearchConfigured()
+          ? 'No results found online — try rephrasing or checking your spelling~! 🔍'
+          : 'Web search is not configured — add a `TAVILY_API_KEY` to Railway to enable online browsing! Meanwhile I will use my local knowledge base. 🔧';
+        cacheSet(cacheKey, noDoc);
+        registerSuccess();
+        return successEnvelope(noDoc, interaction, false);
+      }
+      break;
+    }
+
     case 'web-first': {
       // Web → local fallback
       if (webSearchConfigured()) {
@@ -391,7 +415,9 @@ export async function answer({ query, subcommand, interaction, userId, mode = 'c
 
   // ── Nothing found anywhere ───────────────────────────────────────
   if (docs.length === 0) {
-    const noDoc = 'That information could not be found — not in my knowledge base nor online. Sorry~! 💦';
+    const noDoc = webSearchConfigured()
+      ? 'Could not find anything on that — not in my knowledge base or online. Try rephrasing~! 🔍'
+      : 'Not found in my knowledge base. 💦 Enable online search by adding a `TAVILY_API_KEY` to Railway!';
     cacheSet(cacheKey, noDoc);
     registerSuccess();
     return successEnvelope(noDoc, interaction, false);

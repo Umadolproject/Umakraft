@@ -1,5 +1,5 @@
 // Distribution/Discord/deploy-commands.js
-// Registers all 33 slash commands with the Discord API.
+// Registers all 34 slash commands with the Discord API.
 //
 // Usage:
 //   node Distribution/Discord/deploy-commands.js          — guild commands (instant, dev)
@@ -273,6 +273,22 @@ const adminGreet = new SlashCommandBuilder()
 
 // ─── AI Commands ──────────────────────────────────────────────────────────────
 
+const search = new SlashCommandBuilder()
+  .setName('search')
+  .setDescription('Search the web for anything — Umamusume lore, game guides, news, and more')
+  .addStringOption(o => o
+    .setName('query')
+    .setDescription('What do you want to search for?')
+    .setRequired(true));
+
+const browse = new SlashCommandBuilder()
+  .setName('browse')
+  .setDescription('Browse the web live — forces online search, skips local docs')
+  .addStringOption(o => o
+    .setName('query')
+    .setDescription('What should I look up online?')
+    .setRequired(true));
+
 const ask = new SlashCommandBuilder()
   .setName('ask')
   .setDescription('Ask the AI Knowledge Service a question about the repository or Umamusume game mechanics')
@@ -331,6 +347,7 @@ const commands = [
   deadLetterInspect, deadLetterReplay,
   adminGreet,
   ask, ai,
+  search, browse,
 ].map(c => c.toJSON());
 
 const commandNames = commands.map(command => command.name);

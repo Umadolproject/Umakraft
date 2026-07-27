@@ -9,6 +9,7 @@
 
 import { classify, offTopicMessage } from '../../../AI/TopicFilter.js';
 import { initialize as initAI, answer } from '../../../AI/aiService.js';
+import { isConfigured as webSearchConfigured } from '../../../AI/webSearch.js';
 import { createLogger } from '../../../core/pipelineLogger.js';
 import { CHAT_CHANNEL_ID } from '../../../core/botConfig.js';
 import { isPersonalStatsQuery, isComparisonQuery, isMultiComparison, getStats, compareStats, compareMulti } from '../../../AI/personalStats.js';
@@ -259,12 +260,16 @@ export async function execute(message, client) {
     await initAI();
     const mockInteraction = messageToInteraction(message);
 
+    const useWeb = webSearchConfigured();
+    logger.info(`messageCreate: routing to AI — webSearch=${useWeb ? 'enabled' : 'disabled'}`);
+
     const result = await answer({
       query,
       subcommand: 'ask',
       interaction: mockInteraction,
       userId: message.author.id,
       mode: 'chat',
+      retrievalOverride: useWeb ? 'web-first' : null,
     });
 
     // answer() returns successEnvelope / errorEnvelope — the mock interaction
