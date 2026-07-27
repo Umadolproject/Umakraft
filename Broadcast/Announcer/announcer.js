@@ -15,10 +15,13 @@ const logger = createLogger('announcer');
 // don't hit the Discord REST API once per recipient per step.
 
 const _userCache    = new Map(); // userId -> { user, expiresAt }
-const USER_CACHE_TTL_MS = Number.parseInt(
-  process.env.ANNOUNCER_USER_CACHE_TTL_MS ?? String(5 * 60 * 1000),
-  10,
-);
+const USER_CACHE_TTL_MS = (() => {
+  const raw = process.env.ANNOUNCER_USER_CACHE_TTL_MS;
+  if (raw == null || raw === '') return 5 * 60 * 1000; // 5 minutes
+  const parsed = Number.parseInt(raw, 10);
+  // Guard against NaN (e.g. ANNOUNCER_USER_CACHE_TTL_MS=abc) and negative values
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 5 * 60 * 1000;
+})();
 
 async function _fetchUser(client, userId) {
   const cached = _userCache.get(userId);
@@ -110,9 +113,26 @@ export async function _postChannel(record, cardBuffer, client) {
   }
 
   const errors = [];
+  const succeeded = [];
   let lastSuccess = null;
 
   for (const channelId of channels) {
+    // Skip channels that already succeeded in a previous partial delivery.
+    // This prevents duplicate messages on retry when only some channels failed.
+    try {
+      const history = await archive.getHistory(notificationKey);
+      const alreadyPosted = (history.history ?? [])
+        .some(h => h.step === 'channel' && h.outcome === 'success' && h.detail === `channelId=${channelId}`);
+      if (alreadyPosted) {
+        logger.info('channel already posted in prior attempt — skipping', { notificationKey, channelId });
+        succeeded.push(channelId);
+        continue;
+      }
+    } catch (err) {
+      // History read is best-effort; proceed with delivery on failure.
+      logger.warn(`history read failed for channel skip check: ${err.message}`, { notificationKey });
+    }
+
     try {
       const ch = await client.channels.fetch(channelId);
       const messageOpts = { content: payload?.message ?? undefined };
@@ -120,6 +140,13 @@ export async function _postChannel(record, cardBuffer, client) {
       const msg = await ch.send(messageOpts);
       logger.info('channel posted', { notificationKey, channelId, messageId: msg.id });
       lastSuccess = { channelMsgId: msg.id, channelId: ch.id, guildId: ch.guildId ?? null };
+      succeeded.push(channelId);
+      // Record per-channel success so retries skip this channel
+      await archive.recordHistory(notificationKey, {
+        step: 'channel',
+        outcome: 'success',
+        detail: `channelId=${ch.id}`,
+      });
     } catch (err) {
       const discordCode = err.code ?? null;
       logger.error(`channel post failed: ${err.message}`, { notificationKey, channelId, discordCode });
@@ -133,7 +160,13 @@ export async function _postChannel(record, cardBuffer, client) {
     }
   }
 
-  if (errors.length > 0) return { success: false, errors };
+  if (errors.length > 0) {
+    logger.warn(
+      `partial channel delivery: ${succeeded.length} ok, ${errors.length} failed`,
+      { notificationKey, succeeded, failed: errors.map(e => e.channelId) },
+    );
+    return { success: false, errors, succeeded };
+  }
 
   await archive.markChannelSent(notificationKey, lastSuccess ?? {});
   await archive.recordHistory(notificationKey, { step: 'channel', outcome: 'success' });

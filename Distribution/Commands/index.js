@@ -79,6 +79,7 @@ export async function loadCommands(logger = console) {
     }
 
     if (commands.size === 0) {
+      _loadPromise = null;  // Reset so future calls can retry
       throw new Error('[startup] No valid command handlers were loaded.');
     }
 

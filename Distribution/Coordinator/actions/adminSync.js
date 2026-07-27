@@ -41,13 +41,21 @@ export async function adminSync(payload) {
 
   for (let i = 0; i < links.length; i++) {
     const { trainerId, trainerName } = links[i];
-    const result = await processTrainer(trainerId);
 
-    if (result.success) {
-      synced++;
-    } else {
+    try {
+      const result = await processTrainer(trainerId);
+
+      if (result.success) {
+        synced++;
+      } else {
+        failed++;
+        failures.push(`${trainerName} (${trainerId}): ${result.error ?? 'unknown error'}`);
+      }
+    } catch (err) {
+      // processTrainer threw instead of returning a failure envelope —
+      // treat as a failed sync so one bad trainer doesn't abort the whole batch.
       failed++;
-      failures.push(`${trainerName} (${trainerId}): ${result.error ?? 'unknown error'}`);
+      failures.push(`${trainerName} (${trainerId}): ${err.message}`);
     }
 
     if (i < links.length - 1) await sleep(INTER_TRAINER_DELAY_MS);

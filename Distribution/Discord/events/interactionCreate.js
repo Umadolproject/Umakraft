@@ -73,6 +73,11 @@ async function sendLastChanceFailure(interaction, message) {
   if (!interaction.deferred && !interaction.replied) {
     return interaction.reply({ content: message, flags: MessageFlags.Ephemeral });
   }
+  if (interaction.replied) {
+    // Interaction token already consumed — best effort via followUp
+    try { return await interaction.followUp({ content: message, flags: MessageFlags.Ephemeral }); } catch { /* unrecoverable */ }
+    return;
+  }
   return interaction.editReply({ content: message });
 }
 

@@ -37,5 +37,9 @@ export async function runOperationCycle() {
     return decision;
   } catch (err) {
     log.error(`[Operation] Cycle failed with uncaught error: ${err.message}`);
+    // Re-throw so the task scheduler (via safeRun) records this as a failure
+    // and increments consecutiveFailures. Without this, safeRun sees the
+    // returned undefined and reports success, resetting the failure counter.
+    throw err;
   }
 }

@@ -103,10 +103,10 @@ async function leaderboardFallback(payload) {
 // ─── Public API ────────────────────────────────────────────────────────────────
 
 export async function leaderboard(payload) {
-  const { options, interaction } = payload;
-  const userId = interaction?.user?.id ?? 'unknown';
+  const { options, interaction, userId } = payload;
 
-  // ── Cooldown check ──────────────────────────────────────────────────────────
+  // ── Cooldown check: use payload.userId from the handler (clean value)
+  //    rather than interaction.user.id (proxied object). ────────────────────
   const now = Date.now();
   const lastUsed = cooldowns.get(userId);
   if (lastUsed && (now - lastUsed) < COOLDOWN_MS) {

@@ -6,7 +6,8 @@ const envInt = (name, fallback) => {
   const raw = process.env[name];
   if (raw == null || raw === '') return fallback;
   const parsed = Number.parseInt(raw, 10);
-  return Number.isFinite(parsed) ? parsed : fallback;
+  // Reject NaN and enforce non-negative (negative values are configuration errors).
+  return Number.isFinite(parsed) ? Math.max(0, parsed) : fallback;
 };
 
 export const pipelineRuntime = {

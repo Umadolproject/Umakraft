@@ -27,7 +27,18 @@ export async function setTimezone(payload) {
     };
   }
 
-  await persistTimezone(userId, guildId, timezone);
+  try {
+    await persistTimezone(userId, guildId, timezone);
+  } catch (err) {
+    return {
+      success:   false,
+      failedAt:  'Coordinator',
+      error:     'PERSIST_FAILED',
+      message:   err.message,
+      retriable: false,
+      interaction,
+    };
+  }
 
   const sampleTime = new Intl.DateTimeFormat('en-GB', {
     timeZone: timezone,

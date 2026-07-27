@@ -55,11 +55,18 @@ function parseNumber(raw) {
   return Number.isFinite(n) ? n : null;
 }
 
+/**
+ * Parse a gain cell from the member table.
+ * Returns null for truly missing data ("—" / empty), 0 for literal zero,
+ * and the numeric value otherwise (clamped to ≥0).
+ * Callers can now distinguish "no data" (null) from "zero gain" (0).
+ */
 function parseGain(raw) {
-  if (!raw || raw.trim() === '—' || raw.trim() === '0') return 0;
+  if (!raw || raw.trim() === '—') return null;       // truly unknown
+  if (raw.trim() === '0') return 0;                   // literal zero
   const n = parseNumber(raw);
-  if (n === null) return 0;
-  return Math.max(0, n); // gains are never negative
+  if (n === null) return null;
+  return Math.max(0, n);
 }
 
 /**
@@ -235,9 +242,9 @@ export function buildLeaderboardFromMembers(options = {}) {
   const allActive = readAllActive(options.memberDir);
 
   const gainField =
-    scope === 'monthly' ? 'monthlyGain'
-  : scope === 'weekly'  ? 'weeklyGain'
-  :                        'dailyGain';
+    scope === 'monthly' ? 'monthlyFanGain'
+  : scope === 'weekly'  ? 'weeklyFanGain'
+  :                        'dailyFanGain';
 
   const entries = allActive
     .map(m => ({

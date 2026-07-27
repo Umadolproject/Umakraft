@@ -40,13 +40,15 @@ async function init() {
 
 function hydrate(row) {
   if (!row) return null;
+  let skills;
+  try { skills = JSON.parse(row.skills_json ?? '[]'); } catch { skills = []; }
   return {
     trainerId:   row.trainer_id,
     name:        row.name,
     fans:        row.fans,
     rank:        row.rank,
     whiteSkills: row.white_skills,
-    skills:      JSON.parse(row.skills_json ?? '[]'),
+    skills,
     storedAt:    row.stored_at,
     expiresAt:   row.expires_at,
     kept:        row.kept === 1,

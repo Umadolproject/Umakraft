@@ -10,7 +10,7 @@
 //   stats()    → { totalEntries, filePath }
 //   getRecent(limit) → Array     — read the most recent entries
 
-import { appendFile, mkdir, readFile } from 'node:fs/promises';
+import { appendFile, mkdir, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import coreLog from '../core/log.js';
@@ -99,6 +99,15 @@ export async function log(entry) {
   };
 
   try {
+    // Warn if the log file is approaching the configured maximum size.
+    // Rotation is not implemented yet, so this is an operator visibility aid.
+    try {
+      const info = await stat(LOG_FILE);
+      if (info.size > MAX_FILE_SIZE) {
+        coreLog.warn(`[Operation/AskLogger] Log file exceeds ${MAX_FILE_SIZE} bytes — consider rotating`);
+      }
+    } catch { /* file may not exist yet */ }
+
     const line = JSON.stringify(record) + '\n';
     await appendFile(LOG_FILE, line, 'utf8');
     _totalEntries += 1;
@@ -120,9 +129,21 @@ export async function log(entry) {
  */
 export async function getRecent(limit = 50) {
   try {
-    const raw = await readFile(LOG_FILE, 'utf8');
-    const lines = raw.trim().split('\n').filter(Boolean);
-    // Return last N entries, parsed back to objects
+    // Read only the tail of the file — avoids loading the entire file into
+    // memory when the log has grown large. Estimate ~200 bytes per line.
+    const info = await stat(LOG_FILE);
+    const estLineBytes = 200;
+    const readStart = Math.max(0, info.size - (limit + 5) * estLineBytes);
+
+    const buf = Buffer.alloc(info.size - readStart);
+    const fh = await (await import('node:fs/promises')).open(LOG_FILE, 'r');
+    await fh.read(buf, 0, buf.length, readStart);
+    await fh.close();
+
+    const raw = buf.toString('utf8');
+    // Skip the first (possibly partial) line, then parse the rest
+    const lines = raw.split('\n').filter(Boolean);
+    if (readStart > 0 && lines.length > 0) lines.shift();
     return lines.slice(-limit).map(line => {
       try { return JSON.parse(line); } catch { return null; }
     }).filter(Boolean);

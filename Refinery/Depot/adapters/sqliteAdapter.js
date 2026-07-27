@@ -25,11 +25,15 @@ async function init() {
 
 function hydrate(row) {
   if (!row) return null;
+  // Gracefully handle corrupted JSON — matches Archive adapter pattern.
+  let compiledProduct, provenance;
+  try { compiledProduct = JSON.parse(row.compiled_product_json); } catch { compiledProduct = null; }
+  try { provenance = JSON.parse(row.provenance_json); } catch { provenance = null; }
   return {
     id: row.id,
     version: row.version,
-    compiledProduct: JSON.parse(row.compiled_product_json),
-    provenance: JSON.parse(row.provenance_json),
+    compiledProduct,
+    provenance,
     storedAt: row.stored_at,
   };
 }

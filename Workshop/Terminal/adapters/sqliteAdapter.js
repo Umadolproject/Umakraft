@@ -34,14 +34,22 @@ async function init() {
 
 function hydrate(row) {
   if (!row) return null;
+  // Gracefully handle corrupted JSON — matches Archive adapter pattern.
+  let trigger = null, meta = null;
+  if (row.trigger_json) {
+    try { trigger = JSON.parse(row.trigger_json); } catch { /* leave as null */ }
+  }
+  if (row.meta_json) {
+    try { meta = JSON.parse(row.meta_json); } catch { /* leave as null */ }
+  }
   return {
     terminalId: row.terminal_id,
     blueprintKey: row.blueprint_key,
     blueprintName: row.blueprint_name,
-    trigger: row.trigger_json ? JSON.parse(row.trigger_json) : null,
+    trigger,
     type: row.type,
     png: row.png_base64 ? Buffer.from(row.png_base64, 'base64') : null,
-    meta: row.meta_json ? JSON.parse(row.meta_json) : null,
+    meta,
     validatedAt: row.validated_at,
     fabricatorVersion: row.fabricator_version,
     receivedAt: row.received_at,

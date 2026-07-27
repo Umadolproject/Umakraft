@@ -37,10 +37,15 @@ async function init() {
 
 function hydrateRecord(row) {
   if (!row) return null;
+  // Gracefully handle corrupted JSON — matches Archive adapter pattern.
+  // Single-row corruption won't break a bulk retrieve (returns partial data).
+  let data, metadata;
+  try { data = JSON.parse(row.data_json); } catch { data = {}; }
+  try { metadata = JSON.parse(row.metadata_json ?? '{}'); } catch { metadata = {}; }
   return {
-    data: JSON.parse(row.data_json),
+    data,
     metadata: {
-      ...JSON.parse(row.metadata_json),
+      ...metadata,
       storedAt:  row.stored_at,
       updatedAt: row.updated_at ?? undefined,
     },

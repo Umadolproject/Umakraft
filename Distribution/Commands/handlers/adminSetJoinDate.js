@@ -20,6 +20,22 @@ export async function execute(interaction, coordinator) {
       ephemeral: true,
     });
   }
+  // Date.parse for initial validation; component check catches auto-roll
+  // (e.g. 2026-02-30 → Mar 2 in V8).
+  if (isNaN(Date.parse(date))) {
+    return interaction.reply({
+      content:  `\`${date}\` is not a valid calendar date.`,
+      ephemeral: true,
+    });
+  }
+  const [y, m, d] = date.split('-').map(Number);
+  const parsedDate = new Date(date);
+  if (parsedDate.getUTCFullYear() !== y || parsedDate.getUTCMonth() + 1 !== m || parsedDate.getUTCDate() !== d) {
+    return interaction.reply({
+      content:  `\`${date}\` is not a valid calendar date.`,
+      ephemeral: true,
+    });
+  }
 
   const member  = interaction.options.getMember('member')   ?? null;
   const trainer = interaction.options.getString('trainer')  ?? null;

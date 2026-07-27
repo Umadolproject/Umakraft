@@ -59,7 +59,8 @@ export async function fanGain(payload) {
       }),
     });
   } catch (_pipelineErr) {
-    result = { success: false };
+    // Preserve interaction so the Dispatcher can reply to the user.
+    result = { success: false, interaction: payload.interaction };
   }
 
   if (result?.success !== false) return result;

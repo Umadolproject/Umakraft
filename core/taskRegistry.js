@@ -47,7 +47,12 @@ export function registerTask(name, cronExpr) {
  */
 export function recordTaskStart(name) {
   const stats = _registry.get(name);
-  if (!stats) return;
+  if (!stats) {
+    // Task was never registered — likely a name mismatch between
+    // tasks/index.js schedule() and the actual task registration.
+    console.warn(`[taskRegistry] recordTaskStart: task "${name}" not registered — stats lost`);
+    return;
+  }
   stats.lastRunAt = new Date();
 }
 
@@ -60,7 +65,10 @@ export function recordTaskStart(name) {
  */
 export function recordTaskEnd(name, { success, error = null } = {}) {
   const stats = _registry.get(name);
-  if (!stats) return;
+  if (!stats) {
+    console.warn(`[taskRegistry] recordTaskEnd: task "${name}" not registered — stats lost`);
+    return;
+  }
   stats.lastSuccess = success;
   stats.lastError   = error ?? null;
   stats.totalRuns  += 1;

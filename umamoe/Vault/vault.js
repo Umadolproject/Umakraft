@@ -48,6 +48,8 @@ function isTrusted(inspectorResult) {
     inspectorResult.success === true &&
     inspectorResult.accepted === true &&
     'data' in inspectorResult &&
+    inspectorResult.data !== null &&
+    inspectorResult.data !== undefined &&
     typeof inspectorResult.inspectedAt === 'string'
   );
 }

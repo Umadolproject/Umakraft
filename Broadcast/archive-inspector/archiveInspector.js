@@ -187,7 +187,7 @@ export async function evaluate(envelope, { client } = {}) {
     return reject(notificationKey, 'VARIANT_SELECTION_ERROR');
   }
 
-  if (!variantSelection || !variantSelection.imageParams) {
+  if (!variantSelection || (!variantSelection.imageParams && !variantSelection.message)) {
     return reject(notificationKey, 'VARIANT_SELECTION_INCOMPLETE');
   }
 

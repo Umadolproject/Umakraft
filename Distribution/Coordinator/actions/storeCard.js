@@ -39,14 +39,25 @@ export async function storeCard(payload) {
   const skills = cp.skills ?? [];
   const whiteSkills = skills.filter(s => (s.level ?? s.rarity) >= 5).length;
 
-  await upsertCard({
-    trainerId,
-    name: cp.name ?? trainerId,
-    fans: cp.fans ?? 0,
-    rank: cp.rank ?? null,
-    whiteSkills,
-    skills,
-  });
+  try {
+    await upsertCard({
+      trainerId,
+      name: cp.name ?? trainerId,
+      fans: cp.fans ?? 0,
+      rank: cp.rank ?? null,
+      whiteSkills,
+      skills,
+    });
+  } catch (err) {
+    return {
+      success:   false,
+      failedAt:  'Coordinator',
+      error:     'CARD_STORE_FAILED',
+      message:   err.message,
+      retriable: true,
+      interaction,
+    };
+  }
 
   return {
     success:  true,
