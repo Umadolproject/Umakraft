@@ -1,0 +1,211 @@
+// Distribution/Discord/events/messageCreate.js
+// #bot-chat @mention handler — activates the UmaKraft AI when the bot is
+// mentioned in the designated chat channel. Runs every message through the
+// TopicFilter; qualified questions go to the AI pipeline; off-topic messages
+// get a gentle, in-character decline.
+//
+// Channel: #bot-chat (1531205995009671201)
+// Trigger: @UmaKraft <question>
+
+import { classify, offTopicMessage } from '../../../AI/TopicFilter.js';
+import { initialize as initAI, answer } from '../../../AI/aiService.js';
+import { createLogger } from '../../../core/pipelineLogger.js';
+import { CHAT_CHANNEL_ID } from '../../../core/botConfig.js';
+
+const logger = createLogger('messageCreate');
+
+export const name = 'messageCreate';
+export const once = false;
+
+// ─── Configuration ──────────────────────────────────────────────────────────
+
+const BOT_CHAT_CHANNEL_ID = CHAT_CHANNEL_ID || '1531205995009671201';
+const MAX_QUERY_LENGTH = 500;
+const MIN_QUERY_LENGTH = 2;
+
+// ─── Gentle off-topic replies for when TopicFilter declines ─────────────────
+
+const OFF_TOPIC_REPLIES = [
+  "um... that's a little outside what i can help with... 💕 maybe try asking about uma musume, your circle, or the bot's features? i'd love to help with those~!",
+  "ah... i'm not really sure about that one... 😣 my brain works best with uma musume questions, circle stats, and bot stuff! want to try something like that instead?",
+  "hey~ that's sweet of you to ask, but i don't think i can answer that... 🥺 i'm here for uma musume, fan tracking, and bot features! ask me about those, okay?",
+  "hmm... that's a bit tricky for me... 😕 i know a lot about uma musume and fan circles though! want to ask me about those instead? 💕",
+];
+
+function randomOffTopicReply() {
+  return OFF_TOPIC_REPLIES[Math.floor(Math.random() * OFF_TOPIC_REPLIES.length)];
+}
+
+// ─── Mock interaction wrapper ───────────────────────────────────────────────
+// The AI pipeline (aiService.answer) expects a Discord interaction object.
+// We wrap the Message to look like an interaction so we can reuse the full
+// pipeline without duplicating it.
+
+function messageToInteraction(message) {
+  const userId = message.author.id;
+  let replied = false;
+
+  return {
+    // Core identity
+    id: message.id,
+    user: message.author,
+    guildId: message.guildId,
+    channelId: message.channelId,
+    userId,
+
+    // Flags for aiService
+    deferred: true,
+    replied: false,
+    ephemeral: false,
+
+    // reply() — called by successEnvelope or createDocsOnlyFallback
+    reply: async (payload = {}) => {
+      if (replied) {
+        // Already replied via editReply — followUp instead
+        return message.reply({
+          content: typeof payload === 'string' ? payload : payload.content,
+          allowedMentions: { repliedUser: true },
+        });
+      }
+      replied = true;
+      return message.reply({
+        content: typeof payload === 'string' ? payload : payload.content,
+        allowedMentions: { repliedUser: true },
+      });
+    },
+
+    // deferReply() — some paths defer before replying
+    deferReply: async () => {
+      // no-op — we use typing indicator instead
+    },
+
+    // editReply() — some paths edit a deferred reply
+    editReply: async (payload = {}) => {
+      if (replied) return;
+      replied = true;
+      return message.reply({
+        content: typeof payload === 'string' ? payload : payload.content,
+        allowedMentions: { repliedUser: true },
+      });
+    },
+
+    // followUp() — fallback delivery
+    followUp: async (payload = {}) => {
+      return message.channel.send({
+        content: typeof payload === 'string' ? payload : payload.content,
+        allowedMentions: { repliedUser: false },
+      });
+    },
+  };
+}
+
+// ─── Query extraction ───────────────────────────────────────────────────────
+// Strips the @mention from the message and returns the clean question text.
+
+function extractQuery(message, client) {
+  const botId = client?.user?.id;
+  let content = message.content.trim();
+
+  // Remove @mention(s) of the bot
+  if (botId) {
+    content = content.replace(new RegExp(`<@!?${botId}>`, 'g'), '').trim();
+  }
+
+  // Fallback: remove any remaining @mention
+  content = content.replace(/<@!?\d+>/g, '').trim();
+
+  return content;
+}
+
+// ─── Entry point ────────────────────────────────────────────────────────────
+
+export async function execute(message, client) {
+  // ── Gate 1: Only #bot-chat ───────────────────────────────────────────────
+  if (message.channelId !== BOT_CHAT_CHANNEL_ID) return;
+
+  // ── Gate 2: Ignore bots (including self) ─────────────────────────────────
+  if (message.author.bot) return;
+
+  // ── Gate 3: Must @mention the bot ────────────────────────────────────────
+  const botId = client?.user?.id;
+  if (!botId) {
+    logger.warn('messageCreate: client.user.id not available — skipping');
+    return;
+  }
+
+  const mentioned = message.mentions?.has(botId);
+  if (!mentioned) return;
+
+  // ── Gate 4: Extract and validate the query ───────────────────────────────
+  const query = extractQuery(message, client);
+
+  if (!query || query.length < MIN_QUERY_LENGTH) {
+    await message.reply({
+      content: "hey~! you mentioned me... did you have a question? 💕 ask me anything about uma musume, your circle, or the bot — i'm here to help~!",
+      allowedMentions: { repliedUser: true },
+    });
+    return;
+  }
+
+  if (query.length > MAX_QUERY_LENGTH) {
+    await message.reply({
+      content: `ah... that's a really long question (${query.length} characters!)... 🥺 could you maybe shorten it a bit? my brain works better with shorter questions~ 💕`,
+      allowedMentions: { repliedUser: true },
+    });
+    return;
+  }
+
+  // ── Gate 5: TopicFilter classification ───────────────────────────────────
+  const classification = classify(query, '/ask');
+  const userTag = message.author.tag ?? message.author.username ?? 'unknown';
+
+  logger.info(`messageCreate: ${userTag} asked "${query.slice(0, 80)}" → ${classification.topic}`);
+
+  // ── Off-topic: gentle decline ────────────────────────────────────────────
+  if (classification.rejected || classification.topic === 'off-topic') {
+    await message.reply({
+      content: randomOffTopicReply(),
+      allowedMentions: { repliedUser: true },
+    });
+    logger.info(`messageCreate: declined off-topic from ${userTag}`);
+    return;
+  }
+
+  // ── Show typing indicator ────────────────────────────────────────────────
+  await message.channel.sendTyping().catch(() => {});
+
+  // ── Route to AI pipeline ─────────────────────────────────────────────────
+  try {
+    await initAI();
+    const mockInteraction = messageToInteraction(message);
+
+    const result = await answer({
+      query,
+      subcommand: 'ask',
+      interaction: mockInteraction,
+      userId: message.author.id,
+    });
+
+    // answer() returns successEnvelope / errorEnvelope — the mock interaction
+    // already handled the reply. If the envelope says failure and no reply was
+    // sent, send a fallback.
+    if (result && !result.success) {
+      logger.warn(`AI answer failed for "${query.slice(0, 60)}": ${result.message || result.error}`);
+      // Check if the mock already replied — if not, send fallback
+      try {
+        await message.reply({
+          content: "ah... i tried to answer but something went wrong... 😣 maybe try again in a moment? i'm really sorry~! 💕",
+          allowedMentions: { repliedUser: true },
+        });
+      } catch { /* fine if already replied */ }
+    }
+  } catch (err) {
+    logger.error(`messageCreate AI pipeline error: ${err.message}`);
+    try {
+      await message.reply({
+        content: "eep... something broke when i tried to think about that... 😭 could you try again? i'm really sorry~! 💕",
+        allowedMentions: { repliedUser: true },
+      });
+    } catch { /* unrecoverable */ }
+  }
+}
