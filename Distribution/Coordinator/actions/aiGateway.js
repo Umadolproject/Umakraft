@@ -300,6 +300,16 @@ export async function aiCommand(payload) {
       chunks = await Router.search(query);
     } else if (classification.topic === 'live' || classification.topic === 'web') {
       chunks = await Router.search(query);
+      // Low-confidence web results often miss character names, game terms, etc.
+      // Supplement with knowledge base so the AI has relevant domain context.
+      if (classification.confidence < LOW_CONFIDENCE_THRESHOLD) {
+        try {
+          const kbChunks = knowledgeGetContext(query);
+          if (kbChunks.length > 0) {
+            chunks = [...kbChunks, ...chunks];
+          }
+        } catch { /* knowledge base is additive */ }
+      }
     } else if (promptMode === 'assistant') {
       // Command-help query — use Knowledge Engine (includes Command Primer)
       chunks = knowledgeGetContext(query);
@@ -330,8 +340,10 @@ export async function aiCommand(payload) {
   const { context, citations } = buildContext([chunks]);
 
   // ── Inject conversation memory from previous turns ──────────────────────
+  // Only inject when confidence is adequate — low-confidence contexts
+  // often contain incorrect answers that poison subsequent prompts.
   let memoryContext = '';
-  if (payload.userId && payload.channelId) {
+  if (payload.userId && payload.channelId && classification.confidence >= LOW_CONFIDENCE_THRESHOLD) {
     memoryContext = getConversationContext(payload.userId, payload.channelId);
   }
   const mergedContext = memoryContext
@@ -387,8 +399,10 @@ export async function aiCommand(payload) {
     `[AI/Gateway] Cache STORE topic=${classification.topic} query="${query.slice(0, 60)}"`
   );
 
-  // ── Store this turn in conversation memory ──────────────────────────────
-  if (payload.userId && payload.channelId) {
+  // ── Store this turn in conversation memory (only for confident answers) ──
+  // Low-confidence responses may contain incorrect content that poisons
+  // subsequent prompts. Skip storage to prevent answer repetition.
+  if (payload.userId && payload.channelId && classification.confidence >= LOW_CONFIDENCE_THRESHOLD) {
     addConversationTurn(payload.userId, payload.channelId, query, text);
   }
 
