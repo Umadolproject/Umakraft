@@ -1,43 +1,70 @@
 // Distribution/Coordinator/actions/help.js
-// Renders the help image via Workshop using the 'help' blueprint.
-// No trainer lookup — passes a static payload directly to Workshop/produce().
+// Renders the help embed — uses Fabricator when available, falls back to text.
 
 import { produce, claimDeliverable } from '../../../Workshop/pipeline.js';
 
+const PUPPETEER_DISABLED = process.env.PUPPETEER_DISABLED === 'true';
+
+const HELP_COMMAND_LIST = [
+  { name: '📊 Fan & Stats', commands: ['/fan_gain', '/profile', '/leaderboard', '/total_fan', '/total_circlefan_gain', '/circle_master', '/intercircleleaderboard', '/club_gain'] },
+  { name: '🔗 Accounts',   commands: ['/link', '/unlink', '/link_list', '/store', '/keep', '/joindate'] },
+  { name: '🔍 Search',     commands: ['/search_trainer', '/memberlist'] },
+  { name: '⚙️ Settings',   commands: ['/set_timezone', '/set_fans', '/warningsettings'] },
+  { name: '🛠️ Admin',       commands: ['/admin_sync', '/admin_synccards', '/admin_setjoindate', '/timeline_setup', '/timeline_post', '/test_milestone'] },
+  { name: '🤖 AI',          commands: ['/ask', '/ai', '/admin-greet'] },
+  { name: '📋 Info',       commands: ['/status', '/circle_status', '/help'] },
+];
+
+function buildHelpEmbed(interaction) {
+  const fields = HELP_COMMAND_LIST.map(cat => ({
+    name: cat.name,
+    value: cat.commands.map(c => `\`${c}\``).join('  '),
+    inline: false,
+  }));
+
+  return {
+    success:   true,
+    type:      'embed',
+    ephemeral: false,
+    result: {
+      title:       '📖 UmaKraft Commands',
+      description: 'All available slash commands:',
+      fields,
+      footer:      { text: 'UmaKraft Bot · Use /<command> to get started' },
+      timestamp:   new Date().toISOString(),
+    },
+    interaction,
+  };
+}
+
 export async function help(payload) {
   const { interaction } = payload;
+
+  // Text-only mode — skip Puppeteer entirely.
+  if (PUPPETEER_DISABLED) return buildHelpEmbed(interaction);
 
   const fabricatorInput = {
     blueprintKey: 'help',
     meta: {
       generatedAt: new Date().toISOString(),
     },
-    // The help blueprint renders a static command list — no dynamic data needed.
-    // If the blueprint template requires a command list, pass it here.
   };
 
   const produced = await produce(fabricatorInput);
   if (!produced.success) {
-    return {
-      success:   false,
-      failedAt:  'Workshop',
-      error:     produced.error ?? 'FABRICATOR_RENDER_ERROR',
-      message:   produced.message ?? 'Help image render failed',
-      retriable: false,
-      interaction,
-    };
+    // Fabricator failed — fall back to text embed.
+    console.warn(
+      `[help] Fabricator failed — falling back to text embed. Error: ${produced.message}`
+    );
+    return buildHelpEmbed(interaction);
   }
 
   const claimed = await claimDeliverable(produced.terminalId);
   if (!claimed.success) {
-    return {
-      success:   false,
-      failedAt:  'Terminal',
-      error:     claimed.error ?? 'TERMINAL_NOT_FOUND',
-      message:   claimed.message ?? 'Terminal claim failed',
-      retriable: false,
-      interaction,
-    };
+    console.warn(
+      `[help] Terminal claim failed — falling back to text embed. Error: ${claimed.message}`
+    );
+    return buildHelpEmbed(interaction);
   }
 
   return {

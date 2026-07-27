@@ -49,6 +49,11 @@ function latestDailyFanCount(dailyFans) {
  *
  * Returns the count of trailing zero days.  > 3 means the member likely left.
  */
+/**
+ * Minimum trailing zeros needed (beyond future-day padding) to consider
+ * a member as having left the circle.  e.g. 3 means if there are 3 more
+ * trailing zeros than remaining month days, the member likely left.
+ */
 const LEFT_THRESHOLD_DAYS = 3;
 
 function trailingZeroDays(dailyFans) {
@@ -65,10 +70,25 @@ function trailingZeroDays(dailyFans) {
   return count;
 }
 
+function daysRemainingInMonth() {
+  const now = new Date();
+  const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  return Math.max(0, lastDay - now.getDate());
+}
+
 function hasMemberLeftThisMonth(member) {
   const dailyFans = member?.daily_fans ?? member?.dailyFans;
+  if (!Array.isArray(dailyFans) || dailyFans.length === 0) return false;
+
   const zeroDays = trailingZeroDays(dailyFans);
-  return zeroDays > LEFT_THRESHOLD_DAYS;
+
+  // daily_fans is a per-day cumulative array padded to month length.
+  // Future days (e.g. July 27 → positions 27-30) are zero-filled by the API.
+  // We subtract those from the trailing zero count before checking the threshold.
+  const remainingDays = daysRemainingInMonth();
+  const realTrailingZeros = zeroDays - remainingDays;
+
+  return realTrailingZeros > LEFT_THRESHOLD_DAYS;
 }
 
 // ─── Gain computation (mirrors pipeline.js circleMemberGains) ─────────────────
