@@ -4,7 +4,7 @@
 import { generate, getModelStatus } from './model.js';
 import { initialize as initDocs, search, isOnTopic, stats as documentSearchStats } from './documentSearch.js';
 import { build as buildPrompt } from './promptBuilder.js';
-import { get as cacheGet, set as cacheSet, stats as cacheStats } from './cache.js';
+import { get as cacheGet, set as cacheSet, stats as cacheStats, prewarm as cachePrewarm } from './cache.js';
 import { validate, hardRejectMessage } from './ResponseValidator.js';
 import { classify, offTopicMessage } from './TopicFilter.js';
 import config from './Configuration.js';
@@ -41,6 +41,7 @@ export function initialize() {
 
   _initializationPromise = (async () => {
     await initDocs();
+    cachePrewarm();
     log.info('[AI/LocalService] Document index ready; model will load on first AI request.');
   })();
 
@@ -81,11 +82,12 @@ function appendSources(content, docs) {
   return (content + footer).length <= DISCORD_MAX ? content + footer : content;
 }
 
-function buildCacheContext(query, subcommand, retrievalMode = 'local_docs') {
+function buildCacheContext(query, subcommand, retrievalMode = 'local_docs', mode = 'command') {
   return {
     query,
-    commandMode: subcommand || 'ask',
+    commandMode: subcommand || (mode === 'chat' ? 'ask' : 'ask'),
     retrievalMode,
+    mode,
   };
 }
 
@@ -253,7 +255,7 @@ async function generateValidatedResponse({ messages, classification, docs, inter
   };
 }
 
-export async function answer({ query, subcommand, interaction, userId }) {
+export async function answer({ query, subcommand, interaction, userId, mode = 'command' }) {
   clearDegradedIfExpired();
   _runtime.requests += 1;
   _runtime.lastRequestAt = new Date().toISOString();
@@ -261,19 +263,19 @@ export async function answer({ query, subcommand, interaction, userId }) {
   await initialize();
 
   const classification = resolveClassification(subcommand, query);
-  log.info(`[AI/LocalService] user=${userId} cmd=${subcommand} classification=${classification.topic} degraded=${isDegraded()} query="${query.slice(0, 80)}"`);
+  log.info(`[AI/LocalService] user=${userId} cmd=${subcommand} mode=${mode} classification=${classification.topic} degraded=${isDegraded()} query="${query.slice(0, 80)}"`);
 
   if (!isOnTopic(query) || classification.rejected) {
     return successEnvelope(offTopicMessage(), interaction, true);
   }
 
   const retrievalMode = 'local_docs';
-  const cacheKey = buildCacheContext(query, subcommand, retrievalMode);
+  const cacheKey = buildCacheContext(query, subcommand, retrievalMode, mode);
   const cached = cacheGet(cacheKey);
   if (cached) {
     _runtime.cacheHits += 1;
     registerSuccess();
-    log.info(`[AI/LocalService] Cache hit cmd=${subcommand} retrieval=${retrievalMode}`);
+    log.info(`[AI/LocalService] Cache hit cmd=${subcommand} mode=${mode} retrieval=${retrievalMode}`);
     return successEnvelope(formatText(cached), interaction, false);
   }
   _runtime.cacheMisses += 1;
@@ -304,7 +306,7 @@ export async function answer({ query, subcommand, interaction, userId }) {
     return createDocsOnlyFallback({ docs, query, interaction, reason: _runtime.degradedReason ?? 'degraded mode active' });
   }
 
-  const messages = buildPrompt(query, docs);
+  const messages = buildPrompt(query, docs, { mode });
   const generated = await generateValidatedResponse({
     messages,
     classification,

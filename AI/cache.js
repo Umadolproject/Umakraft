@@ -4,6 +4,7 @@
 
 import { createHash } from 'node:crypto';
 import log from '../core/log.js';
+import FAQ_WARMERS from '../knowledge/faqWarmers.js';
 
 const MAX_ENTRIES = 200;
 const TTL_MS = 3_600_000; // 1 hour
@@ -24,6 +25,7 @@ function normaliseCacheKey(input) {
       query: input.toLowerCase().trim(),
       commandMode: 'legacy',
       retrievalMode: 'legacy',
+      mode: 'legacy',
     };
   }
 
@@ -31,6 +33,7 @@ function normaliseCacheKey(input) {
     query: String(input?.query ?? '').toLowerCase().trim(),
     commandMode: String(input?.commandMode ?? 'unknown').toLowerCase().trim(),
     retrievalMode: String(input?.retrievalMode ?? 'unknown').toLowerCase().trim(),
+    mode: String(input?.mode ?? 'command').toLowerCase().trim(),
   };
 }
 
@@ -96,4 +99,34 @@ export function stats() {
     writes: _metrics.writes,
     evictions: _metrics.evictions,
   };
+}
+
+/**
+ * Pre-warm the cache with high-frequency FAQ answers on startup.
+ * These are hand-written personality-rich responses — instant replies, zero AI cost.
+ * Safe to call multiple times; subsequent calls are no-ops if entries already exist.
+ */
+export function prewarm() {
+  if (!FAQ_WARMERS || FAQ_WARMERS.length === 0) return;
+
+  let seeded = 0;
+  for (const entry of FAQ_WARMERS) {
+    const cacheKey = {
+      query: entry.query,
+      commandMode: entry.commandMode ?? 'ask',
+      retrievalMode: entry.retrievalMode ?? 'local_docs',
+    };
+    // Only seed if not already cached (avoids overwriting any runtime cache)
+    const existing = get(cacheKey);
+    if (!existing) {
+      set(cacheKey, entry.text);
+      seeded += 1;
+    }
+  }
+
+  if (seeded > 0) {
+    log.info(`[AI/LocalCache] Pre-warmed ${seeded}/${FAQ_WARMERS.length} FAQ entries (${_store.size} total cached)`);
+  } else {
+    log.debug(`[AI/LocalCache] Pre-warm skipped — all ${FAQ_WARMERS.length} FAQ entries already cached`);
+  }
 }

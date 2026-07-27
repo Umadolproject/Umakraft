@@ -184,6 +184,7 @@ export async function execute(message, client) {
       subcommand: 'ask',
       interaction: mockInteraction,
       userId: message.author.id,
+      mode: 'chat',
     });
 
     // answer() returns successEnvelope / errorEnvelope — the mock interaction
