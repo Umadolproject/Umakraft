@@ -4,7 +4,7 @@
 
 import { createHash } from 'node:crypto';
 import log from '../core/log.js';
-import FAQ_WARMERS from '../knowledge/faqWarmers.js';
+import FAQ_WARMERS from './knowledge/faqWarmers.js';
 
 const MAX_ENTRIES = 200;
 const TTL_MS = 3_600_000; // 1 hour
