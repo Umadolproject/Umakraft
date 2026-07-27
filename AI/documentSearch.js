@@ -9,6 +9,7 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { join, relative, extname } from 'node:path';
 import log from '../core/log.js';
+import config from './Configuration.js';
 
 const TOPIC_KEYWORDS = new Set([
   'umamusume', 'uma musume', 'umacraft', 'umakraft', 'circle', 'trainer',
@@ -23,6 +24,12 @@ export function isOnTopic(query) {
   const lower = query.toLowerCase();
   for (const kw of TOPIC_KEYWORDS) {
     if (lower.includes(kw)) return true;
+  }
+  // If web search is configured (SearXNG or paid APIs), accept the query.
+  // Explicitly off-topic queries are still caught by TopicFilter separately.
+  if (config.searxngUrl || config.tavilyApiKey || config.braveSearchApiKey ||
+      config.serpapiApiKey || config.serperApiKey) {
+    return true;
   }
   return false;
 }

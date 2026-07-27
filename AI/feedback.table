@@ -1,0 +1,14 @@
+{
+  "fields": [
+    { "field": "id", "type": "string", "required": true },
+    { "field": "userId", "type": "string", "required": true },
+    { "field": "channelId", "type": "string", "required": true },
+    { "field": "question", "type": "string", "required": true },
+    { "field": "answer", "type": "string", "required": true },
+    { "field": "askedAt", "type": "string", "required": true },
+    { "field": "repliedAt", "type": "string" },
+    { "field": "feedback", "type": "enum", "enums": ["pending", "yes", "no", "unknown", "timeout"] },
+    { "field": "userReply", "type": "string" }
+  ],
+  "data": []
+}

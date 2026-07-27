@@ -11,6 +11,7 @@ import { validate } from '../../../AI/ResponseValidator.js';
 import { answer as localAnswer } from '../../../AI/aiService.js';
 import { Router } from '../../../AI/router/Router.js';
 import { getResponse, setResponse } from '../../../AI/Cache.js';
+import { scopeUmaQuery } from '../../../AI/WebSearchEngine.js';
 import config from '../../../AI/Configuration.js';
 import { log as logQuestion } from '../../../Operation/AskLogger.js';
 import log from '../../../core/log.js';
@@ -53,7 +54,9 @@ function resolvePromptMode(subcommand, topic, query) {
     case 'search': return 'knowledge';
       // Detect command-help intents for /ask
       if (isCommandHelpQuery(query)) return 'assistant';
-      return topic === 'umamusume' ? 'knowledge' : 'repository';
+      if (topic === 'umamusume') return 'knowledge';
+      if (topic === 'web') return 'web';
+      return 'repository';
   }
 }
 
@@ -270,7 +273,7 @@ export async function aiCommand(payload) {
     // /browse and /search force web-only search
     if (subcommand === 'browse' || subcommand === 'search') {
       chunks = await Router.search(query);
-    } else if (classification.topic === 'live') {
+    } else if (classification.topic === 'live' || classification.topic === 'web') {
       chunks = await Router.search(query);
     } else if (promptMode === 'assistant') {
       // Command-help query — use Knowledge Engine (includes Command Primer)
@@ -279,7 +282,14 @@ export async function aiCommand(payload) {
       const repoChunks = await repositoryEngine.search(query);
       chunks = [...chunks, ...repoChunks];
     } else if (classification.topic === 'umamusume') {
+      // Knowledge base as foundation
       chunks = knowledgeGetContext(query);
+      // Always supplement with site-scoped web search (trusted uma sites only)
+      try {
+        const umaQuery = scopeUmaQuery(query);
+        const webChunks = await Router.search(umaQuery);
+        chunks = [...chunks, ...webChunks];
+      } catch { /* web search is additive — fine if it fails */ }
     } else {
       chunks = await repositoryEngine.search(query);
       if (classification.confidence < LOW_CONFIDENCE_THRESHOLD && chunks.length < 3) {

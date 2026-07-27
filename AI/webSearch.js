@@ -52,6 +52,65 @@ function formatDocs(results, provider) {
   }));
 }
 
+// ── SearXNG (self-hosted, free, primary) ──────────────────────────────────
+async function searchSearXNG(query) {
+  if (!config.searxngUrl) return null;
+
+  const params = new URLSearchParams({
+    q: query,
+    format: 'json',
+    category_general: '1',
+  });
+
+  try {
+    const res = await fetch(`${config.searxngUrl}/search`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: params.toString(),
+      signal: AbortSignal.timeout(config.searchProviderTimeoutMs || 10_000),
+    });
+
+    if (!res.ok) {
+      log.warn(`[WebSearch] SearXNG returned ${res.status}`);
+      return null;
+    }
+
+    const contentType = res.headers.get('content-type') ?? '';
+    const text = await res.text();
+
+    // JSON path
+    if (contentType.includes('json')) {
+      const data = JSON.parse(text);
+      return formatDocs(data.results ?? [], 'searxng');
+    }
+
+    // HTML scrape path
+    const results = [];
+    const resultRegex = /<article class="result[^"]*"[^>]*>([\s\S]*?)<\/article>/gi;
+    let match;
+    while ((match = resultRegex.exec(text)) !== null && results.length < (config.searchMaxResults ?? 5)) {
+      const block = match[1];
+      const urlMatch = block.match(/<a\s[^>]*href="([^"]+)"[^>]*class="url_header"/i)
+                    || block.match(/<a\s[^>]*class="url_header"[^>]*href="([^"]+)"/i);
+      const titleMatch = block.match(/<h3>\s*<a[^>]*>([\s\S]*?)<\/a>\s*<\/h3>/i);
+      const snippetMatch = block.match(/<p\s[^>]*class="content"[^>]*>([\s\S]*?)<\/p>/i);
+
+      if (titleMatch || snippetMatch) {
+        results.push({
+          url:     urlMatch    ? urlMatch[1]    : '',
+          title:   titleMatch  ? titleMatch[1].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim() : '',
+          content: snippetMatch ? snippetMatch[1].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim() : '',
+        });
+      }
+    }
+
+    return results.length > 0 ? formatDocs(results, 'searxng') : null;
+  } catch (err) {
+    log.warn(`[WebSearch] SearXNG error: ${err.message}`);
+    return null;
+  }
+}
+
 // ── Tavily Search ──────────────────────────────────────────────────────────
 async function searchTavily(query) {
   const apiKey = config.tavilyApiKey || config.tavilyApiKey2;
@@ -209,9 +268,10 @@ async function searchSerper(query) {
 }
 
 // ── Main search function ───────────────────────────────────────────────────
-// Priority: Tavily > Brave > Serper > SerpAPI
+// Priority: SearXNG > Tavily > Brave > Serper > SerpAPI
 
 const PROVIDERS = [
+  { name: 'searxng', fn: searchSearXNG },
   { name: 'tavily', fn: searchTavily },
   { name: 'brave', fn: searchBrave },
   { name: 'serper', fn: searchSerper },
@@ -256,6 +316,7 @@ export async function search(query) {
  */
 export function isConfigured() {
   return Boolean(
+    config.searxngUrl ||
     config.tavilyApiKey || config.tavilyApiKey2 ||
     config.braveSearchApiKey || config.braveSearchApiKey2 ||
     config.serpapiApiKey ||

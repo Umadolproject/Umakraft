@@ -23,6 +23,7 @@ import { assemble as assemblePrompt } from './PromptSystem.js';
 import { validate } from './ResponseValidator.js';
 import { getResponse, setResponse } from './Cache.js';
 import { formatWithCitations, formatConfidence } from './AdvancedFeatures.js';
+import { scopeUmaQuery } from './WebSearchEngine.js';
 
 // Lazy import — MemoryManager may not be loaded at startup
 let _storeConversationTurn = null;
@@ -79,7 +80,7 @@ function plan(classification, ctx) {
   }
 
   // ── Live data → web search first ───────────────────────────────────────
-  if (topic === 'live') {
+  if (topic === 'live' || topic === 'web') {
     steps.push({ tool: 'search_web',       params: { query: ctx.query, maxResults: 5 } });
     return steps;
   }
@@ -87,9 +88,14 @@ function plan(classification, ctx) {
   // ── Umamusume knowledge ────────────────────────────────────────────────
   if (topic === 'umamusume') {
     steps.push({ tool: 'search_knowledge',  params: { query: ctx.query } });
-    // If knowledge base is thin, supplement with repo search
+    // If knowledge base is thin, supplement with repo search + web search
     if (confidence < 0.70) {
       steps.push({ tool: 'search_repository', params: { query: ctx.query, topK: 3 } });
+    }
+    // Site-scoped web search on trusted uma sites (gametora.com, uma.guide, game8.co, etc.)
+    steps.push({ tool: 'search_web',        params: { query: scopeUmaQuery(ctx.query), maxResults: 3 } });
+    if (ctx.userId && ctx.channelId) {
+      steps.push({ tool: 'search_conversation_memory', params: { userId: ctx.userId, channelId: ctx.channelId } });
     }
     return steps;
   }
@@ -209,7 +215,9 @@ function resolvePromptMode(topic, subcommand) {
     case 'glossary': return 'glossary';
     case 'live':     return 'knowledge';
     default:
-      return topic === 'umamusume' ? 'knowledge' : 'repository';
+      if (topic === 'umamusume') return 'knowledge';
+      if (topic === 'web') return 'web';
+      return 'repository';
   }
 }
 

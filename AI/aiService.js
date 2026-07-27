@@ -272,15 +272,6 @@ export async function answer({ query, subcommand, interaction, userId, mode = 'c
   }
 
   const effectiveMode = webSearchConfigured() ? config.aiRetrievalMode : 'local-only';
-  const cacheKey = buildCacheContext(query, subcommand, effectiveMode, mode);
-  const cached = cacheGet(cacheKey);
-  if (cached) {
-    _runtime.cacheHits += 1;
-    registerSuccess();
-    log.info(`[AI/LocalService] Cache hit cmd=${subcommand} mode=${mode} retrieval=${effectiveMode}`);
-    return successEnvelope(formatText(cached), interaction, false);
-  }
-  _runtime.cacheMisses += 1;
 
   let docs = [];
   let retrievalMode = effectiveMode;
@@ -289,7 +280,20 @@ export async function answer({ query, subcommand, interaction, userId, mode = 'c
   let localDocs = [];
 
   // ── Run searches based on configured mode ────────────────────────
-  const activeMode = retrievalOverride === 'web-only' ? 'web-only' : config.aiRetrievalMode;
+  const activeMode = (retrievalOverride === 'web-only' || retrievalOverride === 'web-first')
+    ? retrievalOverride
+    : config.aiRetrievalMode;
+
+  // Cache key must use the ACTUAL mode (with override), not just config default
+  const cacheKey = buildCacheContext(query, subcommand, activeMode, mode);
+  const cached = cacheGet(cacheKey);
+  if (cached) {
+    _runtime.cacheHits += 1;
+    registerSuccess();
+    log.info(`[AI/LocalService] Cache hit cmd=${subcommand} mode=${mode} retrieval=${activeMode}`);
+    return successEnvelope(formatText(cached), interaction, false);
+  }
+  _runtime.cacheMisses += 1;
 
   switch (activeMode) {
     // ── Web-only: explicit /search command — skip local docs ──────

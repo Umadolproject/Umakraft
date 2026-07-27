@@ -12,7 +12,8 @@ import { initialize as initAI, answer } from '../../../AI/aiService.js';
 import { isConfigured as webSearchConfigured } from '../../../AI/webSearch.js';
 import { createLogger } from '../../../core/pipelineLogger.js';
 import { CHAT_CHANNEL_ID } from '../../../core/botConfig.js';
-import { isPersonalStatsQuery, isComparisonQuery, isMultiComparison, getStats, compareStats, compareMulti } from '../../../AI/personalStats.js';
+import { isPersonalStatsQuery, isComparisonQuery, isMultiComparison, isLeaderboardQuery, getStats, compareStats, compareMulti, getLeaderboard } from '../../../AI/personalStats.js';
+import { hasPending, processReply, requestFeedback } from '../../../AI/FeedbackManager.js';
 
 const logger = createLogger('messageCreate');
 
@@ -28,10 +29,10 @@ const MIN_QUERY_LENGTH = 2;
 // ─── Gentle off-topic replies for when TopicFilter declines ─────────────────
 
 const OFF_TOPIC_REPLIES = [
-  "um... that's a little outside what i can help with... 💕 maybe try asking about uma musume, your circle, or the bot's features? i'd love to help with those~!",
-  "ah... i'm not really sure about that one... 😣 my brain works best with uma musume questions, circle stats, and bot stuff! want to try something like that instead?",
-  "hey~ that's sweet of you to ask, but i don't think i can answer that... 🥺 i'm here for uma musume, fan tracking, and bot features! ask me about those, okay?",
-  "hmm... that's a bit tricky for me... 😕 i know a lot about uma musume and fan circles though! want to ask me about those instead? 💕",
+  "um... that's a little outside what i can help with... 💕 i'm here for uma musume, fan tracking, and most questions you can think of — just not politics, crypto, or medical stuff~!",
+  "ah... i'm not really sure about that one... 😣 i can help with uma musume, circle stats, bot stuff, and almost anything else — but some topics are a bit too much for me!",
+  "hey~ that's sweet of you to ask, but i don't think i should answer that... 🥺 i can search the web for most questions though! want to try something else?",
+  "hmm... that's a bit tricky for me... 😕 i know a lot about uma musume, fan circles, and can web-search most topics — but not this one! want to ask differently? 💕",
 ];
 
 function randomOffTopicReply() {
@@ -128,6 +129,21 @@ export async function execute(message, client) {
   // ── Gate 2: Ignore bots (including self) ─────────────────────────────────
   if (message.author.bot) return;
 
+  // ── Gate 2.5: Feedback reply check ─────────────────────────────────────────
+  // If the user has a pending feedback request, their next message might be
+  // a "yes" or "no" reply. Check BEFORE requiring @mention.
+  if (hasPending(message.author.id, message.channelId)) {
+    const fbResult = processReply(message.author.id, message.channelId, message.content);
+    if (fbResult.action !== 'none') {
+      await message.reply({
+        content: fbResult.message,
+        allowedMentions: { repliedUser: true },
+      });
+      return; // Feedback handled — don't process as new question
+    }
+    // If action is 'none' (no pending request found), fall through to normal flow
+  }
+
   // ── Gate 3: Must @mention the bot ────────────────────────────────────────
   const botId = client?.user?.id;
   if (!botId) {
@@ -143,7 +159,7 @@ export async function execute(message, client) {
 
   if (!query || query.length < MIN_QUERY_LENGTH) {
     await message.reply({
-      content: "hey~! you mentioned me... did you have a question? 💕 ask me anything about uma musume, your circle, or the bot — i'm here to help~!",
+      content: "hey~! you mentioned me... did you have a question? 💕 ask me about uma musume, your circle, the bot, or anything you're curious about — i can search the web too~!",
       allowedMentions: { repliedUser: true },
     });
     return;
@@ -229,6 +245,29 @@ export async function execute(message, client) {
     return;
   }
 
+  // ── Leaderboard intent detection ──────────────────────────────────────────
+  // Check if the user is asking about the leaderboard, top trainers, or rankings.
+  // Must be checked BEFORE personal stats to avoid "where do i rank" false matches.
+  if (isLeaderboardQuery(query)) {
+    logger.info(`messageCreate: leaderboard intent from ${userTag}`);
+    await message.channel.sendTyping().catch(() => {});
+
+    try {
+      const lbResult = await getLeaderboard(message.guildId);
+      await message.reply({
+        content: lbResult.content,
+        allowedMentions: { repliedUser: true },
+      });
+    } catch (err) {
+      logger.error(`leaderboard lookup failed for ${userTag}: ${err.message}`);
+      await message.reply({
+        content: "ah... i tried to pull up the leaderboard but something broke... 😣 try using `/leaderboard` instead~! 💕",
+        allowedMentions: { repliedUser: true },
+      });
+    }
+    return;
+  }
+
   // ── Personal stats intent detection ───────────────────────────────────────
   // Check if the user is asking about THEIR OWN fan count, rank, or stats.
   // If so, query the live database directly instead of the AI knowledge base.
@@ -284,6 +323,19 @@ export async function execute(message, client) {
           allowedMentions: { repliedUser: true },
         });
       } catch { /* fine if already replied */ }
+    }
+
+    // ── Request feedback after successful answer ────────────────────────────
+    if (result && result.success) {
+      try {
+        const answerText = result.content || '';
+        const fbPrompt = requestFeedback(message.author.id, message.channelId, query, answerText);
+        await message.channel.send({
+          content: fbPrompt,
+          allowedMentions: { repliedUser: false },
+        });
+        logger.info(`messageCreate: feedback requested from ${userTag}`);
+      } catch { /* feedback is best-effort */ }
     }
   } catch (err) {
     logger.error(`messageCreate AI pipeline error: ${err.message}`);

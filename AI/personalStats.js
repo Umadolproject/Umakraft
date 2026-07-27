@@ -74,7 +74,11 @@ export async function getStats(discordId, guildId) {
     return {
       success: false,
       linkRequired: true,
-      content: "hmm... i don't know which trainer you are yet! 😣 use `/link [your_trainer_id]` to connect your Discord to your uma.moe account, and then i can tell you all about your fans~! 💕",
+      content: [
+        "aww, i don't know who you are yet, trainer... 🥺💕",
+        '',
+        "ask an admin to `/link` your Discord to your uma.moe account and then i can tell you everything about your fans~! once you're linked i'll remember you forever~! ✨",
+      ].join('\n'),
     };
   }
 
@@ -83,13 +87,36 @@ export async function getStats(discordId, guildId) {
     return {
       success: false,
       linkRequired: false,
-      content: `i found your trainer **${data.trainerName}** but i don't have any recent fan data yet... 😢 try using \`/fan_gain\` first to generate your stats card, then i can answer this next time~! 💕`,
+      content: [
+        `oh! i found you, **${data.trainerName}**! 👋`,
+        '',
+        "but... i don't have your latest fan numbers yet 😢 try running `/fan_gain` and then come ask me again — i'll have your stats ready in seconds~! 💕",
+      ].join('\n'),
     };
   }
 
-  // Build personality-rich reply
+  // Build warm, conversational reply
   const lines = [];
-  lines.push(`here's your stats, ${data.trainerName}~! 🏇✨`);
+  const name = data.trainerName;
+  
+  // Personalized greeting based on daily gain
+  if (data.daily != null) {
+    if (data.daily >= 2_000_000) {
+      lines.push(`${name}~! wow you're on FIRE today! 🔥🔥🔥`);
+    } else if (data.daily >= 1_000_000) {
+      lines.push(`${name}~! looking strong today! 💪✨`);
+    } else if (data.daily >= 500_000) {
+      lines.push(`${name}~! steady pace, keep it up! 📈💕`);
+    } else if (data.daily >= 100_000) {
+      lines.push(`${name}~! here's where you're at~! 😊`);
+    } else if (data.daily >= 0) {
+      lines.push(`${name}~! hmm, slow day so far... let's check! 😅`);
+    } else {
+      lines.push(`${name}~! checking in on your stats~! 💕`);
+    }
+  } else {
+    lines.push(`here you go, ${name}~! 🏇✨`);
+  }
   lines.push('');
 
   if (data.lifetime != null) {
@@ -97,7 +124,7 @@ export async function getStats(discordId, guildId) {
   }
   if (data.daily != null) {
     const emoji = data.daily >= 1_000_000 ? '🔥' : data.daily >= 500_000 ? '💪' : data.daily >= 100_000 ? '📈' : '😅';
-    lines.push(`📊 **Today's Gain**: ${fmtDiff(data.daily)} ${emoji}`);
+    lines.push(`📊 **Today**: ${fmtDiff(data.daily)} ${emoji}`);
   }
   if (data.weekly != null) {
     lines.push(`📅 **This Week**: ${fmtDiff(data.weekly)}`);
@@ -108,22 +135,29 @@ export async function getStats(discordId, guildId) {
     lines.push(`📆 **This Month**: ${fmtDiff(data.monthly)} ${mEmoji} ${goalMet ? 'On pace~!' : 'Keep pushing!'}`);
   }
   if (data.rank != null) {
-    lines.push(`📊 **Circle Rank**: #${data.rank}`);
+    const rankEmoji = data.rank <= 10 ? '👑' : data.rank <= 50 ? '⭐' : data.rank <= 100 ? '💫' : '🌱';
+    lines.push(`📊 **Circle Rank**: #${data.rank} ${rankEmoji}`);
   }
 
-  // Daily goal check
+  // Daily goal check — encouraging tone
   if (data.daily != null && data.daily < 1_000_000) {
     const remaining = (1_000_000 - data.daily).toLocaleString('en-US');
     lines.push('');
-    lines.push(`💡 You need **${remaining} more fans** today to hit the 1M goal~! Ganbatte! 💕`);
+    lines.push(`💡 **${remaining} fans** to 1M today — you got this! 💕`);
   }
 
-  // Freshness note
+  // Closing encouragement
+  if (data.daily != null && data.daily >= 1_000_000) {
+    lines.push('');
+    lines.push(`keep going strong, ${name}~! ganbatte! 🏇💕`);
+  }
+
+  // Freshness note — friendly
   if (data.storedAt) {
     const age = Math.round((Date.now() - new Date(data.storedAt).getTime()) / 60000);
     if (age > 60) {
       lines.push('');
-      lines.push(`📌 _last synced ${age}m ago — run \`/fan_gain\` for the latest~_`);
+      lines.push(`📌 _synced ${age}m ago — "/fan_gain" refreshes it~_`);
     }
   }
 
@@ -306,22 +340,36 @@ export async function compareStats(discordIdA, guildId, query, mentions) {
 export function isPersonalStatsQuery(query) {
   const lower = query.toLowerCase().replace(/[?!.]+$/, '').trim();
 
-  // Don't match if it looks like a comparison of any kind
-  if (isComparisonQuery(query) || isMultiComparison(query)) return false;
+  // Don't match if it looks like a comparison or leaderboard query
+  if (isComparisonQuery(query) || isMultiComparison(query) || isLeaderboardQuery(query)) return false;
 
-  const patterns = [
-    /^(how\s+)?(many|much)\s+(fans?|fan\s*(count|gain|points?))\s+(do\s+)?i\s+have/i,
-    /^(my|what('?s| is| are)?\s+my)\s+(fans?|fan\s*(count|gain|stats?|points?|rank))/i,
-    /^(check|show|tell|give)\s+(me\s+)?(my|the)\s+(fans?|fan\s*(count|gain|stats?|points?|rank))/i,
-    /^(how|what)\s+(am\s+)?i\s+(doing|rank(ed|ing)?)/i,
-    /^(what|how)\s+(is|are)\s+my\s+(stats?|progress)/i,
-    /^(fan|stats?|rank)\s+(check|status|update|info)/i,
-    /^my\s+(daily|weekly|monthly)\s+(fan\s*)?(gain|count|fans)/i,
-    /^(lifetime|total)\s+fans?$/i,
-    /^(how\s+)?(am\s+)?i\s+(doing|performing)/i,
-  ];
+  // Don't match if it mentions other trainers (comparison-like)
+  const hasMention = /<@!?\d+>/.test(query);
+  if (hasMention) return false;
 
-  return patterns.some(p => p.test(lower));
+  // Self-reference — explicit (i, my, me) or implicit (no other subject mentioned)
+  const isSelfReferential = /\b(i|my|me|mine|myself|i'm|im|i've|ive|i'd)\b/i.test(lower);
+  // Implicit: fan queries without a subject ("how many fans today" → my fans)
+  const hasOtherPerson = /\b(he|she|they|them|their|his|her|him|everyone|anyone|somebody|someone)\b/i.test(lower);
+  const isImpliedSelf = !isSelfReferential && !hasOtherPerson && !hasMention;
+
+  if (!isSelfReferential && !isImpliedSelf) return false;
+
+  // Broad fan/stats reference check
+  const isFanRelated = /\b(fans?|fan\s*(count|gain|points?|stats?|rank|growth)|gain|stats?|rank|circle|progress|doing|performing|trainer|looking|position|place|standing)\b/i.test(lower);
+  if (!isFanRelated) return false;
+
+  // Must look like a question or request
+  const isQuestionLike = /\b(how|hows|what|whats|who|tell|show|check|give|update|status|look|want|know|wanna|see|lets|gimme|lemme|sup|yo|ayo|hey|could|am\s+i|are\s+my|do\s+i|can\s+(you|u)|please|let\s+me)\b/i.test(lower) 
+    || lower.includes('?')
+    || /\bmy\s+(daily|weekly|monthly|total|lifetime|fan|current|trainer|circle|rank|progress|stats?|gain)\b/i.test(lower);
+  if (!isQuestionLike) return false;
+
+  // Exclude queries that are clearly asking about game mechanics, not personal stats
+  const isGameMechanic = /\b(meaning|means?|define|how\s+(does|to|do|can|should)\s+|what\s+is\s+(a\s+|the\s+)?(mant|fan\s*gain|fan\s*deficit|circle\s*rank|trend\s*tier))\b/i.test(lower);
+  if (isGameMechanic) return false;
+
+  return true;
 }
 
 /**
@@ -337,23 +385,27 @@ export function isComparisonQuery(query) {
 
   // Must have mentions OR explicit comparison keywords
   const hasMention = /<@!?\d+>/.test(query);
-  const hasCompareKeyword = /\b(difference|compar(ed?|ison)|vs\.?|versus|more fans|ahead|behind|gap|closer to)\b/i.test(lower);
+  const hasSelf = /\b(me|my|mine|us)\b/i.test(lower) || /\bi\s+(have|got|am|want)\b/i.test(lower);
+  // "me" as object pronoun is NOT a subject
+  const isObjectMe = /\b(show|tell|give|let|gimme|lemme|pull|rank|list|sort|compare|send|display)\s+me\b/i.test(lower);
+  const effectiveSelf = hasSelf && !isObjectMe;
+
+  // Strong keywords: always trigger comparison (these inherently compare two things)
+  const hasStrongKeyword = /\b(difference|compar(ed?|ison|ing)|vs\.?|versus|ahead|behind|gap|closer\s+to|beat(ing)?|catch(ing)?\s+up|overtak(ing|e)?|surpass(ing)?|pass(ing)?|outperform(ing)?|battle|face\s+off|side\s+by\s+side|rank\s+(us|them|these)|better\s+trainer|bigger\s+trainer)\b/i.test(lower);
+
+  // Weak keywords: only trigger when subjects are identified (mentions or self-ref)
+  const hasWeakKeyword = /\b(who\s+(has|got|have|is|the|da)|which\s+(one|of|trainer)|whose|more\s+fans|less\s+fans|winning|losing|fan\s+(battle|war|face\s+off))\b/i.test(lower);
+
+  const hasCompareKeyword = hasStrongKeyword || (hasWeakKeyword && (hasMention || effectiveSelf));
 
   if (!hasMention && !hasCompareKeyword) return false;
 
-  const patterns = [
-    /difference\s+(between|of)\s+(me|my|@|.+?)\s+and\b/i,
-    /compare\s+(my|@|.+?)\s+(fans?\s+)?(with|and|to|vs)/i,
-    /who\s+(has|got|have)\s+(more|less|the most)\s+fans/i,
-    /how\s+much\s+(more|less)\s+fans\s+(does|do|has)/i,
-    /@.+?\s+(vs\.?|versus)\s+@/i,
-    /how\s+(far|close|much)\s+(am\s+)?i\s+(from|to|behind|ahead\s+of)\s+@/i,
-    /(am\s+i|is\s+@)\s+(ahead|behind|winning|losing|leading)/i,
-    /(gap|difference)\s+between\s+@.+?\s+and\s+@/i,
-    /@.+?\s+or\s+@.+?\s+(more|less|fans)/i,
-  ];
+  // Fan-related context: required when no mentions, relaxed when @mentions exist
+  // (in #bot-chat, @mentions are virtually always trainer references)
+  const isFanRelated = hasMention || /\b(fans?|fan\s*(count|gain|base|war|battle|face)|stats?|rank(ed|ing)?|compare|comparison|higher|lower|more|less|most|least|gap|difference)\b/i.test(lower);
+  if (!isFanRelated) return false;
 
-  return patterns.some(p => p.test(lower));
+  return true;
 }
 
 // ─── Multi-person comparison (3–30 trainers) ─────────────────────────────────
@@ -369,9 +421,17 @@ function countComparisonSubjects(query) {
   // @everyone / @here → full circle
   if (/@everyone|@here/i.test(query)) return 999;
 
+  // "all of us", "everyone here", "compare us", "which of us" → implicit multi
+  const lower = query.toLowerCase();
+  if (/\b(all\s+of\s+us|everyone\s+here|us\s+all|compare\s+us|rank\s+us|which\s+of\s+us|among\s+us|out\s+of\s+us)\b/i.test(lower)) return 999;
+
   const mentionMatches = query.match(/<@!?\d+>/g) || [];
   const distinctIds = new Set(mentionMatches.map(m => m.replace(/[<@!>]/g, '')));
-  const hasSelf = /\b(me|my|mine)\b/i.test(lower) || /\bi\s+(have|got|am|want|need)\b/i.test(lower);
+
+  // "me" as object pronoun ("show me", "tell me", "give me") is NOT a subject
+  const isObjectMe = /\b(show|tell|give|let|gimme|lemme|pull|rank|list|sort|compare|send|display)\s+me\b/i.test(lower);
+  const hasSelf = !isObjectMe && (/\b(me|my|mine)\b/i.test(lower) || /\bi\s+(have|got|am|want|need)\b/i.test(lower));
+
   return distinctIds.size + (hasSelf ? 1 : 0);
 }
 
@@ -384,7 +444,7 @@ export function isMultiComparison(query) {
 
   const lower = query.toLowerCase();
   const isEveryone = /@everyone|@here/i.test(query);
-  const hasFanKeyword = /\b(fans?|fan\s*(count|gain)|stats?|rank(ing|ed)?|compare|compar|vs\.?|versus|difference|leaderboard|who\s+has|top|most|among|listing|list|show)\b/i.test(lower);
+  const hasFanKeyword = /\b(fans?|fan\s*(count|gain|base|battle|war)|stats?|rank(ing|ed)?|compare|compar|vs\.?|versus|difference|leaderboard|who\s+has|top|most|least|among|listing|list|show|sort|by\s+fan|fan\s+comparison|fan\s+ranking|everyone|all\s+of\s+us|our\s+fans|how\s+do\s+we|who\s+is\s+(first|number|top|#|winning|the\s+best|leading)|side\s+by\s+side|face\s+off|how\s+many\s+fans\s+does)\b/i.test(lower);
 
   // @everyone / @here MUST have fan context to avoid false positives
   if (isEveryone) return hasFanKeyword;
@@ -538,6 +598,196 @@ export async function compareMulti(discordId, guildId, query, mentions) {
     const cutoff = content.lastIndexOf('\n', 1900);
     content = content.slice(0, cutoff > 0 ? cutoff : 1900);
     content += '\n\n📌 _...truncated for Discord~_\n\n💡 _try comparing fewer trainers next time!_ 😅';
+  }
+
+  return { success: true, content };
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Leaderboard Query Detection & Lookup
+// ──────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Detect if a query is asking about the leaderboard, top trainers, or rankings.
+ * Used by messageCreate.js to bypass the AI pipeline.
+ */
+export function isLeaderboardQuery(query) {
+  const lower = query.toLowerCase().replace(/[?!.]+$/, '').trim();
+
+  // Don't match comparison queries (handled separately)
+  if (isComparisonQuery(query) || isMultiComparison(query)) return false;
+
+  const hasSelfRef = /\b(i|my|me|mine|myself|i'm|im)\b/i.test(lower);
+
+  // Leaderboard-specific keywords (no trailing \b on alternation groups to allow suffixes)
+  const isLeaderboardRelated = /\b(leaderboard|leader\s*board|top\s+(trainers?|\d+|ranked|fan)|rankings?|rank\s+(list|\d+|check)|number\s+(one|1)|#1|first\s+place|first\b|highest\s+(rank|ranked)|at\s+the\s+top|on\s+top|winning|leading|best\s+trainer|most\s+fans|least\s+fans|biggest\s+gainer|climbing|dropped|last\s+place|at\s+the\s+bottom|lowest\s+ranked|falling\s+behind|catching\s+up|gained\s+the\s+most|whos?\s+(number|#|first|winning|on\s+top|the\s+best|in\s+first|boss)|who\s+(da|the)\s+best)\b/i.test(lower);
+
+  // Self-ref + position words → leaderboard position query
+  // "where do i rank" / "where am i on the leaderboard" → leaderboard
+  // "what position am i" / "what rank am i" → personal stats (NOT leaderboard)
+  const isPositionQuery = hasSelfRef && /\b(where\s+(do|am|is|does)\s+(i|my)\s+(rank|stand|place|sit)|where\s+(is|are)\s+my\s+(rank|position)|am\s+i\s+on\s+the\s+leaderboard|what\s+place\s+am\s+i\s+in\b|where\s+(do\s+)?i\s+fall)\b/i.test(lower);
+
+  // Self-ref as object ("show me", "tell me", "gimme") is NOT self-reference
+  const isObjectPronoun = /\b(show|tell|give|let|gimme|lemme|pull)\s+me\b/i.test(lower);
+
+  if (!isLeaderboardRelated && !isPositionQuery) return false;
+
+  // Question/request detection
+  const hasQuestionWord = /\b(show|display|pull|list|give|tell|who|what|where|how|can|could|check|see|want|lemme|gimme|lets|yo|ayo|sup|hey|please|whats|whos|wheres?)\b/i.test(lower)
+    || lower.includes('?');
+
+  // Statement-like: just says "leaderboard", "rankings", "top 10", "rank check", etc.
+  const isStatementRequest = /\b(leaderboard|rankings?|top\s+\d+|top\s+trainers?|current\s+(leaderboard|rankings?)|circle\s+rankings?|fan\s+rankings?|rank\s+check|lowest\s+ranked|biggest\s+gainer)\b/i.test(lower)
+    && !/\b(meaning|means?|define|what\s+is\s+(a|the))\b/i.test(lower);
+
+  const isQuestionLike = hasQuestionWord || isStatementRequest || isPositionQuery;
+  if (!isQuestionLike) return false;
+
+  // "me" as indirect object is not self-reference ("show me the leaderboard")
+  const effectiveSelfRef = hasSelfRef && !isObjectPronoun;
+
+  // Self-ref position queries always route to leaderboard
+  if (isPositionQuery) return true;
+
+  // No self-ref + leaderboard keywords → general leaderboard query
+  if (!effectiveSelfRef && (isLeaderboardRelated || isStatementRequest)) return true;
+
+  return false;
+}
+
+/**
+ * Look up the leaderboard — returns a ranked list of all linked trainers in the guild.
+ *
+ * @param {string} guildId
+ * @returns {Promise<{ success: boolean, content: string }>}
+ */
+export async function getLeaderboard(guildId) {
+  const { links } = await listLinks(guildId, { limit: 50 });
+  if (!links || links.length === 0) {
+    return {
+      success: false,
+      content: 'no one is linked in this server yet... 😢 an admin needs to use `/link [trainer_id]` for each member first~! once linked i can show the full leaderboard! 💕',
+    };
+  }
+
+  // Resolve all trainers
+  const resolved = [];
+  const notLinked = [];
+  const noData = [];
+
+  const results = await Promise.allSettled(
+    links.map(async (link) => {
+      const data = await resolveTrainerData(link.discordId, guildId);
+      return { link, data };
+    })
+  );
+
+  for (const r of results) {
+    if (r.status === 'rejected') continue;
+    const { link, data } = r.value;
+    if (!data) {
+      notLinked.push({ displayName: link.trainerName || link.discordId });
+    } else if (data.noData) {
+      noData.push({ displayName: link.trainerName || link.discordId, name: data.trainerName });
+    } else {
+      resolved.push({
+        trainerName: data.trainerName,
+        displayName: link.trainerName || link.discordId,
+        lifetime: data.lifetime ?? 0,
+        daily: data.daily ?? 0,
+        weekly: data.weekly ?? 0,
+        monthly: data.monthly ?? 0,
+        rank: data.rank ?? null,
+        storedAt: data.storedAt,
+      });
+    }
+  }
+
+  // Sort by lifetime fans descending
+  resolved.sort((a, b) => b.lifetime - a.lifetime);
+
+  // Build reply
+  const lines = [];
+  lines.push('🏆 **Circle Leaderboard** 🏆');
+  lines.push('');
+
+  if (resolved.length === 0) {
+    lines.push('everyone is linked but no one has fan data yet... 😢 try `/fan_gain` first~! 💕');
+  } else {
+    const medals = ['🥇', '🥈', '🥉'];
+    const topFans = resolved[0].lifetime;
+    const useCompact = resolved.length > 12;
+
+    for (let i = 0; i < Math.min(resolved.length, 25); i++) {
+      const r = resolved[i];
+      const pos = i + 1;
+      const posLabel = medals[i] ?? `${pos}.`.padStart(3, ' ');
+      const name = r.displayName || r.trainerName;
+
+      let fanStr;
+      if (useCompact && r.lifetime >= 1_000_000_000) {
+        fanStr = `${(r.lifetime / 1_000_000_000).toFixed(1)}B`;
+      } else if (useCompact && r.lifetime >= 1_000_000) {
+        fanStr = `${(r.lifetime / 1_000_000).toFixed(1)}M`;
+      } else if (useCompact && r.lifetime >= 1_000) {
+        fanStr = `${(r.lifetime / 1_000).toFixed(1)}K`;
+      } else {
+        fanStr = r.lifetime.toLocaleString('en-US');
+      }
+
+      // Daily gain indicator
+      let dailyTag = '';
+      if (r.daily >= 1_000_000) dailyTag = ' 🔥';
+      else if (r.daily >= 500_000) dailyTag = ' 📈';
+
+      // Gap from #1
+      let gapStr = '';
+      if (i > 0 && topFans > 0) {
+        const diff = topFans - r.lifetime;
+        if (diff > 1_000_000) {
+          gapStr = `  _(${(diff / 1_000_000).toFixed(1)}M behind)_`;
+        } else if (diff > 1_000) {
+          gapStr = `  _(${(diff / 1_000).toFixed(1)}K behind)_`;
+        }
+      }
+
+      lines.push(`${posLabel} **${name}**: ${fanStr}${dailyTag}${gapStr}`);
+    }
+
+    if (resolved.length > 25) {
+      lines.push('');
+      lines.push(`...and ${resolved.length - 25} more trainers~! use "/leaderboard" for the full list! 💕`);
+    }
+  }
+
+  // Warnings — show even when leaderboard has results
+  if (notLinked.length > 0 || noData.length > 0) {
+    lines.push('');
+    const parts = [];
+    if (notLinked.length > 0) parts.push(`🔗 ${notLinked.length} unresolved: ${notLinked.map(n => n.displayName).join(', ')}`);
+    if (noData.length > 0) parts.push(`📭 ${noData.length} no data: ${noData.map(n => n.displayName || n.name).join(', ')}`);
+    lines.push(`⚠️ ${parts.join(' · ')}`);
+  }
+
+  // Freshness
+  let maxAge = 0;
+  if (resolved.length > 0) {
+    maxAge = Math.max(...resolved.map(r => {
+      if (!r.storedAt) return 0;
+      return Math.round((Date.now() - new Date(r.storedAt).getTime()) / 60000);
+    }));
+  }
+  if (maxAge > 60) {
+    lines.push('');
+    lines.push(`📌 _oldest data ${maxAge}m ago — run "/fan_gain" to refresh~_`);
+  }
+
+  // Discord 2000-char limit
+  let content = lines.join('\n');
+  if (content.length > 1950) {
+    const cutoff = content.lastIndexOf('\n', 1900);
+    content = content.slice(0, cutoff > 0 ? cutoff : 1900);
+    content += '\n\n📌 _...truncated — use "/leaderboard" for the full list~_ 😅';
   }
 
   return { success: true, content };

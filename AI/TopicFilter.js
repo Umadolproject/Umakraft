@@ -5,7 +5,7 @@
 // Spec:      AI/TOPIC_FILTER.md
 //
 // Two outputs per non-rejected request:
-//   1. topic      — 'repository' | 'umamusume' | 'live' | 'message' | 'off-topic'
+//   1. topic      — 'repository' | 'umamusume' | 'live' | 'message' | 'web' | 'off-topic'
 //   2. complexity — 'simple' | 'complex'
 //
 // Public API:
@@ -124,7 +124,7 @@ function assignComplexity(topic, query) {
 
 /**
  * @typedef {object} ClassificationResult
- * @property {'repository'|'umamusume'|'live'|'message'|'off-topic'} topic
+ * @property {'repository'|'umamusume'|'live'|'message'|'web'|'off-topic'} topic
  * @property {'simple'|'complex'|null} complexity — null when off-topic
  * @property {number} confidence — 0.0–1.0
  * @property {'keyword'|'semantic'|'command-override'|'off-topic-indicator'} method
@@ -189,7 +189,7 @@ function _keywordClassify(q) {
     };
   }
 
-  // Off-topic check first (fast reject)
+  // Off-topic check first (fast reject) — explicit off-topic keywords only
   const offTopicHits = countHits(q, OFF_TOPIC_INDICATORS);
   if (offTopicHits > 0) {
     return {
@@ -209,15 +209,17 @@ function _keywordClassify(q) {
 
   const total = repoHits + umaHits + messageHits + liveHits;
 
-  // No hits at all — fall back to off-topic below confidence threshold
+  // No hits at all — route to web search (SearXNG) instead of rejecting.
+  // Explicitly off-topic queries were already caught above; everything
+  // else gets a real web search attempt so the bot never refuses outright.
   if (total === 0) {
     return {
-      topic:            'off-topic',
-      complexity:       null,
-      confidence:       0.0,
+      topic:            'web',
+      complexity:       'simple',
+      confidence:       0.3,
       method:           'keyword',
-      rejected:         true,
-      rejectionMessage: offTopicMessage(),
+      rejected:         false,
+      rejectionMessage: null,
     };
   }
 
@@ -233,15 +235,15 @@ function _keywordClassify(q) {
   const runnerUp  = scores[1];
   const confidence = total > 0 ? Math.min(0.5 + (winner.hits / total) * 0.5, 1.0) : 0.0;
 
-  // Below confidence threshold → off-topic
+  // Below confidence threshold — route to web search
   if (confidence < config.topicFilterConfidenceThreshold && winner.hits === 0) {
     return {
-      topic:            'off-topic',
-      complexity:       null,
+      topic:            'web',
+      complexity:       'simple',
       confidence,
       method:           'keyword',
-      rejected:         true,
-      rejectionMessage: offTopicMessage(),
+      rejected:         false,
+      rejectionMessage: null,
     };
   }
 
@@ -282,8 +284,9 @@ export function offTopicMessage() {
     "I'm the Umakraft AI Knowledge Service. I can help with:\n" +
     '• **Repository questions** — ask about any part of the Umakraft codebase\n' +
     '• **Umamusume knowledge** — ask about game mechanics, terms, or circle concepts\n' +
+    '• **Web search** — ask me anything and I'll search the web for answers\n' +
     '• **Live data** — use `/ai live` to ask about current rankings or recent updates\n' +
     '• **Community messages** — use `/ai message` to generate a message\n\n' +
-    "I'm not able to help with general questions outside of these topics."
+    "I can't help with topics like politics, cryptocurrency, medical advice, or other explicitly off-topic subjects."
   );
 }

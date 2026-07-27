@@ -1,5 +1,5 @@
 // AI/WebSearchEngine.js
-// Live data retrieval via web search — Tavily primary, Brave/Google CSE/SerpAPI fallback.
+// Live data retrieval via web search — SearXNG primary, Tavily/Brave/Google CSE/SerpAPI fallback.
 //
 // Authority: GOVERNANCE/ARCHITECTURE_AUTHORITY.md
 // Spec:      AI/WEB_SEARCH_ENGINE.md
@@ -37,6 +37,37 @@ function scopeQuery(query) {
   return `${q} Umamusume Pretty Derby`;
 }
 
+/**
+ * Site-scoped Umamusume query — limits web search results to trusted Umamusume sites.
+ * Used when TopicFilter classifies the request as 'umamusume'.
+ *
+ * Trusted sites: gametora.com, uma.guide, game8.co, umamusume.com, uma.moe
+ *
+ * @param {string} query — original user question
+ * @returns {string} site-scoped search query
+ */
+export function scopeUmaQuery(query) {
+  const q = query.trim();
+  if (!q) return q;
+
+  const TRUSTED_UMA_SITES = [
+    'gametora.com',
+    'uma.guide',
+    'game8.co',
+    'umamusume.com',
+    'uma.moe',
+  ];
+
+  // Build site-scoped query: (query) (umamusume) (site:a OR site:b OR ...)
+  const siteFilter = TRUSTED_UMA_SITES.map(s => `site:${s}`).join(' OR ');
+
+  // If query already contains umamusume, don't double-add the term
+  const hasUmaTerm = /umamusume|uma musume|pretty derby/i.test(q);
+  const termEnrich = hasUmaTerm ? '' : ' umamusume';
+
+  return `(${q})${termEnrich} (${siteFilter})`;
+}
+
 // ---------------------------------------------------------------------------
 // Per-provider callers
 // ---------------------------------------------------------------------------
@@ -72,6 +103,83 @@ async function withKeyRotation(label, keys, fn) {
 // ---------------------------------------------------------------------------
 // Per-provider callers
 // ---------------------------------------------------------------------------
+
+// ── SearXNG (self-hosted, free, primary) ──────────────────────────────────
+// Stock SearXNG image does NOT enable format=json by default.
+// We POST form-encoded and accept either JSON or HTML. If HTML is returned,
+// we try to parse it for results; if that fails, the provider chain falls
+// through to Tavily → Brave → Google CSE → SerpAPI.
+async function callSearXNG(query, maxResults) {
+  if (!config.searxngUrl) throw new Error('SEARXNG_URL not set');
+
+  const params = new URLSearchParams({
+    q: query,
+    format: 'json',
+    category_general: '1',
+  });
+
+  const res = await fetch(`${config.searxngUrl}/search`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: params.toString(),
+    signal: AbortSignal.timeout(config.searchProviderTimeoutMs),
+  });
+
+  if (!res.ok) throw new Error(`SearXNG ${res.status}: ${await res.text().catch(() => '')}`);
+
+  const contentType = res.headers.get('content-type') ?? '';
+  const text = await res.text();
+
+  // JSON — parse directly
+  if (contentType.includes('json')) {
+    const data = JSON.parse(text);
+    return (data.results ?? []).slice(0, maxResults).map((r, i) => ({
+      content:  r.content ?? '',
+      filePath: r.url     ?? '',
+      heading:  r.title   ?? '',
+      score:    r.score   ?? Math.max(1.0 - i * 0.05, 0.1),
+      source:   'web',
+    }));
+  }
+
+  // HTML — scrape result blocks from the page.
+  // Structure per result:
+  //   <article class="result result-default category-general">
+  //     <a href="URL" class="url_header" ...>...</a>
+  //     <h3><a href="URL" ...>TITLE</a></h3>
+  //     <p class="content">SNIPPET</p>
+  //   </article>
+  const chunks = [];
+  const resultRegex = /<article class="result[^"]*"[^>]*>([\s\S]*?)<\/article>/gi;
+  let match;
+  while ((match = resultRegex.exec(text)) !== null && chunks.length < maxResults) {
+    const block = match[1];
+    // URL from <a class="url_header" href="URL">  (href may come before or after class)
+    const urlMatch = block.match(/<a\s[^>]*href="([^"]+)"[^>]*class="url_header"/i)
+                  || block.match(/<a\s[^>]*class="url_header"[^>]*href="([^"]+)"/i);
+    // Title from <h3><a ...>TITLE</a></h3>
+    const titleMatch = block.match(/<h3>\s*<a[^>]*>([\s\S]*?)<\/a>\s*<\/h3>/i);
+    // Snippet from <p class="content">SNIPPET</p>
+    const snippetMatch = block.match(/<p\s[^>]*class="content"[^>]*>([\s\S]*?)<\/p>/i);
+
+    const url   = urlMatch    ? urlMatch[1]    : '';
+    const title = titleMatch  ? titleMatch[1].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim() : '';
+    const content = snippetMatch ? snippetMatch[1].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim() : '';
+
+    if (title || content) {
+      chunks.push({
+        content,
+        filePath: url,
+        heading:  title,
+        score:    Math.max(1.0 - chunks.length * 0.05, 0.1),
+        source:   'web',
+      });
+    }
+  }
+
+  if (chunks.length === 0) throw new Error('SearXNG returned HTML with no parseable results');
+  return chunks;
+}
 
 async function callTavily(query, maxResults) {
   const keys = tavilyKeys();
@@ -197,6 +305,7 @@ async function callSerpAPI(query, maxResults) {
 // ---------------------------------------------------------------------------
 
 const PROVIDERS = [
+  { name: 'SearXNG',    fn: callSearXNG,   failoverEvent: 'SEARXNG_FAILOVER'   },
   { name: 'Tavily',     fn: callTavily,    failoverEvent: 'TAVILY_FAILOVER'    },
   { name: 'Brave',      fn: callBrave,     failoverEvent: 'BRAVE_FAILOVER'     },
   { name: 'Google CSE', fn: callGoogleCSE, failoverEvent: 'GCSE_FAILOVER'      },
