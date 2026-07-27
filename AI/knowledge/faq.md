@@ -272,7 +272,7 @@ Build for the event's specific race conditions (distance, surface, weather). Pri
 **@mention** the bot in #bot-chat. Example: `@UmaKraft what's the best support card for Special Week?` The bot replies with an AI-generated answer in character.
 
 ### 80. What can I ask the AI?
-Anything about UmaKraft, Uma Musume, circle mechanics, bot commands, fan tracking, or the game! It draws from the documentation and knowledge base.
+Anything about UmaKraft, Uma Musume characters (personality, racing style, real-horse history, rivalries), circle mechanics, bot commands, fan tracking, game modes, scouting, skills, support cards, or the game! It draws from the documentation, character profiles (40+ girls), new player guide, and skills reference.
 
 ### 81. Can the AI check my live stats?
 Yes! Try "how many fans do I have?", "my fan count", "what's my rank?" — these bypass the AI and query the live database. You can also compare: "difference between me and @Trainer" or "compare @A @B @C".
