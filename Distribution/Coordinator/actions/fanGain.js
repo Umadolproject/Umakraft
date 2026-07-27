@@ -18,26 +18,27 @@ function buildFanGainEmbed(fabricatorInput, blueprintKey, interaction) {
   const fans = fabricatorInput.fans ?? {};
   const trainerName = meta.trainerName ?? meta.trainerId ?? 'Unknown';
 
-  const avatarUrl = interaction.user?.displayAvatarURL({ dynamic: true, size: 256 }) ?? null;
+  const thumbnailUrl = interaction.user?.displayAvatarURL({ dynamic: true, size: 256 }) ?? null;
 
   const fields = [];
-  if (fans.daily != null)   fields.push({ name: '📈 Daily Gain',   value: fmtGain(fans.daily),   inline: true });
-  if (fans.weekly != null)  fields.push({ name: '📈 Weekly Gain',  value: fmtGain(fans.weekly),  inline: true });
-  if (fans.monthly != null) fields.push({ name: '📈 Monthly Gain', value: fmtGain(fans.monthly), inline: true });
-  if (fabricatorInput.rank != null) fields.push({ name: '📊 Rank', value: `#${fabricatorInput.rank}`, inline: true });
+  if (fans.daily != null)   fields.push({ name: '📈 Daily',    value: fmtGain(fans.daily),   inline: true });
+  if (fans.weekly != null)  fields.push({ name: '📈 Weekly',   value: fmtGain(fans.weekly),  inline: true });
+  if (fans.monthly != null) fields.push({ name: '📈 Monthly',  value: fmtGain(fans.monthly), inline: true });
+  if (fabricatorInput.rank != null) fields.push({ name: '📊 Rank',  value: `#${fabricatorInput.rank}`, inline: true });
+  if (fabricatorInput.trend)        fields.push({ name: '📉 Trend', value: fabricatorInput.trend,        inline: true });
 
   return {
     success:   true,
     type:      'embed',
     ephemeral: false,
     result: {
-      title:       `🏇 ${trainerName}`,
+      title:       `📊 ${trainerName}`,
       description: fans.lifetime != null
-        ? `**Lifetime Fangain:** ${fans.lifetime.toLocaleString('en-US')}`
+        ? `**Lifetime Fangain**  ·  ${fans.lifetime.toLocaleString('en-US')}`
         : '',
-      thumbnail:   avatarUrl ? { url: avatarUrl } : undefined,
+      thumbnail:   thumbnailUrl ? { url: thumbnailUrl } : undefined,
       fields:      fields.length > 0 ? fields : [{ name: 'Status', value: 'No data available.' }],
-      footer:      { text: `${blueprintKey} · UmaKraft` },
+      footer:      { text: 'fanGain · UmaKraft' },
       timestamp:   meta.generatedAt ?? new Date().toISOString(),
     },
     interaction,
