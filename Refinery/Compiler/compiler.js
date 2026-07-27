@@ -122,6 +122,17 @@ function assembleProduct(merged, envelopes, compiledAt) {
       monthlyFanGain: merged.monthlyFanGain,
       gainsSource:    merged.gainsSource,
 
+      // Profile icon — leader character dress ID from uma.moe
+      leader_chara_dress_id: merged.leaderCharaDressId ?? null,
+
+      // Team Stadium & Inheritance — stored locally, updated automatically
+      team_class:             merged.teamClass          ?? null,
+      team_evaluation_point:  merged.teamEvaluationPoint ?? null,
+      best_team_class:        merged.bestTeamClass      ?? null,
+      rank_score:             merged.rankScore          ?? null,
+      team_stadium:           merged.teamStadium        ?? null,
+      inheritance:            merged.inheritance        ?? null,
+
       // Presentation hints for Workshop
       presentationHints: {
         highlight: merged.dailyFanGain != null ? 'dailyFanGain' : 'fans',

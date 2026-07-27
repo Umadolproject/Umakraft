@@ -399,8 +399,8 @@ export async function processTrainer(trainerId, options = {}) {
   //   • Or found but missing required fields (e.g. rank not in circle data)
   let minerResult;
 
-  if (circleTrainer && !hasMissingRequiredFields(circleTrainer)) {
-    // Circle supplies all required fields — no extra API call needed.
+  if (circleTrainer && !hasMissingRequiredFields(circleTrainer) && !options.forceProfileFetch) {
+    // Circle supplies all required fields and full profile is not required.
     logger.info('Trainer data complete from circle (primary source)', { trainerId });
     minerResult = {
       success:  true,
@@ -418,7 +418,9 @@ export async function processTrainer(trainerId, options = {}) {
     // Fetch individual trainer profile as fallback.
     logger.info(
       circleTrainer
-        ? 'Circle member found but missing required fields — fetching trainer profile'
+        ? (options.forceProfileFetch
+           ? 'Full profile requested — fetching trainer profile'
+           : 'Circle member found but missing required fields — fetching trainer profile')
         : 'Trainer not found in circle — fetching trainer profile',
       { trainerId },
     );
@@ -475,6 +477,23 @@ export async function processTrainer(trainerId, options = {}) {
         data: mergeCircleMemberGains(minerResult.data, circleResult, trainerId),
       }
     : minerResult;
+
+  // Extract leader character dress ID from the raw API profile data.
+  // Used by the profile command to render the trainer's character icon.
+  const leaderCharaDressId =
+    enrichedMinerResult?.data?.trainer?.leader_chara_dress_id
+    ?? enrichedMinerResult?.data?.leader_chara_dress_id
+    ?? null;
+
+  // Extract Team Stadium & Inheritance data from the profile API.
+  // Available only when the individual trainer profile endpoint is fetched.
+  const profileData = enrichedMinerResult?.data;
+  const teamClass          = profileData?.trainer?.team_class              ?? null;
+  const teamEvaluationPoint = profileData?.trainer?.team_evaluation_point  ?? null;
+  const bestTeamClass      = profileData?.trainer?.best_team_class        ?? null;
+  const rankScore          = profileData?.trainer?.rank_score             ?? null;
+  const teamStadium        = Array.isArray(profileData?.team_stadium)     ? profileData.team_stadium   : null;
+  const inheritance        = profileData?.inheritance ?? null;
 
   // ── STEP 5: Courier → Inspector ───────────────────────────────────────────
   const inspectorResult = await runStage('Courier', transport, enrichedMinerResult);
@@ -543,6 +562,13 @@ export async function processTrainer(trainerId, options = {}) {
     version:  compileResult.version,
     product:  compileResult.product,
     storedAt: compileResult.storedAt,
+    leaderCharaDressId,
+    teamClass,
+    teamEvaluationPoint,
+    bestTeamClass,
+    rankScore,
+    teamStadium,
+    inheritance,
   }, { trainerId });
 }
 

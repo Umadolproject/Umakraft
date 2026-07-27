@@ -141,7 +141,7 @@ function buildTrainerEmbed(fabricatorInput, blueprintKey, interaction) {
  * @param {Function} opts.mapToFabricator — (compiledProduct) => fabricator input shape
  * @returns {Promise<envelope>}
  */
-export async function runImagePipeline({ payload, blueprintKey, mapToFabricator }) {
+export async function runImagePipeline({ payload, blueprintKey, mapToFabricator, embedBuilder, forceProfileFetch }) {
   const { interaction, options, guildId, userId } = payload;
 
   // ── 1. Resolve trainer ID ─────────────────────────────────────────────────
@@ -161,6 +161,7 @@ export async function runImagePipeline({ payload, blueprintKey, mapToFabricator 
   // ── 2. Umamoe + Refinery pipeline ─────────────────────────────────────────
   const pipelineResult = await processTrainer(trainerId, {
     circleId: parseCircleId(options.circle),
+    forceProfileFetch: forceProfileFetch ?? false,
   });
   if (!pipelineResult.success) {
     return {
@@ -187,13 +188,25 @@ export async function runImagePipeline({ payload, blueprintKey, mapToFabricator 
   }
 
   // ── 4. Map to Fabricator input shape ─────────────────────────────────────
-  const fabricatorInput = mapToFabricator(depotProduct.compiledProduct, options);
+  const fabricatorInput = mapToFabricator(
+    depotProduct.compiledProduct,
+    options,
+    {
+      leaderCharaDressId:   pipelineResult.leaderCharaDressId ?? null,
+      teamClass:            pipelineResult.teamClass          ?? null,
+      teamEvaluationPoint:  pipelineResult.teamEvaluationPoint ?? null,
+      bestTeamClass:        pipelineResult.bestTeamClass      ?? null,
+      rankScore:            pipelineResult.rankScore          ?? null,
+      teamStadium:          pipelineResult.teamStadium        ?? null,
+      inheritance:          pipelineResult.inheritance        ?? null,
+    },
+  );
 
   // ── 5. Render: Fabricator (Puppeteer → PNG) or text embed fallback ─────
 
   // Text mode — skip Puppeteer entirely for low-RAM environments (Railway).
   if (PUPPETEER_DISABLED) {
-    return buildTrainerEmbed(fabricatorInput, blueprintKey, interaction);
+    return (embedBuilder ?? buildTrainerEmbed)(fabricatorInput, blueprintKey, interaction);
   }
 
   const produced = await produce(fabricatorInput);
@@ -203,7 +216,7 @@ export async function runImagePipeline({ payload, blueprintKey, mapToFabricator 
       `[pipelineImage] Fabricator failed for ${blueprintKey} — ` +
       `falling back to text embed. Error: ${produced.message}`
     );
-    return buildTrainerEmbed(fabricatorInput, blueprintKey, interaction);
+    return (embedBuilder ?? buildTrainerEmbed)(fabricatorInput, blueprintKey, interaction);
   }
 
   // ── 6. Claim deliverable from Terminal ────────────────────────────────────

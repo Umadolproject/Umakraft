@@ -350,6 +350,17 @@ export function refine(vaultRecord, options = {}) {
       characters:   data.characters  ?? [],
       achievements: data.achievements ?? [],
 
+      // Profile icon — leader character dress ID from uma.moe profile API
+      leaderCharaDressId: data.leader_chara_dress_id ?? data.leaderCharaDressId ?? null,
+
+      // Team Stadium & Inheritance (from individual profile API)
+      teamClass:          data.trainer?.team_class             ?? data.team_class             ?? null,
+      teamEvaluationPoint: data.trainer?.team_evaluation_point  ?? data.team_evaluation_point  ?? null,
+      bestTeamClass:      data.trainer?.best_team_class        ?? data.best_team_class        ?? null,
+      rankScore:          data.trainer?.rank_score             ?? data.rank_score             ?? null,
+      teamStadium:        data.team_stadium                    ?? data.teamStadium            ?? null,
+      inheritance:        data.inheritance                     ?? null,
+
       // Derived fields
       trend,
       ...gains,
