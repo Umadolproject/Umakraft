@@ -1,7 +1,10 @@
 // Distribution/Commands/handlers/ai.js
 // Handler for /ai — AI Knowledge Service subcommands:
-//   explain, search, docs, glossary, live
-// ADMIN-ONLY: regular members must use @mention instead.
+//   search, docs, live
+// ADMIN-ONLY: regular members must use @mention or /ask instead.
+//
+// NOTE: /ai explain and /ai glossary have been merged into /ask.
+//       Use /ask "explain …" or /ask "define …" instead.
 
 import { PermissionFlagsBits } from 'discord.js';
 
@@ -25,20 +28,12 @@ export async function execute(interaction, coordinator) {
   const options    = {};
 
   switch (subcommand) {
-    case 'explain':
-      options.topic = interaction.options.getString('topic', true);
-      break;
-
     case 'search':
       options.query = interaction.options.getString('query', true);
       break;
 
     case 'docs':
       options.file = interaction.options.getString('file', true);
-      break;
-
-    case 'glossary':
-      options.term = interaction.options.getString('term', true);
       break;
 
     case 'live':

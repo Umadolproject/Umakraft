@@ -273,14 +273,6 @@ const adminGreet = new SlashCommandBuilder()
 
 // ─── AI Commands ──────────────────────────────────────────────────────────────
 
-const search = new SlashCommandBuilder()
-  .setName('search')
-  .setDescription('Search the web for anything — Umamusume lore, game guides, news, and more')
-  .addStringOption(o => o
-    .setName('query')
-    .setDescription('What do you want to search for?')
-    .setRequired(true));
-
 const browse = new SlashCommandBuilder()
   .setName('browse')
   .setDescription('Browse the web live — forces online search, skips local docs')
@@ -299,14 +291,7 @@ const ask = new SlashCommandBuilder()
 
 const ai = new SlashCommandBuilder()
   .setName('ai')
-  .setDescription('Umakraft AI Knowledge Service')
-  .addSubcommand(sub => sub
-    .setName('explain')
-    .setDescription('Get a structured explanation of a repository concept or game mechanic')
-    .addStringOption(o => o
-      .setName('topic')
-      .setDescription('Topic or concept to explain')
-      .setRequired(true)))
+  .setDescription('Umakraft AI Knowledge Service — search, docs, live (admin)')
   .addSubcommand(sub => sub
     .setName('search')
     .setDescription('Similarity search across the Umakraft repository codebase')
@@ -320,13 +305,6 @@ const ai = new SlashCommandBuilder()
     .addStringOption(o => o
       .setName('file')
       .setDescription('File path or component name (e.g. Refinery/Refiner/refiner.js)')
-      .setRequired(true)))
-  .addSubcommand(sub => sub
-    .setName('glossary')
-    .setDescription('Look up an Umamusume or Umakraft term in the knowledge base')
-    .addStringOption(o => o
-      .setName('term')
-      .setDescription('Term to look up (e.g. MANT, Fan Deficit, Trend Tier)')
       .setRequired(true)))
   .addSubcommand(sub => sub
     .setName('live')
@@ -347,7 +325,7 @@ const commands = [
   deadLetterInspect, deadLetterReplay,
   adminGreet,
   ask, ai,
-  search, browse,
+  browse,
 ].map(c => c.toJSON());
 
 const commandNames = commands.map(command => command.name);

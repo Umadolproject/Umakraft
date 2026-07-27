@@ -422,7 +422,6 @@ function countComparisonSubjects(query) {
   if (/@everyone|@here/i.test(query)) return 999;
 
   // "all of us", "everyone here", "compare us", "which of us" → implicit multi
-  const lower = query.toLowerCase();
   if (/\b(all\s+of\s+us|everyone\s+here|us\s+all|compare\s+us|rank\s+us|which\s+of\s+us|among\s+us|out\s+of\s+us)\b/i.test(lower)) return 999;
 
   const mentionMatches = query.match(/<@!?\d+>/g) || [];

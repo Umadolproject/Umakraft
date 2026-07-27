@@ -38,6 +38,20 @@ export async function execute(client) {
 
   console.log('[ready] AI initialization is deferred until the first AI command.');
 
+  // ── LearningManager — cognitive memory & learning layer ────────────────
+  // Initialised lazily on first use via the global accessor.
+  // Fire-and-forget — failure here must never prevent the bot from starting.
+  try {
+    const { LearningManager } = await import('../../../../LearningManager/src/LearningManager.js');
+    const lmConfig = (await import('../../../AI/knowledge/learningManagerConfig.js')).default;
+    global.__learningManager = new LearningManager(lmConfig);
+    await global.__learningManager.init();
+    console.log('[ready] LearningManager initialised');
+  } catch (err) {
+    console.warn('[ready] LearningManager not available (non-fatal):', err?.message ?? err);
+    global.__learningManager = null;
+  }
+
   // Seed the local trainer DB from circle members so autocomplete works immediately.
   // Fire-and-forget — a failure here must never prevent the bot from starting.
   seedTrainerDbFromCircles().catch(err =>

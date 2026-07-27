@@ -6,10 +6,13 @@
 //
 // Channel: #bot-chat (1531205995009671201)
 // Trigger: @UmaKraft <question>
+//
+// NOTE: @mentions now use the SAME full pipeline as /ask — coordinator.aiCommand()
+// handles context building, prompt assembly, conversation memory, web search,
+// multi-language detection, and LearningManager enrichment. No more local-only AI.
 
 import { classify, offTopicMessage } from '../../../AI/TopicFilter.js';
-import { initialize as initAI, answer } from '../../../AI/aiService.js';
-import { isConfigured as webSearchConfigured } from '../../../AI/webSearch.js';
+import { coordinator } from '../../Coordinator/index.js';
 import { createLogger } from '../../../core/pipelineLogger.js';
 import { CHAT_CHANNEL_ID } from '../../../core/botConfig.js';
 import { isPersonalStatsQuery, isComparisonQuery, isMultiComparison, isLeaderboardQuery, getStats, compareStats, compareMulti, getLeaderboard } from '../../../AI/personalStats.js';
@@ -134,6 +137,29 @@ export async function execute(message, client) {
   // a "yes" or "no" reply. Check BEFORE requiring @mention.
   if (hasPending(message.author.id, message.channelId)) {
     const fbResult = processReply(message.author.id, message.channelId, message.content);
+
+    // ── Feed correction into LearningManager ────────────────────────────
+    try {
+      const lm = global.__learningManager;
+      if (lm && fbResult.question && fbResult.answer) {
+        if (fbResult.action === 'no') {
+          lm.process({
+            userId:   message.author.id,
+            query:    `CORRECTION: ${fbResult.question}`,
+            response: `The user said the answer was wrong. User reply: "${message.content.slice(0, 200)}"`,
+            metadata: { interactionId: message.id, domain: 'correction', feedback: 0 },
+          }).catch(() => {});
+        } else if (fbResult.action === 'yes') {
+          lm.process({
+            userId:   message.author.id,
+            query:    `CONFIRMED: ${fbResult.question}`,
+            response: `The user confirmed the answer was correct.`,
+            metadata: { interactionId: message.id, domain: 'confirmation', feedback: 1 },
+          }).catch(() => {});
+        }
+      }
+    } catch { /* learning is additive */ }
+
     if (fbResult.action !== 'none') {
       await message.reply({
         content: fbResult.message,
@@ -294,48 +320,51 @@ export async function execute(message, client) {
   // ── Show typing indicator ────────────────────────────────────────────────
   await message.channel.sendTyping().catch(() => {});
 
-  // ── Route to AI pipeline ─────────────────────────────────────────────────
+  // ── Route to full AI pipeline (same 9-layer pipeline as /ask) ────────────
+  // coordinator.aiCommand() handles: security constraint, topic classification,
+  // prompt template selection, context building, conversation memory injection,
+  // web search, multi-language detection, LearningManager enrichment + learning,
+  // and response validation — the same path slash commands take.
   try {
-    await initAI();
     const mockInteraction = messageToInteraction(message);
 
-    const useWeb = webSearchConfigured();
-    logger.info(`messageCreate: routing to AI — webSearch=${useWeb ? 'enabled' : 'disabled'}`);
-
-    const result = await answer({
-      query,
-      subcommand: 'ask',
+    const result = await coordinator.aiCommand({
+      commandName: 'ask',
+      subcommand:  'ask',
       interaction: mockInteraction,
-      userId: message.author.id,
-      mode: 'chat',
-      retrievalOverride: useWeb ? 'web-first' : null,
+      options:     { question: query },
+      guildId:     message.guildId,
+      userId:      message.author.id,
+      channelId:   message.channelId,
     });
 
-    // answer() returns successEnvelope / errorEnvelope — the mock interaction
-    // already handled the reply. If the envelope says failure and no reply was
-    // sent, send a fallback.
-    if (result && !result.success) {
-      logger.warn(`AI answer failed for "${query.slice(0, 60)}": ${result.message || result.error}`);
-      // Check if the mock already replied — if not, send fallback
-      try {
-        await message.reply({
-          content: "ah... i tried to answer but something went wrong... 😣 maybe try again in a moment? i'm really sorry~! 💕",
-          allowedMentions: { repliedUser: true },
-        });
-      } catch { /* fine if already replied */ }
-    }
+    // aiCommand returns { success, content, ... } — we send the reply ourselves.
+    // (For slash commands the Dispatcher handles this; for @mentions we do it here.)
+    if (result && result.success && result.content) {
+      await message.reply({
+        content: result.content.slice(0, 2000),
+        allowedMentions: { repliedUser: true },
+      });
 
-    // ── Request feedback after successful answer ────────────────────────────
-    if (result && result.success) {
+      // ── Request feedback ──────────────────────────────────────────────────
       try {
-        const answerText = result.content || '';
-        const fbPrompt = requestFeedback(message.author.id, message.channelId, query, answerText);
+        const fbPrompt = requestFeedback(message.author.id, message.channelId, query, result.content);
         await message.channel.send({
           content: fbPrompt,
           allowedMentions: { repliedUser: false },
         });
         logger.info(`messageCreate: feedback requested from ${userTag}`);
       } catch { /* feedback is best-effort */ }
+
+      // LearningManager.process() is already handled inside aiCommand() —
+      // no duplicate call needed here.
+    } else {
+      const errMsg = (result && result.message) || (result && result.error) || 'unknown error';
+      logger.warn(`AI answer failed for "${query.slice(0, 60)}": ${errMsg}`);
+      await message.reply({
+        content: "ah... i tried to answer but something went wrong... 😣 maybe try again in a moment? i'm really sorry~! 💕",
+        allowedMentions: { repliedUser: true },
+      });
     }
   } catch (err) {
     logger.error(`messageCreate AI pipeline error: ${err.message}`);

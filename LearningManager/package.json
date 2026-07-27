@@ -1,0 +1,8 @@
+{
+  "name": "learning-manager",
+  "version": "1.0.0",
+  "description": "Cognitive AI Framework — 8-tier memory system for AI agents that learn continuously",
+  "type": "module",
+  "main": "src/LearningManager.js",
+  "license": "MIT"
+}

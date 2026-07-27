@@ -46,12 +46,10 @@ let _latestConfidence = null;
 function resolvePromptMode(subcommand, topic, query) {
   switch (subcommand) {
     case 'search': return 'search';
-    case 'explain': return 'explain';
     case 'docs': return 'docs';
-    case 'glossary': return 'glossary';
     case 'live': return 'knowledge';
     case 'browse': return 'knowledge';
-    case 'search': return 'knowledge';
+    default:
       // Detect command-help intents for /ask
       if (isCommandHelpQuery(query)) return 'assistant';
       if (topic === 'umamusume') return 'knowledge';
@@ -77,14 +75,11 @@ function isCommandHelpQuery(query) {
 function extractQuery(subcommand, options) {
   switch (subcommand) {
     case 'ask': return options.question ?? '';
-    case 'explain': return options.topic ?? '';
     case 'search': return options.query ?? '';
     case 'docs': return options.file ?? '';
-    case 'glossary': return options.term ?? '';
     case 'message': return options.type ?? '';
     case 'live': return options.query ?? '';
     case 'browse': return options.query ?? '';
-    case 'search': return options.query ?? '';
     default: return options.question ?? options.query ?? '';
   }
 }
@@ -162,7 +157,6 @@ export async function aiCommand(payload) {
   }
 
   const commandOverride = subcommand === 'ask' ? '/ask'
-    : subcommand === 'web-search' ? '/ask'
     : `/ai ${subcommand}`;
   const classification = classify(query, commandOverride);
 
@@ -209,6 +203,20 @@ export async function aiCommand(payload) {
   if (config.aiProvider === 'local') {
     const retrievalOverride = (subcommand === 'browse' || subcommand === 'search') ? 'web-only' : undefined;
     const localResult = await localAnswer({ query, subcommand, interaction, userId: payload.userId, retrievalOverride });
+
+    // ── Feed into LearningManager ───────────────────────────────────────
+    try {
+      const lm = global.__learningManager;
+      if (lm && payload.userId && localResult.success) {
+        lm.process({
+          userId:   payload.userId,
+          query,
+          response: localResult.content ?? '',
+          metadata: { interactionId: interaction?.id, domain: classification.topic },
+        }).catch(() => {});
+      }
+    } catch { /* learning is additive */ }
+
     return finalize({ ...localResult, _topic: classification.topic, _complexity: classification.complexity });
   }
 
@@ -231,6 +239,23 @@ export async function aiCommand(payload) {
         if (payload.userId && payload.channelId && agentResult.success && agentResult.content) {
           addConversationTurn(payload.userId, payload.channelId, query, agentResult.content);
         }
+
+        // ── Feed into LearningManager ───────────────────────────────────
+        try {
+          const lm = global.__learningManager;
+          if (lm && payload.userId && agentResult.success) {
+            lm.process({
+              userId:   payload.userId,
+              query,
+              response: agentResult.content ?? '',
+              metadata: {
+                interactionId: interaction?.id,
+                domain:        classification.topic,
+                citations:     agentResult.citations,
+              },
+            }).catch(() => {});
+          }
+        } catch { /* learning is additive */ }
 
         return finalize({
           success: agentResult.success,
@@ -322,6 +347,20 @@ export async function aiCommand(payload) {
     prompt += langInstruction;
   }
 
+  // ── Enrich with LearningManager memory context ─────────────────────────
+  try {
+    const lm = global.__learningManager;
+    if (lm && payload.userId) {
+      const memories = await lm.retrieveContext(query, payload.userId);
+      if (memories && memories.length > 0) {
+        const memoryLines = memories.slice(0, 5).map(m =>
+          `- ${m.content} (${m.tier}, confidence: ${m.confidence?.toFixed(2) ?? '?'})`
+        );
+        prompt += `\n\n[Relevant memories from past interactions:]\n${memoryLines.join('\n')}`;
+      }
+    }
+  } catch { /* memory enrichment is additive — fine if it fails */ }
+
   let text;
   try {
     const result = await Router.ai(prompt, { complexity: classification.complexity });
@@ -352,6 +391,24 @@ export async function aiCommand(payload) {
   if (payload.userId && payload.channelId) {
     addConversationTurn(payload.userId, payload.channelId, query, text);
   }
+
+  // ── Feed into LearningManager for cognitive learning ────────────────────
+  try {
+    const lm = global.__learningManager;
+    if (lm && payload.userId) {
+      lm.process({
+        userId:   payload.userId,
+        query,
+        response: text,
+        metadata: {
+          interactionId: interaction?.id,
+          domain:        classification.topic,
+          sources:       citations,
+          retrieved:     chunks,
+        },
+      }).catch(() => {}); // fire-and-forget
+    }
+  } catch { /* learning is additive — fine if it fails */ }
 
   return finalize({
     success: true,
