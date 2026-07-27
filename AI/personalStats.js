@@ -457,7 +457,6 @@ export async function compareMulti(discordId, guildId, query, mentions) {
   // ── Build reply ─────────────────────────────────────────────────────────
   const lines = [];
   const total = capped.length;
-  const isEveryone = /@everyone|@here/i.test(query);
   const header = isEveryone
     ? `📊 **Circle Fan Comparison — ${ranked.length} of ${total} linked trainers~!**`
     : `📊 **Fan Comparison — ${ranked.length} of ${total} trainers~!**`;
