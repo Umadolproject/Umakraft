@@ -62,12 +62,15 @@ async function searchSearXNG(query) {
     category_general: '1',
   });
 
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), config.searchProviderTimeoutMs || 10_000);
+
   try {
     const res = await fetch(`${config.searxngUrl}/search`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: params.toString(),
-      signal: AbortSignal.timeout(config.searchProviderTimeoutMs || 10_000),
+      signal: controller.signal,
     });
 
     if (!res.ok) {
@@ -108,6 +111,8 @@ async function searchSearXNG(query) {
   } catch (err) {
     log.warn(`[WebSearch] SearXNG error: ${err.message}`);
     return null;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
