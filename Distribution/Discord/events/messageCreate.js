@@ -11,6 +11,7 @@ import { classify, offTopicMessage } from '../../../AI/TopicFilter.js';
 import { initialize as initAI, answer } from '../../../AI/aiService.js';
 import { createLogger } from '../../../core/pipelineLogger.js';
 import { CHAT_CHANNEL_ID } from '../../../core/botConfig.js';
+import { isPersonalStatsQuery, isComparisonQuery, isMultiComparison, getStats, compareStats, compareMulti } from '../../../AI/personalStats.js';
 
 const logger = createLogger('messageCreate');
 
@@ -168,6 +169,85 @@ export async function execute(message, client) {
       allowedMentions: { repliedUser: true },
     });
     logger.info(`messageCreate: declined off-topic from ${userTag}`);
+    return;
+  }
+
+  // ── Multi-person fan comparison (3–30 trainers) ───────────────────────────
+  // Checked BEFORE binary comparison since 3+ mentions need a ranked list.
+  if (isMultiComparison(query)) {
+    const mentionCount = query.match(/<@!?\d+>/g)?.length ?? 0;
+    logger.info(`messageCreate: multi-comparison intent from ${userTag} — ${mentionCount} mentions`);
+    await message.channel.sendTyping().catch(() => {});
+
+    try {
+      const result = await compareMulti(
+        message.author.id,
+        message.guildId,
+        query,
+        message.mentions?.users,
+      );
+      await message.reply({
+        content: result.content,
+        allowedMentions: { repliedUser: true },
+      });
+    } catch (err) {
+      logger.error(`compareMulti failed for ${userTag}: ${err.message}`);
+      await message.reply({
+        content: "ah... i tried to compare everyone but something broke... 😣 maybe try fewer people or use `/leaderboard`? 💕",
+        allowedMentions: { repliedUser: true },
+      });
+    }
+    return;
+  }
+
+  // ── Fan comparison intent detection ───────────────────────────────────────
+  // Check if the user is comparing two trainers' fan counts.
+  // "difference between me and @Trainer", "@A vs @B fans", etc.
+  if (isComparisonQuery(query)) {
+    logger.info(`messageCreate: comparison intent from ${userTag}`);
+    await message.channel.sendTyping().catch(() => {});
+
+    try {
+      const result = await compareStats(
+        message.author.id,
+        message.guildId,
+        query,
+        message.mentions?.users,
+      );
+      await message.reply({
+        content: result.content,
+        allowedMentions: { repliedUser: true },
+      });
+    } catch (err) {
+      logger.error(`compareStats failed for ${userTag}: ${err.message}`);
+      await message.reply({
+        content: "ah... i tried to compare but something broke... 😣 maybe try again? or use `/fan_gain` for each of you~! 💕",
+        allowedMentions: { repliedUser: true },
+      });
+    }
+    return;
+  }
+
+  // ── Personal stats intent detection ───────────────────────────────────────
+  // Check if the user is asking about THEIR OWN fan count, rank, or stats.
+  // If so, query the live database directly instead of the AI knowledge base.
+  if (isPersonalStatsQuery(query)) {
+    logger.info(`messageCreate: personal stats intent from ${userTag} — querying depot`);
+    await message.channel.sendTyping().catch(() => {});
+
+    try {
+      const statsResult = await getStats(message.author.id, message.guildId);
+      await message.reply({
+        content: statsResult.content,
+        allowedMentions: { repliedUser: true },
+      });
+    } catch (err) {
+      logger.error(`personalStats lookup failed for ${userTag}: ${err.message}`);
+      await message.reply({
+        content: "ah... i tried to look up your stats but something went wrong... 😣 try using `/fan_gain` instead~! 💕",
+        allowedMentions: { repliedUser: true },
+      });
+    }
     return;
   }
 
