@@ -8,9 +8,17 @@
 // Model: ~23 MB download on first run, cached on disk thereafter.
 // No API key, no rate limits, no quota — works offline.
 
-import { pipeline } from '@huggingface/transformers';
+import { pipeline, env } from '@huggingface/transformers';
 import log from '../../../core/log.js';
 import config from '../../Configuration.js';
+
+// Force cache to the writable Railway volume — the Dockerfile sets
+// HF_HOME=/data/.cache/huggingface but the library doesn't always
+// respect it, so we hardwire it here before any model is loaded.
+const CACHE_DIR = process.env.HF_HOME || '/data/.cache/huggingface';
+env.cacheDir = CACHE_DIR;
+env.localModelPath = CACHE_DIR;
+log.info(`[LocalEmbedding] Cache directory set to: ${CACHE_DIR}`);
 
 let _extractor = null;
 let _modelName = null;
