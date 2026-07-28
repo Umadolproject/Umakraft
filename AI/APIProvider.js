@@ -8,7 +8,7 @@
 //   - generate(prompt, options) — complexity-routed chat completion
 //   - embed(text)               — embedding vector generation
 //   - Linear-backoff retry via core/errors.js withRetry()
-//   - Bidirectional fallback between simple (Gemini) and complex (GPT-4o-mini) tiers
+//   - Mistral-primary generation with local-model fallback
 //   - Sliding-window rate limiter (per-minute, guild-wide)
 //   - Never expose API keys outside this module
 
@@ -16,6 +16,9 @@ import { withRetry } from '../core/errors.js';
 import log from '../core/log.js';
 import config, { requireApiKey } from './Configuration.js';
 import { getEmbedding, setEmbedding } from './Cache.js';
+import { generate as generateLocal } from './model.js';
+import { embed as embedLocal } from './providers/embeddings/localEmbeddingProvider.js';
+import { embed as embedCohere } from './providers/embeddings/cohereEmbeddingProvider.js';
 
 // ---------------------------------------------------------------------------
 // Rate Limiter — sliding window
@@ -66,6 +69,16 @@ function openaiKeys() {
 /** Returns all configured Gemini keys (primary first, backup second). */
 function geminiKeys() {
   return [config.geminiApiKey, config.geminiApiKey2].filter(Boolean);
+}
+
+/** Returns all configured Mistral keys. */
+function mistralKeys() {
+  return [config.mistralApiKey].filter(Boolean);
+}
+
+/** Returns all configured Groq keys. */
+function groqKeys() {
+  return [config.groqApiKey].filter(Boolean);
 }
 
 /**
@@ -192,6 +205,109 @@ async function callGemini(prompt, model, maxTokens, temperature, apiKey) {
 }
 
 /**
+ * Call Mistral chat completions API.
+ *
+ * @param {string} prompt
+ * @param {string} model
+ * @param {number} maxTokens
+ * @param {number} temperature
+ * @param {string} apiKey
+ * @returns {Promise<{ text: string, model: string, tokens: number }>}
+ */
+async function callMistral(prompt, model, maxTokens, temperature, apiKey) {
+  const response = await fetch('https://api.mistral.ai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type':  'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens:  maxTokens,
+      temperature,
+    }),
+  });
+
+  if (response.status === 429) {
+    const body = await response.text();
+    const err = new Error(`[AI/APIProvider] Mistral 429 rate limit: ${body}`);
+    err.isRateLimit = true;
+    throw err;
+  }
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`[AI/APIProvider] Mistral ${response.status}: ${body}`);
+  }
+
+  const data = await response.json();
+  const text   = data.choices?.[0]?.message?.content ?? '';
+  const tokens = data.usage?.total_tokens ?? 0;
+
+  return { text, model, tokens };
+}
+
+/**
+ * Call Groq chat completions API (OpenAI-compatible, LPU-accelerated).
+ *
+ * @param {string} prompt
+ * @param {string} model
+ * @param {number} maxTokens
+ * @param {number} temperature
+ * @param {string} apiKey
+ * @returns {Promise<{ text: string, model: string, tokens: number }>}
+ */
+async function callGroq(prompt, model, maxTokens, temperature, apiKey) {
+  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type':  'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens:  maxTokens,
+      temperature,
+    }),
+  });
+
+  if (response.status === 429) {
+    const body = await response.text();
+    const err = new Error(`[AI/APIProvider] Groq 429 rate limit: ${body}`);
+    err.isRateLimit = true;
+    throw err;
+  }
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`[AI/APIProvider] Groq ${response.status}: ${body}`);
+  }
+
+  const data = await response.json();
+  const text   = data.choices?.[0]?.message?.content ?? '';
+  const tokens = data.usage?.total_tokens ?? 0;
+
+  return { text, model, tokens };
+}
+
+/**
+ * Call local HuggingFace model.
+ *
+ * @param {string} prompt
+ * @param {string} model
+ * @param {number} maxTokens
+ * @param {number} temperature
+ * @returns {Promise<{ text: string, model: string, tokens: number }>}
+ */
+async function callLocal(prompt, model, maxTokens, temperature) {
+  const result = await generateLocal(
+    [{ role: 'user', content: prompt }],
+    { maxNewTokens: maxTokens, temperature }
+  );
+  return { text: result.text, model, tokens: 0 };
+}
+
+/**
  * Call OpenAI Embeddings API to produce a float32 vector.
  *
  * @param {string} text
@@ -254,13 +370,11 @@ function oppositeComplexity(complexity) {
 /**
  * Generate a chat completion.
  *
- * Selects the model based on the `complexity` field set by the Topic Filter:
- *   - 'simple'  → Gemini 1.5 Flash (free tier, fast factual lookups)
- *   - 'complex' → GPT-4o-mini (strong reasoning, cost-effective)
+ * Routes to Mistral as primary provider with Groq as fast fallback.
+ * Falls back to the local HuggingFace model (SmolLM2-135M-Instruct)
+ * if both cloud providers fail.
  *
- * Retries up to AI_MAX_RETRIES times with linear backoff.
- * If the primary tier exhausts its retries, falls back to the other tier.
- * If the fallback also fails, throws a graceful error.
+ * Retries each provider up to AI_MAX_RETRIES times with linear backoff.
  *
  * @param {string} prompt — fully assembled prompt (use AI/Security.buildSafePrompt)
  * @param {{
@@ -273,7 +387,6 @@ function oppositeComplexity(complexity) {
  */
 export async function generate(prompt, options = {}) {
   const {
-    complexity  = 'complex',
     model:       explicitModel,
     maxTokens   = 1024,
     temperature = 0.3,
@@ -281,77 +394,97 @@ export async function generate(prompt, options = {}) {
 
   checkRateLimit();
 
-  // Explicit model override — bypass complexity routing
+  const primaryModel = explicitModel || config.mistralModel;
+  const mistralKeysList = mistralKeys();
+
+  // Explicit model override
   if (explicitModel) {
-    const isGemini = explicitModel.startsWith('gemini');
-    const keys     = isGemini ? geminiKeys() : openaiKeys();
-    const caller   = isGemini ? callGemini   : callOpenAI;
+    const isLocal = explicitModel === 'local' || explicitModel.startsWith('local:');
+    if (isLocal) {
+      log.info(`[AI/APIProvider] Explicit local model: ${explicitModel}`);
+      return callLocal(prompt, explicitModel, maxTokens, temperature);
+    }
+    // Default to Mistral for any other explicit model
+    if (mistralKeysList.length === 0) {
+      throw new Error('[AI/APIProvider] No MISTRAL_API_KEY configured.');
+    }
     return withRetry(
-      () => withKeyRotation(explicitModel, keys, key => caller(prompt, explicitModel, maxTokens, temperature, key)),
-      { maxAttempts: config.maxRetries, delayMs: config.retryBaseDelayMs, context: `generate[${explicitModel}]` }
+      () => withKeyRotation(primaryModel, mistralKeysList, key => callMistral(prompt, primaryModel, maxTokens, temperature, key)),
+      { maxAttempts: config.maxRetries, delayMs: config.retryBaseDelayMs, context: `generate[${primaryModel}]` }
     );
   }
 
-  // Complexity-tier routing with fallback
-  const primaryComplexity  = complexity;
-  const fallbackComplexity = oppositeComplexity(complexity);
-
-  const primaryModel   = modelForComplexity(primaryComplexity);
-  const fallbackModel  = modelForComplexity(fallbackComplexity);
-  const primaryProvider  = providerForComplexity(primaryComplexity);
-  const fallbackProvider = providerForComplexity(fallbackComplexity);
-
-  const primaryCaller  = primaryProvider  === 'gemini' ? callGemini : callOpenAI;
-  const fallbackCaller = fallbackProvider === 'gemini' ? callGemini : callOpenAI;
-  const primaryKeys    = primaryProvider  === 'gemini' ? geminiKeys() : openaiKeys();
-  const fallbackKeys   = fallbackProvider === 'gemini' ? geminiKeys() : openaiKeys();
-
-  try {
-    const result = await withRetry(
-      () => withKeyRotation(primaryModel, primaryKeys, key => primaryCaller(prompt, primaryModel, maxTokens, temperature, key)),
-      { maxAttempts: config.maxRetries, delayMs: config.retryBaseDelayMs, context: `generate[${primaryModel}]` }
-    );
-    log.info(`[AI/APIProvider] Served by primary: ${primaryModel}`);
-    return result;
-  } catch (primaryErr) {
-    log.warn(
-      `[AI/APIProvider] ${primaryModel} failed after ${config.maxRetries} attempts — ` +
-      `falling back to ${fallbackModel}. Error: ${primaryErr.message}`
-    );
-
+  // ── Primary: Mistral ────────────────────────────────────────────────
+  if (mistralKeysList.length === 0) {
+    log.warn('[AI/APIProvider] No MISTRAL_API_KEY set — skipping to Groq fallback.');
+  } else {
     try {
       const result = await withRetry(
-        () => withKeyRotation(fallbackModel, fallbackKeys, key => fallbackCaller(prompt, fallbackModel, maxTokens, temperature, key)),
-        { maxAttempts: config.maxRetries, delayMs: config.retryBaseDelayMs, context: `generate-fallback[${fallbackModel}]` }
+        () => withKeyRotation(primaryModel, mistralKeysList, key => callMistral(prompt, primaryModel, maxTokens, temperature, key)),
+        { maxAttempts: config.maxRetries, delayMs: config.retryBaseDelayMs, context: `generate[${primaryModel}]` }
       );
-      log.info(`[AI/APIProvider] Served by fallback: ${fallbackModel}`);
+      log.info(`[AI/APIProvider] Served by Mistral: ${primaryModel}`);
       return result;
-    } catch (fallbackErr) {
-      log.error(
-        `[AI/APIProvider] Both model tiers failed. ` +
-        `Primary (${primaryModel}): ${primaryErr.message} | ` +
-        `Fallback (${fallbackModel}): ${fallbackErr.message}`
-      );
-      throw new Error(
-        'The AI Knowledge Service is temporarily unavailable. ' +
-        'Both model tiers failed to respond. Please try again shortly.',
-        { cause: fallbackErr }
+    } catch (mistralErr) {
+      log.warn(
+        `[AI/APIProvider] Mistral (${primaryModel}) failed after ${config.maxRetries} attempts — ` +
+        `falling back to Groq. Error: ${mistralErr.message}`
       );
     }
+  }
+
+  // ── Fallback 1: Groq (LPU-accelerated) ──────────────────────────────
+  const groqModel = config.groqModel;
+  const groqKeysList = groqKeys();
+  if (groqKeysList.length === 0) {
+    log.warn('[AI/APIProvider] No GROQ_API_KEY set — skipping to local fallback.');
+  } else {
+    try {
+      const result = await withRetry(
+        () => withKeyRotation(groqModel, groqKeysList, key => callGroq(prompt, groqModel, maxTokens, temperature, key)),
+        { maxAttempts: config.maxRetries, delayMs: config.retryBaseDelayMs, context: `generate[${groqModel}]` }
+      );
+      log.info(`[AI/APIProvider] Served by Groq (fallback): ${groqModel}`);
+      return result;
+    } catch (groqErr) {
+      log.warn(
+        `[AI/APIProvider] Groq (${groqModel}) failed after ${config.maxRetries} attempts — ` +
+        `falling back to local model. Error: ${groqErr.message}`
+      );
+    }
+  }
+
+  // ── Fallback: Local model ───────────────────────────────────────────
+  try {
+    const localModelId = config.localModelId;
+    log.info(`[AI/APIProvider] Falling back to local model: ${localModelId}`);
+    const result = await callLocal(prompt, localModelId, maxTokens, temperature);
+    log.info(`[AI/APIProvider] Served by fallback (local): ${localModelId}`);
+    return result;
+  } catch (localErr) {
+    log.error(
+      `[AI/APIProvider] All providers (Mistral, Groq, local) failed. ` +
+      `Local: ${localErr.message}`
+    );
+    throw new Error(
+      'The AI Knowledge Service is temporarily unavailable. ' +
+      'All providers (Mistral, Groq, local) are currently unavailable. ' +
+      { cause: localErr }
+    );
   }
 }
 
 /**
  * Generate an embedding vector for the given text.
  *
- * Checks the embedding cache first. On miss, calls OpenAI Embeddings API
- * and stores the result in cache before returning.
+ * Checks the embedding cache first. On miss, tries local embedding
+ * (Xenova/all-MiniLM-L6-v2, 384-dim) first, then falls back to Cohere
+ * (embed-english-v3.0, 1024-dim). OpenAI has been removed.
  *
- * The embedding model must match between index time and query time.
- * Current model: AI_EMBEDDING_MODEL (default: text-embedding-3-small, dim: 1536).
+ * Caches the result before returning.
  *
  * @param {string} text
- * @returns {Promise<number[]>}
+ * @returns {Promise<{ vector: number[], model: string, tokens: number }>}
  */
 export async function embed(text) {
   const normalised = text.toLowerCase().trim();
@@ -360,18 +493,33 @@ export async function embed(text) {
   const cached = getEmbedding(normalised);
   if (cached !== undefined) {
     log.debug(`[AI/APIProvider] Embedding cache hit for "${normalised.slice(0, 40)}..."`);
-    return { vector: cached, model: config.embeddingModel, tokens: 0 };
+    return { vector: cached, model: 'cached', tokens: 0 };
   }
 
-  // Generate via OpenAI — rotate to backup key on 429
-  const vector = await withRetry(
-    () => withKeyRotation('embed', openaiKeys(), key => callOpenAIEmbed(normalised, key)),
-    { maxAttempts: config.maxRetries, delayMs: config.retryBaseDelayMs, context: 'embed' }
-  );
+  // ── Primary: Local embedding (Xenova/all-MiniLM-L6-v2, 384-dim) ───
+  try {
+    const result = await embedLocal(normalised);
+    setEmbedding(normalised, result.vector);
+    log.debug(`[AI/APIProvider] Embedding served by local: ${result.model} (dim: ${result.vector.length})`);
+    return { vector: result.vector, model: result.model, tokens: result.tokens ?? 0 };
+  } catch (localErr) {
+    log.warn(`[AI/APIProvider] Local embedding failed — falling back to Cohere. Error: ${localErr.message}`);
+  }
 
-  setEmbedding(normalised, vector);
-  log.debug(`[AI/APIProvider] Embedding generated and cached (dim: ${vector.length})`);
-  return { vector, model: config.embeddingModel, tokens: 0 };
+  // ── Fallback: Cohere (embed-english-v3.0, 1024-dim) ──────────────
+  try {
+    const cohereResult = await embedCohere(normalised);
+    setEmbedding(normalised, cohereResult.vector);
+    log.info(`[AI/APIProvider] Embedding served by Cohere: ${cohereResult.model} (dim: ${cohereResult.vector.length})`);
+    return { vector: cohereResult.vector, model: cohereResult.model, tokens: cohereResult.tokens ?? 0 };
+  } catch (cohereErr) {
+    log.error(`[AI/APIProvider] Cohere embedding also failed: ${cohereErr.message}`);
+    throw new Error(
+      'Embedding service is temporarily unavailable. ' +
+      'Both local and Cohere embedding providers failed.',
+      { cause: cohereErr }
+    );
+  }
 }
 
 /**
