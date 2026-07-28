@@ -77,6 +77,7 @@ const config = {
   cohereApiKey:   process.env.COHERE_API_KEY   || null,
   cohereModel:    process.env.COHERE_MODEL     || 'command-r-plus',
   cohereEmbedModel: process.env.COHERE_EMBED_MODEL || 'embed-english-v3.0',
+  localEmbedModel:  process.env.LOCAL_EMBED_MODEL  || 'Xenova/all-MiniLM-L6-v2',
   firecrawlApiKey: process.env.FIRECRAWL_API_KEY || null,
   serperApiKey:    process.env.SERPER_API_KEY    || null,
   scrapeTimeoutMs:      envInt('SCRAPE_TIMEOUT_MS',      20_000),
