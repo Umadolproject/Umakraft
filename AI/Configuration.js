@@ -40,7 +40,7 @@ const config = {
   qdrantUrl:        process.env.QDRANT_URL        || null,
   qdrantApiKey:     process.env.QDRANT_API_KEY    || null,
   qdrantCollection: process.env.QDRANT_COLLECTION || 'umakraft',
-  vdbEmbeddingDim:      envInt('VDB_EMBEDDING_DIM',        1536),
+  vdbEmbeddingDim:      envInt('VDB_EMBEDDING_DIM',         384),
   vdbTopK:              envInt('VDB_TOP_K',                   8),
   vdbMinScore:          Number(process.env.VDB_MIN_SCORE ?? '0.60'),
   vdbIndexIntervalHours: envInt('VDB_INDEX_INTERVAL_HOURS',   6),

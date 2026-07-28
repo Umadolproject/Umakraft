@@ -19,7 +19,7 @@ import { createHash } from 'node:crypto';
 import log from '../core/log.js';
 import config from './Configuration.js';
 import { registerTask, recordTaskStart, recordTaskEnd } from '../core/taskRegistry.js';
-import { embed as apiEmbed } from './APIProvider.js';
+import { embed as apiEmbed } from './managers/EmbeddingManager.js';
 import { stats as cacheStats } from './Cache.js';
 import { stats as vdbStats } from './VectorDatabase.js';
 import { stats as docStats } from './documentSearch.js';

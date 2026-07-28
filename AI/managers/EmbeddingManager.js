@@ -7,13 +7,11 @@
 import log from '../../core/log.js';
 import { embed as localEmbed } from '../providers/embeddings/localEmbeddingProvider.js';
 import { embed as cohereEmbed } from '../providers/embeddings/cohereEmbeddingProvider.js';
-import { embed as legacyEmbed } from '../APIProvider.js';
 
 /** @type {Array<{ name: string, fn: () => Promise<import('../providers/interfaces.js').EmbeddingVector> }>} */
 const chain = [
   { name: 'Local',   fn: localEmbed },
   { name: 'Cohere',  fn: cohereEmbed },
-  { name: 'OpenAI',  fn: legacyEmbed },
 ];
 
 /**
