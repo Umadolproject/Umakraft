@@ -74,6 +74,11 @@ const config = {
   // ── New Provider + Manager architecture keys ────────────────────────────
   mistralApiKey:  process.env.MISTRAL_API_KEY  || null,
   mistralModel:   process.env.MISTRAL_MODEL    || 'mistral-small-latest',
+
+  // ── Groq (LPU inference — fast open-source model runner) ──────────────
+  groqApiKey:  process.env.GROQ_API_KEY  || null,
+  groqModel:   process.env.GROQ_MODEL    || 'llama-3.1-70b-versatile',
+
   cohereApiKey:   process.env.COHERE_API_KEY   || null,
   cohereModel:    process.env.COHERE_MODEL     || 'command-r-plus',
   cohereEmbedModel: process.env.COHERE_EMBED_MODEL || 'embed-english-v3.0',
