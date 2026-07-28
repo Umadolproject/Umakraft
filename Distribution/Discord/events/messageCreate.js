@@ -17,6 +17,7 @@ import { createLogger } from '../../../core/pipelineLogger.js';
 import { CHAT_CHANNEL_ID } from '../../../core/botConfig.js';
 import { isPersonalStatsQuery, isComparisonQuery, isMultiComparison, isLeaderboardQuery, getStats, compareStats, compareMulti, getLeaderboard } from '../../../AI/personalStats.js';
 import { hasPending, hasPendingCorrection, processReply, processCorrection, requestFeedback } from '../../../AI/FeedbackManager.js';
+import { addConversationTurn, getConversationContext } from '../../../AI/AdvancedFeatures.js';
 
 const logger = createLogger('messageCreate');
 
@@ -28,6 +29,48 @@ export const once = false;
 const BOT_CHAT_CHANNEL_ID = CHAT_CHANNEL_ID || '1531205995009671201';
 const MAX_QUERY_LENGTH = 500;
 const MIN_QUERY_LENGTH = 2;
+
+// ─── Recent query dedup cache ───────────────────────────────────────────────
+// Prevent re-running the full AI pipeline when the same user asks the exact
+// same question within a short window. Key: userId:channelId:normalizedQuery.
+
+const _recentQueryCache = new Map();
+const RECENT_QUERY_TTL_MS = 30 * 60 * 1000; // 30 minutes
+const RECENT_QUERY_MAX = 200;
+
+/** Normalize for dedup: lowercase, collapse whitespace, strip punctuation */
+function normalizeQuery(q) {
+  return q.toLowerCase().replace(/[^\w\s<>@]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+function getRecentCacheKey(userId, channelId, query) {
+  return `${userId}:${channelId}:${normalizeQuery(query)}`;
+}
+
+function checkRecentCache(userId, channelId, query) {
+  const key = getRecentCacheKey(userId, channelId, query);
+  const entry = _recentQueryCache.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.timestamp > RECENT_QUERY_TTL_MS) {
+    _recentQueryCache.delete(key);
+    return null;
+  }
+  return entry;
+}
+
+function setRecentCache(userId, channelId, query, answer, source) {
+  const key = getRecentCacheKey(userId, channelId, query);
+  // LRU eviction
+  if (_recentQueryCache.size >= RECENT_QUERY_MAX) {
+    const lruKey = _recentQueryCache.keys().next().value;
+    _recentQueryCache.delete(lruKey);
+  }
+  _recentQueryCache.set(key, {
+    answer: answer.slice(0, 500),
+    source,
+    timestamp: Date.now(),
+  });
+}
 
 // ─── Gentle off-topic replies for when TopicFilter declines ─────────────────
 
@@ -261,6 +304,7 @@ export async function execute(message, client) {
         content: result.content,
         allowedMentions: { repliedUser: true },
       });
+      setRecentCache(message.author.id, message.channelId, query, result.content, 'compare-multi');
     } catch (err) {
       logger.error(`compareMulti failed for ${userTag}: ${err.message}`);
       await message.reply({
@@ -289,6 +333,7 @@ export async function execute(message, client) {
         content: result.content,
         allowedMentions: { repliedUser: true },
       });
+      setRecentCache(message.author.id, message.channelId, query, result.content, 'compare');
     } catch (err) {
       logger.error(`compareStats failed for ${userTag}: ${err.message}`);
       await message.reply({
@@ -312,6 +357,7 @@ export async function execute(message, client) {
         content: lbResult.content,
         allowedMentions: { repliedUser: true },
       });
+      setRecentCache(message.author.id, message.channelId, query, lbResult.content, 'leaderboard');
     } catch (err) {
       logger.error(`leaderboard lookup failed for ${userTag}: ${err.message}`);
       await message.reply({
@@ -335,6 +381,7 @@ export async function execute(message, client) {
         content: statsResult.content,
         allowedMentions: { repliedUser: true },
       });
+      setRecentCache(message.author.id, message.channelId, query, statsResult.content, 'personal-stats');
     } catch (err) {
       logger.error(`personalStats lookup failed for ${userTag}: ${err.message}`);
       await message.reply({
@@ -347,6 +394,34 @@ export async function execute(message, client) {
 
   // ── Show typing indicator ────────────────────────────────────────────────
   await message.channel.sendTyping().catch(() => {});
+
+  // ── Recent query dedup ─────────────────────────────────────────────────
+  // If the same user asked the same question recently, skip the AI pipeline
+  // and give them a short response instead of repeating a full answer.
+  const cachedRecent = checkRecentCache(message.author.id, message.channelId, query);
+  if (cachedRecent) {
+    const minutesAgo = Math.ceil((Date.now() - cachedRecent.timestamp) / 60000);
+    logger.info(
+      `messageCreate: DEDUP hit for ${userTag} — answered ${minutesAgo}m ago (${cachedRecent.source})`
+    );
+    await message.reply({
+      content: `i answered this just ${minutesAgo}m ago~! 📝 the answer was:\n\n> ${cachedRecent.answer.slice(0, 300)}${cachedRecent.answer.length > 300 ? '...' : ''}\n\nif you meant something different, could you rephrase? 💕`,
+      allowedMentions: { repliedUser: true },
+    });
+    return;
+  }
+
+  // ── Inject conversation context ────────────────────────────────────────
+  // Always pass recent conversation history so the AI knows what was just
+  // discussed and won't repeat itself. Even without AI_CONVERSATION_MEMORY
+  // enabled, @mentions benefit from short-term context.
+  let conversationContext = '';
+  try {
+    conversationContext = getConversationContext(message.author.id, message.channelId);
+    if (conversationContext) {
+      logger.info(`messageCreate: injecting conversation context for ${userTag} (${conversationContext.length} chars)`);
+    }
+  } catch { /* context is additive */ }
 
   // ── Route to full AI pipeline (same 9-layer pipeline as /ask) ────────────
   // coordinator.aiCommand() handles: security constraint, topic classification,
@@ -373,6 +448,14 @@ export async function execute(message, client) {
         content: result.content.slice(0, 2000),
         allowedMentions: { repliedUser: true },
       });
+
+      // ── Cache the answer for dedup ───────────────────────────────────
+      setRecentCache(message.author.id, message.channelId, query, result.content, 'ai');
+
+      // ── Record conversation turn (always, for @mentions) ─────────────
+      try {
+        addConversationTurn(message.author.id, message.channelId, query, result.content);
+      } catch { /* conversation memory is additive */ }
 
       // ── Request feedback (skipped if question was already resolved) ────
       try {
