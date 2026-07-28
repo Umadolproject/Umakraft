@@ -18,12 +18,59 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import log from '../core/log.js';
-import { OPS_CHANNEL_ID } from '../core/botConfig.js';
+import { OPS_CHANNEL_ID, MESSAGE_CHANNEL_ID, ANNOUNCEMENT_CHANNEL_ID, DISCORD_GUILD_ID } from '../core/botConfig.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const BANK_PATH  = join(__dirname, '..', 'data', 'messageBank.json');
 const MAX_BANK_SIZE = 20;
-const GREETING_CHANNEL_ID = process.env.GREETING_CHANNEL_ID || OPS_CHANNEL_ID;
+const GREETING_CHANNEL_ID = process.env.GREETING_CHANNEL_ID || MESSAGE_CHANNEL_ID || ANNOUNCEMENT_CHANNEL_ID || OPS_CHANNEL_ID;
+
+/**
+ * Resolve the best available channel for greeting messages.
+ * Tries configured IDs first, then falls back to guild's system channel
+ * or the first available text channel.
+ *
+ * @param {import('discord.js').Client} client
+ * @returns {Promise<import('discord.js').TextChannel|null>}
+ */
+async function resolveGreetingChannel(client) {
+  // 1. Try the configured GREETING_CHANNEL_ID (from env or botConfig fallback)
+  if (GREETING_CHANNEL_ID) {
+    const channel = await client.channels.fetch(GREETING_CHANNEL_ID).catch(() => null);
+    if (channel) {
+      log.info(`[greeting-ai] Using configured greeting channel: ${GREETING_CHANNEL_ID}`);
+      return channel;
+    }
+    log.warn(`[greeting-ai] Configured channel ${GREETING_CHANNEL_ID} not found — trying fallbacks`);
+  }
+
+  // 2. Try the guild's system channel (Discord's default welcome channel)
+  const guildId = DISCORD_GUILD_ID || client.guilds.cache.first()?.id;
+  if (guildId) {
+    const guild = await client.guilds.fetch(guildId).catch(() => null);
+    if (guild?.systemChannelId) {
+      const systemChannel = await client.channels.fetch(guild.systemChannelId).catch(() => null);
+      if (systemChannel) {
+        log.info(`[greeting-ai] Using guild system channel: ${systemChannel.id}`);
+        return systemChannel;
+      }
+    }
+    // 3. Find the first text channel the bot can send to
+    const channels = await guild.channels.fetch().catch(() => null);
+    if (channels) {
+      const textChannel = channels.find(
+        ch => ch.isTextBased() && !ch.isThread() && ch.permissionsFor(guild.members.me)?.has('SendMessages')
+      );
+      if (textChannel) {
+        log.info(`[greeting-ai] Using first available text channel: ${textChannel.id} (${textChannel.name})`);
+        return textChannel;
+      }
+    }
+  }
+
+  log.error('[greeting-ai] No suitable greeting channel found — all fallbacks exhausted');
+  return null;
+}
 
 // ---------------------------------------------------------------------------
 // Message bank helpers
@@ -96,9 +143,9 @@ function randomFromBank(bank, timeSlot) {
  * @param {'morning'|'noon'|'night'|'midnight'} timeSlot
  */
 export async function runGreetingAI(client, timeSlot = 'morning') {
-  const channel = await client.channels.fetch(GREETING_CHANNEL_ID).catch(() => null);
+  const channel = await resolveGreetingChannel(client);
   if (!channel) {
-    log.error(`[greeting-ai] Channel ${GREETING_CHANNEL_ID} not found — skipping ${timeSlot} greeting`);
+    log.error(`[greeting-ai] No channel resolved — skipping ${timeSlot} greeting`);
     return;
   }
 
