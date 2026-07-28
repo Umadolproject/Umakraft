@@ -23,7 +23,14 @@ import { createHash } from 'node:crypto';
 import log from '../core/log.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const TABLE_PATH = resolve(__dirname, 'feedback.table');
+
+// Railway: /data is the persistent writable volume (chowned to node in Dockerfile).
+// Locally / Replit: fall back to the AI/ directory.
+const TABLE_PATH = (() => {
+  if (existsSync('/data')) return '/data/feedback.table';
+  if (process.env.FEEDBACK_TABLE_PATH) return process.env.FEEDBACK_TABLE_PATH;
+  return resolve(__dirname, 'feedback.table');
+})();
 
 // ─── Load / Save .table file ─────────────────────────────────────────────────
 
