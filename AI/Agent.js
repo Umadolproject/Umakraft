@@ -13,17 +13,35 @@
 //
 // Public API:
 //   orchestrate(request) → AgentResponse
-//     { success, content, toolPlan, reflection, latencyMs, topic, complexity }
+//     { success, content, topic, complexity, toolsUsed, toolPlan, reflection, latencyMs, citations }
+//   withCommunication(request) → AgentResponse & CommunicationEnriched
+//     + communicationResult, discordOutput, responseObj
+//     Gracefully falls back to plain-text DiscordOutput if Communication wrapping fails.
 
 import log from '../core/log.js';
-import { listAvailable, execute } from './ToolRegistry.js';
+import config from './Configuration.js';
+import { execute } from './ToolRegistry.js';
 import { reflect, shouldGenerate, shouldRetry } from './ReflectionEngine.js';
 import { build as buildContext } from './ContextBuilder.js';
 import { assemble as assemblePrompt } from './PromptSystem.js';
 import { validate } from './ResponseValidator.js';
 import { getResponse, setResponse } from './Cache.js';
 import { formatWithCitations, formatConfidence } from './AdvancedFeatures.js';
-import { scopeUmaQuery } from './WebSearchEngine.js';
+import { plan as buildPlan } from './Planner.js';
+import { softValidate } from './CognitiveContracts.js';
+import { suggestFollowUps, trackInteraction } from './GrowthEngine.js';
+
+// Lazy import — CommunicationManager for Phase 1 bridge
+let _wrapCommResponse = null;
+async function _getCommManager() {
+  if (!_wrapCommResponse) {
+    try {
+      const mod = await import('./Communication/integration/CommunicationManager.js');
+      _wrapCommResponse = mod.wrapAgentResponse;
+    } catch { /* CommunicationManager not available */ }
+  }
+  return _wrapCommResponse;
+}
 
 // Lazy import — MemoryManager may not be loaded at startup
 let _storeConversationTurn = null;
@@ -37,87 +55,29 @@ async function _getMemoryStore() {
   return _storeConversationTurn;
 }
 
+// Lazy import — UserProfileManager for learning & experience
+let _updateProfile = null;
+let _enrichPrompt = null;
+async function _getProfileManager() {
+  if (!_updateProfile) {
+    try {
+      const mod = await import('./managers/UserProfileManager.js');
+      _updateProfile = mod.updateFromInteraction;
+      _enrichPrompt = mod.enrichPrompt;
+    } catch { /* UserProfileManager not available */ }
+  }
+  return { updateFromInteraction: _updateProfile, enrichPrompt: _enrichPrompt };
+}
+
 // ──────────────────────────────────────────────────────────────────────────────
-// Intent planning — maps intent → ordered tool chain
+// Intent planning — delegated to Planner.js (Chapter 5)
+// The Planner decomposes complex queries into multi-step sub-goal plans.
+// Simple queries get flat tool chains as before.
 // ──────────────────────────────────────────────────────────────────────────────
 
 const MAX_TOOL_ATTEMPTS = 2;
 
-/**
- * Build an ordered plan (list of tool names + params) from the classification
- * result and Discord context.
- *
- * Rules (ordered by priority):
- *   1. rejected         → no tools, return rejection
- *   2. message          → generate_message only
- *   3. live             → search_web → then answer
- *   4. umamusume        → search_knowledge → (search_repository) → answer
- *   5. repository       → search_repository → search_conversation_memory → answer
- *   6. low confidence   → add search_web as supplement
- *
- * @param {object} classification — from classify_intent tool
- * @param {object} ctx            — Discord context { userId, channelId, query }
- * @returns {Array<{tool: string, params: object}>}
- */
-function plan(classification, ctx) {
-  const { topic, complexity, confidence } = classification;
-  const steps = [];
-
-  // ── Message generation: single-tool plan ───────────────────────────────
-  if (topic === 'message') {
-    steps.push({
-      tool: 'generate_message',
-      params: {
-        type:            ctx.messageType      ?? 'greeting',
-        trainerName:     ctx.trainerName      ?? undefined,
-        milestoneValue:  ctx.milestoneValue   ?? undefined,
-        achievementName: ctx.achievementName  ?? undefined,
-        eventName:       ctx.eventName        ?? undefined,
-        eventDate:       ctx.eventDate        ?? undefined,
-      },
-    });
-    return steps;
-  }
-
-  // ── Live data → web search first ───────────────────────────────────────
-  if (topic === 'live' || topic === 'web') {
-    steps.push({ tool: 'search_web',       params: { query: ctx.query, maxResults: 5 } });
-    return steps;
-  }
-
-  // ── Umamusume knowledge ────────────────────────────────────────────────
-  if (topic === 'umamusume') {
-    steps.push({ tool: 'search_knowledge',  params: { query: ctx.query } });
-    // If knowledge base is thin, supplement with repo search + web search
-    if (confidence < 0.70) {
-      steps.push({ tool: 'search_repository', params: { query: ctx.query, topK: 3 } });
-    }
-    // Site-scoped web search on trusted uma sites (gametora.com, uma.guide, game8.co, etc.)
-    steps.push({ tool: 'search_web',        params: { query: scopeUmaQuery(ctx.query), maxResults: 3 } });
-    if (ctx.userId && ctx.channelId) {
-      steps.push({ tool: 'search_conversation_memory', params: { userId: ctx.userId, channelId: ctx.channelId } });
-    }
-    return steps;
-  }
-
-  // ── Repository questions (default path) ────────────────────────────────
-  steps.push({ tool: 'search_repository',   params: { query: ctx.query, topK: 5 } });
-
-  // Add conversation memory if we have session context
-  if (ctx.userId && ctx.channelId) {
-    steps.push({ tool: 'search_conversation_memory', params: { userId: ctx.userId, channelId: ctx.channelId } });
-  }
-
-  // Always try semantic memory — low-cost, complements repo search
-  steps.push({ tool: 'search_semantic_memory', params: { query: ctx.query, limit: 3 } });
-
-  // Low-confidence → supplement with web search
-  if (confidence < 0.65) {
-    steps.push({ tool: 'search_web',        params: { query: ctx.query, maxResults: 3 } });
-  }
-
-  return steps;
-}
+// plan() is now imported from ./Planner.js as buildPlan
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Plan execution
@@ -280,8 +240,8 @@ export async function orchestrate(request = {}) {
     };
   }
 
-  // ── Phase 2: Plan ──────────────────────────────────────────────────────
-  let toolPlan = plan(classification, {
+  // ── Phase 2: Plan (via Planner.js — Chapter 5) ────────────────────────
+  const planCtx = {
     query,
     userId,
     channelId,
@@ -291,27 +251,64 @@ export async function orchestrate(request = {}) {
     achievementName: request.messageOpts?.achievementName ?? undefined,
     eventName: request.messageOpts?.eventName ?? undefined,
     eventDate: request.messageOpts?.eventDate ?? undefined,
-  });
+  };
+  const executionPlan = buildPlan(classification, planCtx);
+  let toolPlan = executionPlan.steps;
 
-  log.info(`[AI/Agent] Plan: ${toolPlan.map(s => s.tool).join(' → ') || '(none)'}`);
+  log.info(`[AI/Agent] Plan: ${toolPlan.map(s => s.tool).join(' → ') || '(none)'} ` +
+    `decomposed=${executionPlan.isDecomposed} pattern=${executionPlan.description}`);
 
   // ── Phase 3: Execute tools ─────────────────────────────────────────────
   const { results: toolResults, toolsUsed, totalChunks } = await executePlan(toolPlan);
 
-  // Special case: message generation returns the message directly
+  // Special case: message generation returns the message directly.
+  // Wire through Communication pipeline for structured DiscordOutput.
   const msgResult = toolResults.find(r => r.tool === 'generate_message');
   if (msgResult?.result?.message) {
     const content = msgResult.result.message.length > DISCORD_MAX
       ? `${msgResult.result.message.slice(0, DISCORD_MAX - 3)}...`
       : msgResult.result.message;
+    const latencyMs = Date.now() - startTime;
+
+    // ── Enrich through Communication (Phase 1 bridge) ──────────────────
+    let communicationResult = null;
+    let discordOutput = null;
+    try {
+      const wrap = await _getCommManager();
+      if (wrap) {
+        communicationResult = wrap({
+          success: true, content, topic, complexity, toolsUsed,
+          toolPlan: toolPlan.map(s => s.tool),
+        }, {
+          query: query.slice(0, 200), topic, complexity,
+          confidence: request.confidence ?? 0.9,
+          userId, channelId, guildId: request.guildId,
+        });
+        discordOutput = communicationResult?.discordOutput ?? null;
+      }
+    } catch (err) {
+      log.warn(`[AI/Agent] Communication wrapping failed for message: ${err.message}`);
+    }
+
+    // Fallback: plain-text DiscordOutput if wrapping failed
+    if (!discordOutput) {
+      discordOutput = {
+        messages: [content], embeds: [], attachments: [],
+        components: [], metadata: { topic, complexity },
+      };
+    }
+
     return {
-      success: true,
+      success:    true,
       content,
       topic,
       complexity,
       toolsUsed,
-      toolPlan: toolPlan.map(s => s.tool),
-      latencyMs: Date.now() - startTime,
+      toolPlan:   toolPlan.map(s => s.tool),
+      latencyMs,
+      communicationResult,
+      discordOutput,
+      responseObj: communicationResult?.responseObj ?? null,
     };
   }
 
@@ -328,6 +325,12 @@ export async function orchestrate(request = {}) {
   let finalAnswer  = null;
   let finalReflect = null;
   let searchWebAttempted = toolsUsed.includes('search_web');
+
+  // ── Enrich context with user profile (Chapter 7 — Learning) ─────────────
+  const { enrichPrompt: enrich } = await _getProfileManager();
+  if (enrich && userId) {
+    mainContext = enrich(mainContext, userId);
+  }
 
   for (let attempt = 1; attempt <= MAX_TOOL_ATTEMPTS + 1; attempt++) {
     const prompt = assemblePrompt(promptMode, mainContext, query);
@@ -456,7 +459,58 @@ export async function orchestrate(request = {}) {
     }).catch(() => {});
   }
 
+  // ── Update user profile (Chapter 7 — Learning) ─────────────────────────
+  if (userId) {
+    _getProfileManager().then(({ updateFromInteraction }) => {
+      if (updateFromInteraction) {
+        updateFromInteraction(userId, query, finalAnswer, topic);
+      }
+    }).catch(() => {});
+  }
+
+  // ── Soft-validate contracts in dev mode ───────────────────────────────
+  if (config.devMode) {
+    softValidate({
+      query,
+      subcommand,
+      userId,
+      channelId,
+      guildId,
+      classification,
+      plan: { steps: toolPlan, complexity, description: `Plan for topic=${topic}`, estimatedLatencyMs: latencyMs, isDecomposed: false },
+      toolResults: toolsUsed.map(t => ({ tool: t, ok: true, data: null, error: null, durationMs: 0, source: 'agent' })),
+    });
+  }
+
   const latencyMs = Date.now() - startTime;
+
+  // ── Growth: follow-up suggestions (Chapter 10) ──────────────────────────
+  const followUps = suggestFollowUps(query, topic, confidence);
+  if (followUps.length > 0) {
+    const followUpText = followUps.map((q, i) => `  ${i + 1}. ${q}`).join('\n');
+    content += `\n\n**Want to know more?** Try asking:\n${followUpText}`;
+    if (content.length > DISCORD_MAX) {
+      content = content.slice(0, DISCORD_MAX - 100);
+      const remaining = DISCORD_MAX - content.length - 30;
+      if (remaining > 20) {
+        const trimmed = followUps.slice(0, Math.min(followUps.length, 2));
+        const trimmedText = trimmed.map((q, i) => `  ${i + 1}. ${q}`).join('\n');
+        content += `\n\n**Want to know more?**\n${trimmedText}`;
+      }
+      content = content.slice(0, DISCORD_MAX);
+    }
+  }
+
+  // ── Growth: performance tracking (Chapter 10) ──────────────────
+  trackInteraction({
+    topic,
+    confidence,
+    reflectionAction: finalReflect?.action ?? 'send',
+    toolsFailed: toolPlan.length - toolsUsed.length,
+    latencyMs,
+    query: query.slice(0, 120),
+  });
+
   log.info(
     `[AI/Agent] Complete — topic=${topic} tools=[${toolsUsed.join(',')}] ` +
     `attempts=${finalReflect ? 'multi' : '1'} ` +
@@ -474,4 +528,66 @@ export async function orchestrate(request = {}) {
     latencyMs,
     citations,
   };
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Communication bridge (Part 8 — Phase 1)
+// ──────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Orchestrate through the full Agent pipeline AND wrap the result through
+ * the Communication subsystem (Composition + Rendering).
+ *
+ * This is the Phase 1 integration point — existing retrieval/generation
+ * stays the same, but the response is enriched with a structured
+ * ResponseObject and Discord-ready output.
+ *
+ * @param {object} request — same as orchestrate()
+ * @returns {Promise<AgentResponse & { communicationResult: object|null }>}
+ */
+export async function withCommunication(request) {
+  // 1. Run the normal Agent pipeline
+  const agentResponse = await orchestrate(request);
+
+  // 2. Try to wrap through Communication
+  let communicationResult = null;
+  try {
+    const wrap = await _getCommManager();
+    if (wrap) {
+      communicationResult = wrap(agentResponse, {
+        query: request.query ?? request.subcommand ?? '',
+        topic: agentResponse.topic,
+        complexity: agentResponse.complexity,
+        confidence: request.confidence ?? 0.7,
+        userId: request.userId,
+        channelId: request.channelId,
+        guildId: request.guildId,
+      });
+    }
+  } catch (err) {
+    log.warn(`[AI/Agent] Communication wrapping failed: ${err.message}`);
+  }
+
+  // 3. Enrich the response with Communication output
+  agentResponse.communicationResult = communicationResult;
+  if (communicationResult?.discordOutput) {
+    agentResponse.discordOutput = communicationResult.discordOutput;
+  } else {
+    // Graceful fallback: wrap raw content as plain-text DiscordOutput
+    // so callers always have a .discordOutput to pass to DiscordAdapter
+    agentResponse.discordOutput = {
+      messages: [agentResponse.content],
+      embeds: [],
+      attachments: [],
+      components: [],
+      metadata: { topic: agentResponse.topic, complexity: agentResponse.complexity },
+    };
+  }
+  if (communicationResult?.responseObj) {
+    agentResponse.responseObj = communicationResult.responseObj;
+  } else {
+    agentResponse.responseObj = null;
+  }
+
+  return agentResponse;
 }

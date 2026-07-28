@@ -39,6 +39,7 @@ let _knowledgeContext  = null;
 let _webSearch         = null;
 let _messageGenerate   = null;
 let _topicFilter       = null;
+let _topicFilterAsync  = null;
 let _memoryRecall      = null;
 let _conversationCtx   = null;
 let _aiGenerate        = null;
@@ -56,6 +57,7 @@ async function _imports() {
     _webSearch         = modWeb.search;
     _messageGenerate   = modMsg.generate;
     _topicFilter       = modTf.classify;
+    _topicFilterAsync  = modTf.classifyAsync ?? modTf.classify;
     _conversationCtx   = modConv.getConversationContext;
   }
   if (!_aiGenerate) {
@@ -241,7 +243,9 @@ _define({
   },
   execute: async (params) => {
     await _imports();
-    const r = _topicFilter(params.query, params.command ?? null);
+    // Use classifyAsync for semantic embedding fallback on low-confidence queries.
+    // Falls through to keyword-only classify() when classifyAsync is unavailable.
+    const r = await _topicFilterAsync(params.query, params.command ?? null);
     return {
       topic:      r.topic,
       complexity: r.complexity,

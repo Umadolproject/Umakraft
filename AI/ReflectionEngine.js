@@ -31,11 +31,11 @@ const VAGUE_PHRASES = [
 ];
 
 const CONTRADICTION_FLAGS = [
-  /however,? (according to|the (?:docs|repository|code|source)|based on)/i,
-  /but (?:actually|in fact|the truth is)/i,
-  /that said,? (?:the|this|it)/i,
-  /on the (?:other|one) hand/i,
-  /contrary to/i,
+  { pattern: /however,? (according to|the (?:docs|repository|code|source)|based on)/i, label: 'however-contrary-source' },
+  { pattern: /but (?:actually|in fact|the truth is)/i,                                       label: 'but-contradiction' },
+  { pattern: /that said,? (?:the|this|it)/i,                                                 label: 'that-said-contradiction' },
+  { pattern: /on the (?:other|one) hand/i,                                                   label: 'on-the-other-hand' },
+  { pattern: /contrary to/i,                                                                  label: 'contrary-to' },
 ];
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -123,9 +123,9 @@ export function reflect({ answer, topic, confidence, attempt, context = {} } = {
   }
 
   // ── Check 4: Self-contradiction flags ──────────────────────────────────
-  const contradictory = CONTRADICTION_FLAGS.filter(p => p.test(answer));
+  const contradictory = CONTRADICTION_FLAGS.filter(f => f.pattern.test(answer));
   if (contradictory.length >= 2 && attempt < MAX_RETRY_ATTEMPTS) {
-    reasons.push(`Self-contradiction flags: ${contradictory.map(m => m.source).join(', ')}`);
+    reasons.push(`Self-contradiction flags: ${contradictory.map(m => m.label).join(', ')}`);
     return {
       passed: false,
       action: 're-phrase',

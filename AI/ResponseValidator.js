@@ -102,7 +102,12 @@ function checkScope(text, classification) {
   }
 
   if (terms.length === 0) return 'skip';
-  const matched = terms.some(t => lower.includes(t.toLowerCase()));
+  // Word-boundary matching — prevents "mant" matching "manticore" etc.
+  const matched = terms.some(t => {
+    const escaped = t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp(`(?:^|\\s)${escaped}(?:\\s|$)`, 'i');
+    return re.test(lower);
+  });
   return matched ? 'pass' : 'fail';
 }
 

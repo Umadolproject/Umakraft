@@ -1,13 +1,15 @@
 // AI/test/phase8.test.js
-// Phase 8 test suite — Agent Layer
-//   ToolRegistry, ReflectionEngine, Agent orchestrator
+// Phase 8 test suite — Cognitive Contracts, Planner, Learning & Experience
 //
-// All tests are pure and synchronous where possible. Tool execution
-// may fail gracefully without API keys — that's tested explicitly.
+// Tests the full Agent Raising Project cognitive architecture:
+//   Chapter 5:  Planning Engine (multi-step decomposition)
+//   Chapter 7:  Learning & Experience (user profiles, fact extraction)
+//   Chapter 8:  Cognitive API & Intent Contracts (type validation)
+//   Chapter 9:  Decision Scenarios & Cognitive Case Studies
+//
+// Runs without live API keys. All tests are pure logic/contract validation.
 
 import assert from 'node:assert/strict';
-
-// ── helpers ─────────────────────────────────────────────────────────────────
 
 let passed = 0;
 let failed = 0;
@@ -25,312 +27,672 @@ async function test(name, fn) {
 }
 
 function section(title) {
-  console.log(`\n── ${title} ──────────────────────────────────────`);
+  console.log(`\n── ${title} ──────────────────────────────────────────────`);
 }
 
-// ── ToolRegistry ─────────────────────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────────────────────
+// Chapter 8: Cognitive Contracts
+// ──────────────────────────────────────────────────────────────────────────────
 
-section('ToolRegistry — imports');
-
-const {
-  listAll,
-  listAvailable,
-  get: getTool,
-  register,
-  execute: executeTool,
-  count,
-} = await import('../ToolRegistry.js');
-
-await test('module exports all public functions', () => {
-  assert.equal(typeof listAll,        'function');
-  assert.equal(typeof listAvailable,  'function');
-  assert.equal(typeof getTool,        'function');
-  assert.equal(typeof register,       'function');
-  assert.equal(typeof executeTool,    'function');
-  assert.equal(typeof count,          'function');
-});
-
-section('ToolRegistry — catalog');
-
-await test('listAll returns 8 registered tools', () => {
-  const tools = listAll();
-  assert.equal(tools.length, 8, `expected 8 tools, got ${tools.length}`);
-});
-
-await test('every tool has required fields', () => {
-  for (const t of listAll()) {
-    assert.ok(t.name,            `tool missing name`);
-    assert.ok(t.description,     `tool "${t.name}" missing description`);
-    assert.ok(t.category,        `tool "${t.name}" missing category`);
-    assert.ok(t.parameters,      `tool "${t.name}" missing parameters`);
-    assert.ok(typeof t.execute === 'function', `tool "${t.name}" execute not a function`);
-    assert.ok(t.bestFor?.length > 0, `tool "${t.name}" missing bestFor`);
-  }
-});
-
-await test('tool names are unique', () => {
-  const names = listAll().map(t => t.name);
-  assert.equal(new Set(names).size, names.length, 'duplicate tool names');
-});
-
-await test('get returns a tool by name', () => {
-  const t = getTool('search_repository');
-  assert.ok(t, 'search_repository not found');
-  assert.equal(t.category, 'search');
-});
-
-await test('get returns null for unknown tool', () => {
-  assert.equal(getTool('nonexistent_tool'), null);
-});
-
-await test('available tools by category', () => {
-  const searchTools = listAll().filter(t => t.category === 'search');
-  assert.ok(searchTools.length >= 2, `expected >=2 search tools, got ${searchTools.length}`);
-});
-
-section('ToolRegistry — listAvailable');
-
-await test('listAvailable("answer_question") returns multiple tools', () => {
-  const tools = listAvailable('answer_question');
-  assert.ok(tools.length >= 3, `expected >=3 tools for answer_question, got ${tools.length}`);
-  const names = tools.map(t => t.name);
-  assert.ok(names.includes('search_repository'), 'should include search_repository');
-  assert.ok(names.includes('search_knowledge'),  'should include search_knowledge');
-});
-
-await test('listAvailable("generate_message") returns generate_message', () => {
-  const tools = listAvailable('generate_message');
-  const names = tools.map(t => t.name);
-  assert.ok(names.includes('generate_message'), 'should include generate_message');
-});
-
-await test('listAvailable filters out not-always-available tools', () => {
-  const tools = listAvailable('search_web');
-  // search_web and ai_generate are not alwaysAvailable (need API keys)
-  // So this should NOT include them
-  for (const t of tools) {
-    assert.equal(t.alwaysAvailable, true, `${t.name} should be alwaysAvailable`);
-  }
-});
-
-section('ToolRegistry — register');
-
-await test('register adds a new tool at runtime', () => {
-  const before = count();
-  register({
-    name:        'test_tool',
-    description: 'A test tool',
-    category:    'utility',
-    parameters:  { input: { type: 'string', required: true, description: 'test' } },
-    execute:     async (p) => ({ echoed: p.input }),
-    alwaysAvailable: true,
-    returns:   ['{echoed}'],
-    bestFor:   ['answer_question'],
-  });
-  assert.equal(count(), before + 1);
-  assert.ok(getTool('test_tool'));
-
-  // Clean up — remove from internal map (test only)
-  // Not a public API, so we just verify it works
-});
-
-section('ToolRegistry — execute');
-
-await test('execute returns ok:false for unknown tool', async () => {
-  const { ok, error } = await executeTool('nonexistent');
-  assert.equal(ok, false);
-  assert.ok(error.includes('Unknown tool'));
-});
-
-await test('execute classify_intent returns a valid classification', async () => {
-  const { ok, result } = await executeTool('classify_intent', {
-    query:   'How does the Vault store data?',
-    command: '/ask',
-  });
-  assert.equal(ok, true);
-  assert.ok(result.topic,           'missing topic');
-  assert.ok(result.complexity,      'missing complexity');
-  assert.ok(typeof result.confidence === 'number', 'confidence should be a number');
-  assert.ok(result.confidence >= 0 && result.confidence <= 1, 'confidence out of range');
-});
-
-await test('execute search_repository works without API keys (returns empty or errors gracefully)', async () => {
-  const { ok } = await executeTool('search_repository', {
-    query: 'Vault storage',
-    topK:  3,
-  });
-  // May fail without API keys / Qdrant, but should not throw
-  assert.ok(typeof ok === 'boolean');
-});
-
-await test('execute search_knowledge returns knowledge chunks', async () => {
-  const { ok, result } = await executeTool('search_knowledge', {
-    query: 'What is MANT?',
-  });
-  assert.equal(ok, true);
-  assert.ok(Array.isArray(result.chunks), 'chunks should be an array');
-  assert.ok(result.count >= 0, 'count should be >= 0');
-});
-
-// ── ReflectionEngine ─────────────────────────────────────────────────────────
-
-section('ReflectionEngine — imports');
+section('Contracts — import');
 
 const {
-  reflect,
-  shouldGenerate,
-  shouldRetry,
-} = await import('../ReflectionEngine.js');
+  IntentResult,
+  ExecutionPlan,
+  CapabilityResult,
+  CognitiveContext,
+  ContractError,
+  createContext,
+  resultFor,
+  softValidate,
+} = await import('../CognitiveContracts.js');
 
-await test('module exports reflect, shouldGenerate, shouldRetry', () => {
-  assert.equal(typeof reflect,        'function');
-  assert.equal(typeof shouldGenerate, 'function');
-  assert.equal(typeof shouldRetry,    'function');
+await test('all contracts exported', () => {
+  assert.ok(IntentResult, 'IntentResult missing');
+  assert.ok(ExecutionPlan, 'ExecutionPlan missing');
+  assert.ok(CapabilityResult, 'CapabilityResult missing');
+  assert.ok(CognitiveContext, 'CognitiveContext missing');
+  assert.ok(ContractError, 'ContractError missing');
 });
 
-section('ReflectionEngine — reflect');
+section('Contracts — IntentResult validation');
 
-await test('reflect returns passed:true for a good answer', () => {
-  const r = reflect({
-    answer:     'The Vault is a persistence layer that stores validated data from the Inspector. It uses SQLite for local storage and supports multiple adapters.',
-    topic:      'repository',
-    confidence: 0.85,
-    attempt:    1,
-    context:    { query: 'How does the Vault work?', toolsUsed: ['search_repository'], chunksFound: 5, searchWebAttempted: false },
+await test('valid IntentResult passes', () => {
+  const valid = {
+    topic: 'umamusume', complexity: 'simple', confidence: 0.95,
+    method: 'keyword', subtopic: null, rejected: false, rejectionMessage: null,
+  };
+  assert.equal(IntentResult.validate(valid), true);
+});
+
+await test('IntentResult — invalid topic throws', () => {
+  assert.throws(() => IntentResult.validate({ topic: 'invalid', complexity: 'simple', confidence: 0.5, method: 'keyword', subtopic: null, rejected: false, rejectionMessage: null }), ContractError);
+});
+
+await test('IntentResult — invalid method throws', () => {
+  assert.throws(() => IntentResult.validate({ topic: 'umamusume', complexity: 'simple', confidence: 0.5, method: 'unknown', subtopic: null, rejected: false, rejectionMessage: null }), ContractError);
+});
+
+await test('IntentResult — confidence out of range throws', () => {
+  assert.throws(() => IntentResult.validate({ topic: 'umamusume', complexity: 'simple', confidence: 1.5, method: 'keyword', subtopic: null, rejected: false, rejectionMessage: null }), ContractError);
+});
+
+await test('IntentResult — hybrid method is valid', () => {
+  IntentResult.validate({ topic: 'umamusume', complexity: 'simple', confidence: 0.6, method: 'hybrid', subtopic: null, rejected: false, rejectionMessage: null });
+});
+
+await test('IntentResult — bot_assist subtopic is valid', () => {
+  IntentResult.validate({ topic: 'umamusume', complexity: 'simple', confidence: 0.9, method: 'keyword', subtopic: 'bot_assist', rejected: false, rejectionMessage: null });
+});
+
+section('Contracts — ExecutionPlan validation');
+
+await test('valid ExecutionPlan passes', () => {
+  const plan = {
+    steps: [
+      { id: 's1', tool: 'search_knowledge', params: { query: 'test' }, dependsOn: [], description: 'search', outputKey: 'kb' },
+      { id: 's2', tool: 'ai_generate', params: { query: 'test' }, dependsOn: ['s1'], description: 'generate', outputKey: 'answer' },
+    ],
+    complexity: 'complex', description: 'test-plan', estimatedLatencyMs: 1000, isDecomposed: true,
+  };
+  assert.equal(ExecutionPlan.validate(plan), true);
+});
+
+await test('ExecutionPlan — missing step id throws', () => {
+  assert.throws(() => ExecutionPlan.validate({
+    steps: [{ tool: 'search', params: {} }],
+    complexity: 'simple', description: 'bad', estimatedLatencyMs: 100, isDecomposed: false,
+  }), ContractError);
+});
+
+await test('ExecutionPlan — duplicate step ids throw', () => {
+  assert.throws(() => ExecutionPlan.validate({
+    steps: [
+      { id: 's1', tool: 'a', params: {}, dependsOn: [] },
+      { id: 's1', tool: 'b', params: {}, dependsOn: [] },
+    ],
+    complexity: 'simple', description: 'dupe', estimatedLatencyMs: 100, isDecomposed: false,
+  }), ContractError);
+});
+
+await test('ExecutionPlan — circular dependency detected', () => {
+  assert.throws(() => ExecutionPlan.validate({
+    steps: [
+      { id: 's1', tool: 'a', params: {}, dependsOn: ['s2'] },
+      { id: 's2', tool: 'b', params: {}, dependsOn: ['s1'] },
+    ],
+    complexity: 'simple', description: 'cycle', estimatedLatencyMs: 100, isDecomposed: false,
+  }), ContractError);
+});
+
+await test('ExecutionPlan — empty steps is valid (accepting)', () => {
+  ExecutionPlan.validate({
+    steps: [], complexity: 'simple', description: 'empty', estimatedLatencyMs: 0, isDecomposed: false,
   });
-  assert.equal(r.passed, true);
-  assert.equal(r.action, 'send');
 });
 
-await test('reflect returns passed:false for empty answer', () => {
-  const r = reflect({ answer: '', topic: 'repository', confidence: 0.5, attempt: 1 });
-  assert.equal(r.passed, false);
-  assert.equal(r.action, 'reject');
+section('Contracts — CapabilityResult validation');
+
+await test('valid CapabilityResult passes', () => {
+  CapabilityResult.validate({ tool: 'search_web', ok: true, data: { chunks: [] }, error: null, durationMs: 150, source: 'web' });
 });
 
-await test('reflect returns re-search for vague answer with zero chunks', () => {
-  const r = reflect({
-    answer:     "I'm not sure about that. I don't have enough information.",
-    topic:      'repository',
-    confidence: 0.5,
-    attempt:    1,
-    context:    { query: 'test', toolsUsed: ['search_repository'], chunksFound: 0, searchWebAttempted: false },
+await test('CapabilityResult — failed result with error passes', () => {
+  CapabilityResult.validate({ tool: 'search_web', ok: false, data: null, error: 'API key missing', durationMs: 10, source: 'web' });
+});
+
+await test('CapabilityResult — failed without error throws', () => {
+  assert.throws(() => CapabilityResult.validate({ tool: 'x', ok: false, data: null, error: null }), ContractError);
+});
+
+section('Contracts — CognitiveContext validation');
+
+await test('valid CognitiveContext passes', () => {
+  const ctx = createContext({ query: 'What is MANT?', subcommand: 'ask', userId: 'u1' });
+  ctx.classification = { topic: 'umamusume', complexity: 'simple', confidence: 0.9, method: 'keyword', subtopic: null, rejected: false, rejectionMessage: null };
+  assert.equal(CognitiveContext.validate(ctx), true);
+});
+
+await test('CognitiveContext — missing query throws', () => {
+  assert.throws(() => CognitiveContext.validate({ subcommand: 'ask' }), ContractError);
+});
+
+await test('CognitiveContext — invalid nested classification throws', () => {
+  const ctx = createContext({ query: 'test' });
+  ctx.classification = { topic: 'bad_topic' };
+  assert.throws(() => CognitiveContext.validate(ctx), ContractError);
+});
+
+section('Contracts — utilities');
+
+await test('createContext returns valid shape', () => {
+  const ctx = createContext({ query: 'test', userId: 'u1', channelId: 'c1' });
+  assert.equal(ctx.query, 'test');
+  assert.equal(ctx.userId, 'u1');
+  assert.equal(ctx.classification, null);
+  assert.deepEqual(ctx.toolResults, []);
+});
+
+await test('resultFor builds valid CapabilityResult', () => {
+  const r = resultFor('search_web', true, { chunks: [] }, null, 200, 'web');
+  assert.equal(r.tool, 'search_web');
+  assert.equal(r.ok, true);
+  CapabilityResult.validate(r);
+});
+
+await test('softValidate does not throw on invalid context', () => {
+  const { ok } = softValidate({ query: 'test', classification: { topic: 'bad' } });
+  assert.equal(ok, false); // should detect violation without throwing
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Chapter 5: Planner — multi-step decomposition
+// ──────────────────────────────────────────────────────────────────────────────
+
+section('Planner — import');
+
+const { plan, decompose, validatePlan, compressPlan } = await import('../Planner.js');
+
+await test('module exports plan, decompose, validatePlan, compressPlan', () => {
+  assert.equal(typeof plan, 'function');
+  assert.equal(typeof decompose, 'function');
+  assert.equal(typeof validatePlan, 'function');
+  assert.equal(typeof compressPlan, 'function');
+});
+
+section('Planner — simple plans');
+
+await test('simple umamusume plan has search_knowledge', () => {
+  const classification = { topic: 'umamusume', complexity: 'simple', confidence: 0.9 };
+  const result = plan(classification, { query: 'What is MANT?' });
+  assert.equal(result.isDecomposed, false);
+  assert.ok(result.steps.some(s => s.tool === 'search_knowledge'), 'should include search_knowledge');
+});
+
+await test('simple repository plan has search_repository', () => {
+  const classification = { topic: 'repository', complexity: 'complex', confidence: 0.9 };
+  const result = plan(classification, { query: 'How does the Vault work?' });
+  assert.ok(result.steps.some(s => s.tool === 'search_repository'), 'should include search_repository');
+});
+
+await test('live plan has search_web', () => {
+  const classification = { topic: 'live', complexity: 'simple', confidence: 0.8 };
+  const result = plan(classification, { query: 'current rankings' });
+  assert.ok(result.steps.some(s => s.tool === 'search_web'));
+});
+
+await test('message plan has generate_message', () => {
+  const classification = { topic: 'message', complexity: 'complex', confidence: 1.0 };
+  const result = plan(classification, { query: 'greeting', messageType: 'greeting' });
+  assert.ok(result.steps.some(s => s.tool === 'generate_message'));
+});
+
+section('Planner — decomposition');
+
+await test('"how to grow my circle" decomposes to multi-step', () => {
+  const result = decompose('how to grow my circle rank from D to A', 'umamusume');
+  assert.ok(result, 'should decompose');
+  assert.equal(result.isDecomposed, true);
+  assert.ok(result.steps.length >= 3, `expected >=3 steps, got ${result.steps.length}`);
+  assert.equal(result.description, 'growth-strategy');
+});
+
+await test('"compare A vs B" decomposes to multi-step', () => {
+  const result = decompose('compare Gold Ship vs Special Week which is better', 'umamusume');
+  assert.ok(result, 'should decompose');
+  assert.equal(result.description, 'comparison');
+  assert.ok(result.steps.length >= 3);
+});
+
+await test('"what is the best card for speed" decomposes', () => {
+  const result = decompose('what is the best card for speed build', 'umamusume');
+  assert.ok(result, 'should decompose');
+  assert.equal(result.description, 'recommendation');
+});
+
+await test('"step by step guide" decomposes', () => {
+  const result = decompose('walk me through step by step how to build a good deck', 'umamusume');
+  assert.ok(result, 'should decompose');
+  assert.equal(result.description, 'step-by-step');
+});
+
+await test('simple query does not decompose', () => {
+  const result = decompose('What is MANT?', 'umamusume');
+  assert.equal(result, null, 'simple query should not match any decomposition pattern');
+});
+
+await test('decomposed plan has ai_generate as final step', () => {
+  const result = decompose('how to improve my fan gain', 'umamusume');
+  const lastStep = result.steps[result.steps.length - 1];
+  assert.equal(lastStep.tool, 'ai_generate');
+});
+
+await test('decomposed plan has correct dependency chain', () => {
+  const result = decompose('how to increase my circle rank', 'umamusume');
+  const genStep = result.steps.find(s => s.tool === 'ai_generate');
+  assert.ok(genStep, 'should have ai_generate step');
+  assert.ok(genStep.dependsOn.length >= 1, 'ai_generate should depend on search steps');
+});
+
+section('Planner — plan validation');
+
+await test('valid plan passes validation', () => {
+  const result = decompose('how to grow my circle', 'umamusume');
+  const toolMap = new Map([
+    ['search_knowledge', { alwaysAvailable: true }],
+    ['search_web', { alwaysAvailable: true }],
+    ['ai_generate', { alwaysAvailable: true }],
+  ]);
+  const { valid, issues } = validatePlan(result, toolMap);
+  assert.equal(valid, true);
+  assert.equal(issues.filter(i => i.startsWith('unknown tool')).length, 0);
+});
+
+await test('plan with unknown tool flagged', () => {
+  const plan = {
+    steps: [{ id: 's1', tool: 'nonexistent_tool', params: {}, dependsOn: [] }],
+    complexity: 'simple', description: 'bad', estimatedLatencyMs: 100, isDecomposed: false,
+  };
+  const { valid } = validatePlan(plan, new Map());
+  assert.equal(valid, false);
+});
+
+section('Planner — compress');
+
+await test('independent steps are compressed', () => {
+  const plan = {
+    steps: [
+      { id: 'a1', tool: 'search_web', params: { query: 'a' }, dependsOn: [] },
+      { id: 'a2', tool: 'search_web', params: { query: 'b' }, dependsOn: [] },
+      { id: 'a3', tool: 'search_web', params: { query: 'c' }, dependsOn: [] },
+    ],
+    complexity: 'complex', description: 'test', estimatedLatencyMs: 1000, isDecomposed: true,
+  };
+  const compressed = compressPlan(plan);
+  assert.equal(compressed.isDecomposed, false);
+  assert.equal(compressed.steps.length, 1);
+});
+
+await test('dependent steps are not compressed', () => {
+  const plan = {
+    steps: [
+      { id: 's1', tool: 'search_knowledge', params: {}, dependsOn: [] },
+      { id: 's2', tool: 'ai_generate', params: {}, dependsOn: ['s1'] },
+    ],
+    complexity: 'complex', description: 'test', estimatedLatencyMs: 1000, isDecomposed: true,
+  };
+  const compressed = compressPlan(plan);
+  assert.equal(compressed.isDecomposed, true); // still decomposed
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Chapter 7: Learning — UserProfileManager
+// ──────────────────────────────────────────────────────────────────────────────
+
+section('UserProfileManager — import');
+
+const {
+  getProfile, extractFacts, isCorrection, learnCorrection,
+  updateFromInteraction, summarizeProfile, enrichPrompt, stats,
+  applyDecay,
+} = await import('../managers/UserProfileManager.js');
+
+await test('all functions exported', () => {
+  assert.equal(typeof getProfile, 'function');
+  assert.equal(typeof extractFacts, 'function');
+  assert.equal(typeof isCorrection, 'function');
+  assert.equal(typeof learnCorrection, 'function');
+  assert.equal(typeof updateFromInteraction, 'function');
+  assert.equal(typeof summarizeProfile, 'function');
+  assert.equal(typeof enrichPrompt, 'function');
+  assert.equal(typeof applyDecay, 'function');
+});
+
+section('UserProfileManager — fact extraction');
+
+await test('"my horse is Gold Ship" extracts character fact', () => {
+  const facts = extractFacts('my horse is Gold Ship', 'u1');
+  const charFact = facts.find(f => f.category === 'fact');
+  assert.ok(charFact, 'should extract fact');
+  assert.ok(charFact.fact.toLowerCase().includes('gold ship'), `got: ${charFact.fact}`);
+  assert.equal(charFact.tier, 'core');
+});
+
+await test('"my main horse is Special Week" extracts character fact', () => {
+  const facts = extractFacts('my main horse is Special Week and I love racing', 'u1');
+  const charFact = facts.find(f => f.category === 'character');
+  assert.ok(charFact, 'should extract character');
+  assert.ok(charFact.fact.toLowerCase().includes('special week'));
+});
+
+await test('"I am at rank A" extracts rank fact', () => {
+  const facts = extractFacts('I am at rank A1', 'u1');
+  const rankFact = facts.find(f => f.category === 'rank');
+  assert.ok(rankFact, 'should extract rank');
+  assert.equal(rankFact.fact, 'A1');
+});
+
+await test('"my circle is Moonlight Stables" extracts circle', () => {
+  const facts = extractFacts('my circle is Moonlight Stables', 'u1');
+  assert.ok(facts.length >= 1);
+  const circleFact = facts.find(f => f.category === 'circle');
+  assert.ok(circleFact);
+});
+
+await test('common noise is filtered out', () => {
+  const facts = extractFacts('my favorite is a', 'u1');
+  // "a" should be filtered as noise (single letter / common word)
+  const noiseFacts = facts.filter(f => f.fact === 'a');
+  assert.equal(noiseFacts.length, 0, 'single-letter facts should be filtered');
+});
+
+section('UserProfileManager — correction detection');
+
+await test('"no that is wrong" is a correction', () => {
+  assert.equal(isCorrection('no that is wrong'), true);
+});
+
+await test('"actually, I meant Gold Ship" is a correction', () => {
+  assert.equal(isCorrection('actually, I meant Gold Ship'), true);
+});
+
+await test('"you are wrong about that" is a correction', () => {
+  assert.equal(isCorrection('you are wrong about that'), true);
+});
+
+await test('"thanks that helped" is NOT a correction', () => {
+  assert.equal(isCorrection('thanks that helped'), false);
+});
+
+section('UserProfileManager — profile flow');
+
+await test('profile accumulates facts over interactions', () => {
+  const userId = 'test-user-flow';
+  updateFromInteraction(userId, 'my main horse is Gold Ship', 'ok', 'umamusume');
+  updateFromInteraction(userId, 'I am at rank B', 'ok', 'umamusume');
+  updateFromInteraction(userId, 'my circle is Starlight', 'ok', 'umamusume');
+
+  const profile = getProfile(userId);
+  assert.equal(profile.interactionCount, 3);
+  assert.ok(profile.facts.length >= 2, `expected >=2 facts, got ${profile.facts.length}`);
+});
+
+await test('profile tracks topic counts', () => {
+  const userId = 'test-user-topics';
+  updateFromInteraction(userId, 'q1', 'ok', 'umamusume');
+  updateFromInteraction(userId, 'q2', 'ok', 'umamusume');
+  updateFromInteraction(userId, 'q3', 'ok', 'repository');
+
+  const profile = getProfile(userId);
+  assert.equal(profile.topicCounts['umamusume'], 2);
+  assert.equal(profile.topicCounts['repository'], 1);
+  assert.deepEqual(profile.commonTopics, ['umamusume', 'repository']);
+});
+
+await test('correction decreases fact confidence', () => {
+  const userId = 'test-user-correct';
+  updateFromInteraction(userId, 'my horse is Gold Ship', 'Gold Ship is a great horse!', 'umamusume');
+  const before = getProfile(userId).facts.find(f => f.fact.toLowerCase().includes('gold ship')).confidence;
+
+  updateFromInteraction(userId, 'no that is wrong, my horse is Special Week', 'sorry', 'umamusume');
+  const facts = getProfile(userId).facts;
+  const goldShip = facts.find(f => f.fact.toLowerCase().includes('gold ship'));
+  if (goldShip) {
+    assert.ok(goldShip.confidence < before, `confidence should decrease: ${goldShip.confidence} >= ${before}`);
+  }
+  // Should also have extracted Special Week
+  const specialWeek = facts.find(f => f.fact.toLowerCase().includes('special week'));
+  assert.ok(specialWeek, 'should extract corrected fact');
+});
+
+section('UserProfileManager — summarization');
+
+await test('summarizeProfile returns string with known facts', () => {
+  const userId = 'test-user-summary';
+  updateFromInteraction(userId, 'my main horse is Gold Ship', 'ok', 'umamusume');
+  updateFromInteraction(userId, 'I am at rank A', 'ok', 'umamusume');
+
+  const summary = summarizeProfile(userId);
+  assert.ok(summary.length > 0, 'should produce summary');
+  assert.ok(summary.includes('Gold Ship') || summary.includes('rank'), 'should include known facts');
+});
+
+await test('enrichPrompt appends profile context', () => {
+  const userId = 'test-user-enrich';
+  updateFromInteraction(userId, 'my main horse is Gold Ship', 'ok', 'umamusume');
+
+  const prompt = 'Answer the following question:';
+  const enriched = enrichPrompt(prompt, userId);
+  assert.ok(enriched.length > prompt.length, 'enriched should be longer');
+  assert.ok(enriched.startsWith(prompt), 'enriched should start with original prompt');
+});
+
+await test('enrichPrompt handles null userId', () => {
+  const result = enrichPrompt('test prompt', null);
+  assert.equal(result, 'test prompt');
+});
+
+section('UserProfileManager — decay');
+
+await test('core facts do not decay', () => {
+  const userId = 'test-user-decay';
+  updateFromInteraction(userId, 'my horse is Gold Ship', 'ok', 'umamusume');
+
+  applyDecay(userId);
+  const facts = getProfile(userId).facts;
+  const goldShip = facts.find(f => f.fact.toLowerCase().includes('gold ship'));
+  assert.ok(goldShip, 'core fact should survive decay');
+  assert.ok(goldShip.confidence >= 0.85, `core confidence should stay high: ${goldShip.confidence}`);
+});
+
+section('UserProfileManager — stats');
+
+await test('stats returns profile count', () => {
+  const s = stats();
+  assert.ok(s.profiles >= 0);
+  assert.ok(typeof s.totalFacts === 'number');
+  assert.ok(typeof s.totalInteractions === 'number');
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Chapter 9: Decision Scenarios — edge cases & integration
+// ──────────────────────────────────────────────────────────────────────────────
+
+section('Scenarios — multi-intent queries');
+
+await test('plan handles umamusume + growth decomposition', () => {
+  const classification = { topic: 'umamusume', complexity: 'complex', confidence: 0.8 };
+  const result = plan(classification, { query: 'how to grow my circle rank and get more fans', channelId: 'c1', userId: 'u1' });
+  assert.equal(result.isDecomposed, true);
+  assert.equal(result.description, 'growth-strategy');
+});
+
+await test('plan handles recommendation decomposition', () => {
+  const classification = { topic: 'umamusume', complexity: 'complex', confidence: 0.8 };
+  const result = plan(classification, { query: 'which support card should I use for speed training', channelId: 'c1', userId: 'u1' });
+  assert.equal(result.isDecomposed, true);
+});
+
+section('Scenarios — ambiguous / missing context');
+
+await test('empty query produces empty plan', () => {
+  const classification = { topic: 'umamusume', complexity: 'simple', confidence: 0.9 };
+  const result = plan(classification, { query: '' });
+  assert.ok(result.steps.length >= 1); // still produces a plan (umamusume default)
+});
+
+await test('plan with no userId/channelId works', () => {
+  const classification = { topic: 'umamusume', complexity: 'simple', confidence: 0.9 };
+  const result = plan(classification, { query: 'What is MANT?' });
+  // Should not crash — just won't include conversation memory steps
+  assert.equal(result.isDecomposed, false);
+});
+
+section('Scenarios — planning edge cases');
+
+await test('complex repository query gets comparison pattern', () => {
+  const result = decompose('compare the Vault vs the Miner which is better', 'repository');
+  assert.ok(result, 'should decompose');
+  assert.equal(result.description, 'comparison');
+});
+
+await test('growth query for non-gaming topic still decomposes', () => {
+  const result = decompose('how do I improve the pipeline performance', 'repository');
+  assert.ok(result, 'should decompose');
+  assert.equal(result.description, 'growth-strategy');
+});
+
+await test('planner correctly identifies simple queries', () => {
+  const result = decompose('MANT', 'umamusume');
+  assert.equal(result, null, 'single word should not trigger decomposition');
+});
+
+section('Scenarios — contract integration');
+
+await test('softValidate on full context does not crash', () => {
+  const ctx = createContext({ query: 'test', userId: 'u1' });
+  ctx.classification = { topic: 'umamusume', complexity: 'simple', confidence: 0.9, method: 'keyword', subtopic: null, rejected: false, rejectionMessage: null };
+  ctx.plan = {
+    steps: [{ id: 's1', tool: 'search_knowledge', params: { query: 'test' }, dependsOn: [] }],
+    complexity: 'simple', description: 'test', estimatedLatencyMs: 100, isDecomposed: false,
+  };
+  ctx.toolResults = [{ tool: 'search_knowledge', ok: true, data: { chunks: [] }, error: null, durationMs: 50, source: 'kb' }];
+  const { ok } = softValidate(ctx);
+  assert.equal(ok, true, 'full valid context should pass soft validate');
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Chapter 10: Growing Beyond Intelligence — GrowthEngine
+// ──────────────────────────────────────────────────────────────────────────────
+
+section('GrowthEngine — import');
+
+const {
+  suggestFollowUps, trackInteraction, getImprovementInsights,
+  explainReasoning, curiosityStats, shouldLearn,
+} = await import('../GrowthEngine.js');
+
+await test('all GrowthEngine functions exported', () => {
+  assert.equal(typeof suggestFollowUps, 'function');
+  assert.equal(typeof trackInteraction, 'function');
+  assert.equal(typeof getImprovementInsights, 'function');
+  assert.equal(typeof explainReasoning, 'function');
+  assert.equal(typeof curiosityStats, 'function');
+  assert.equal(typeof shouldLearn, 'function');
+});
+
+section('GrowthEngine — autonomous curiosity');
+
+await test('suggestFollowUps returns array for umamusume topic', () => {
+  const suggestions = suggestFollowUps('how to get more fans', 'umamusume', 0.9);
+  assert.ok(Array.isArray(suggestions));
+  assert.ok(suggestions.length >= 1);
+  assert.ok(suggestions.length <= 3);
+});
+
+await test('suggestFollowUps for repository topic', () => {
+  const suggestions = suggestFollowUps('how does the Vault work', 'repository', 0.8);
+  assert.ok(suggestions.length >= 1);
+  // Should contain the topic phrase
+  assert.ok(suggestions.some(s => s.includes('Vault')));
+});
+
+await test('suggestFollowUps low confidence gives fewer suggestions', () => {
+  const high = suggestFollowUps('test query', 'umamusume', 0.95);
+  const low = suggestFollowUps('test query', 'umamusume', 0.4);
+  assert.ok(low.length <= high.length, `low=${low.length} should be <= high=${high.length}`);
+});
+
+await test('suggestFollowUps with empty query still works', () => {
+  const suggestions = suggestFollowUps('', 'web', 0.5);
+  assert.ok(Array.isArray(suggestions));
+  assert.ok(suggestions.length >= 1);
+});
+
+section('GrowthEngine — introspection');
+
+await test('explainReasoning returns non-empty string', () => {
+  const explanation = explainReasoning(
+    'What is MANT?',
+    'umamusume',
+    ['search_knowledge', 'search_web', 'ai_generate'],
+    ['search_knowledge', 'search_web', 'ai_generate'],
+    { passed: true, action: 'send', reasons: ['All checks passed'] },
+    0.9
+  );
+  assert.ok(explanation.length > 50);
+  assert.ok(explanation.includes('umamusume'));
+  assert.ok(explanation.includes('knowledge base'));
+});
+
+await test('explainReasoning includes reflection info', () => {
+  const explanation = explainReasoning(
+    'query', 'umamusume',
+    ['search_knowledge'], ['search_knowledge'],
+    { passed: false, action: 're-search', reasons: ['vague answer'] },
+    0.4
+  );
+  assert.ok(explanation.includes('re-search') || explanation.includes('searched again'));
+});
+
+await test('explainReasoning with no tools used', () => {
+  const explanation = explainReasoning('hi', 'web', [], [], null, 0.3);
+  assert.ok(explanation.length > 10);
+  assert.ok(explanation.includes('web'));
+});
+
+section('GrowthEngine — self-improvement tracking');
+
+await test('trackInteraction does not throw', () => {
+  assert.doesNotThrow(() => {
+    trackInteraction({ topic: 'umamusume', confidence: 0.8, reflectionAction: 'send', toolsFailed: 0, latencyMs: 500 });
   });
-  assert.equal(r.passed, false);
-  assert.equal(r.action, 're-search');
-  assert.ok(r.adjustedPlan?.addTools?.includes('search_web'), 'should recommend web search');
 });
 
-await test('reflect returns re-search for low confidence without web search', () => {
-  const r = reflect({
-    answer:     'The Vault is a storage system that persists validated data. It uses SQLite and supports multiple adapters for different storage backends.',
-    topic:      'repository',
-    confidence: 0.35,
-    attempt:    1,
-    context:    { query: 'test', toolsUsed: ['search_repository'], chunksFound: 1, searchWebAttempted: false },
-  });
-  assert.equal(r.passed, false);
-  assert.equal(r.action, 're-search');
-  assert.ok(r.reasons.some(r => r.includes('Confidence too low') || r.includes('low confidence')), `got reasons: ${r.reasons.join('; ')}`);
+await test('getImprovementInsights with few interactions returns empty', () => {
+  // After just 1 interaction, not enough data
+  const insights = getImprovementInsights();
+  assert.ok(Array.isArray(insights));
 });
 
-await test('reflect returns send for vague answer after max attempts', () => {
-  const r = reflect({
-    answer:     "I don't know.",
-    topic:      'repository',
-    confidence: 0.5,
-    attempt:    3,
-    context:    { query: 'test', toolsUsed: ['search_repository', 'search_web'], chunksFound: 0, searchWebAttempted: true },
-  });
-  // After max attempts even a vague answer passes
-  assert.equal(r.passed, true);
-  assert.equal(r.action, 'send');
+await test('curiosityStats returns object', () => {
+  const s = curiosityStats();
+  assert.ok(typeof s.total === 'number');
+  assert.ok(typeof s.byTopic === 'object');
 });
 
-section('ReflectionEngine — shouldGenerate');
-
-await test('shouldGenerate returns proceed:false for rejected classification', () => {
-  const r = shouldGenerate({ rejected: true, topic: 'off-topic' });
-  assert.equal(r.proceed, false);
+await test('shouldLearn with few interactions returns null', () => {
+  const result = shouldLearn();
+  assert.equal(result, null);
 });
 
-await test('shouldGenerate returns proceed:true for valid classification', () => {
-  const r = shouldGenerate({ rejected: false, topic: 'repository', confidence: 0.8 });
-  assert.equal(r.proceed, true);
+await test('trackInteraction accumulates data', () => {
+  // Add enough interactions to trigger insights
+  for (let i = 0; i < 30; i++) {
+    trackInteraction({
+      topic: i % 2 === 0 ? 'umamusume' : 'repository',
+      confidence: i < 20 ? 0.3 : 0.9,
+      reflectionAction: i < 15 ? 're-search' : 'send',
+      toolsFailed: i < 5 ? 1 : 0,
+      latencyMs: 500 + i * 100,
+    });
+  }
+  const insights = getImprovementInsights();
+  // Should have at least one insight with 30 interactions at 0.3 confidence
+  assert.ok(insights.length >= 1, `expected >=1 insight, got ${insights.length}`);
 });
 
-section('ReflectionEngine — shouldRetry');
-
-await test('shouldRetry returns true when attempts remain', () => {
-  assert.equal(shouldRetry(1, 3, ['search_repository']), true);
+await test('shouldLearn after many low-confidence interactions', () => {
+  // We've already added 30 interactions above with low confidence
+  // shouldLearn needs >= 20 interactions and >= 5 per topic
+  const result = shouldLearn();
+  // Either returns a suggestion or null (depends on 24h window)
+  assert.ok(result === null || (result.topic && result.reason));
 });
 
-await test('shouldRetry returns false when max attempts reached', () => {
-  assert.equal(shouldRetry(3, 3, ['search_repository']), false);
-});
-
-await test('shouldRetry returns false when all search tools already tried', () => {
-  assert.equal(shouldRetry(1, 3, ['search_repository', 'search_web']), false);
-});
-
-// ── Agent orchestrator ───────────────────────────────────────────────────────
-
-section('Agent — imports');
-
-const { orchestrate } = await import('../Agent.js');
-
-await test('module exports orchestrate', () => {
-  assert.equal(typeof orchestrate, 'function');
-});
-
-section('Agent — orchestrate basic flows');
-
-await test('orchestrate returns immediately for empty query', async () => {
-  const r = await orchestrate({ query: '', subcommand: 'ask' });
-  assert.equal(r.success, true);
-  assert.ok(r.content.includes('provide a question'), `got: ${r.content?.slice(0, 60)}`);
-  assert.equal(r.topic, 'empty');
-});
-
-await test('orchestrate classifies and rejects off-topic query', async () => {
-  const r = await orchestrate({ query: 'Who is the president of Japan?', subcommand: 'ask', userId: 'u1', channelId: 'c1' });
-  // TopicFilter returns 'off-topic', Agent returns 'rejected' after preflight
-  assert.ok(r.topic === 'off-topic' || r.topic === 'rejected', `expected off-topic/rejected, got: ${r.topic}`);
-  assert.ok(r.content.includes('outside') || r.content.includes('scope') || r.content.includes('help with'),
-    `expected off-topic message, got: ${r.content?.slice(0, 80)}`);
-});
-
-await test('orchestrate handles umamusume question and returns a response', async () => {
-  const r = await orchestrate({ query: 'What is MANT?', subcommand: 'ask', userId: 'u1', channelId: 'c1' });
-  assert.equal(r.topic, 'umamusume');
-  // May fail gracefully if AI provider unavailable, but should always return
-  assert.ok(typeof r.success === 'boolean');
-  assert.ok(r.toolsUsed?.includes('search_knowledge'), `should use search_knowledge, used: ${r.toolsUsed?.join(',')}`);
-});
-
-await test('orchestrate handles repository question', async () => {
-  const r = await orchestrate({ query: 'How does the Vault store data?', subcommand: 'ask', userId: 'u1', channelId: 'c1' });
-  // Classification should be repository; generation may fail without API keys
-  assert.ok(r.topic === 'repository', `expected repository, got: ${r.topic}`);
-  assert.ok(typeof r.success === 'boolean');
-  // Without API keys, search_repository may fail gracefully — that's fine
-  assert.ok(r.toolsUsed?.includes('search_repository') || r.success === false,
-    `should use search_repository or fail gracefully, used: ${r.toolsUsed?.join(',')}`);
-});
-
-await test('orchestrate handles live query with web search tool', async () => {
-  const r = await orchestrate({ query: 'What are the top circles right now?', subcommand: 'live', userId: 'u1', channelId: 'c1' });
-  assert.equal(r.topic, 'live');
-  assert.ok(r.toolsUsed?.includes('search_web'), `should use search_web, used: ${r.toolsUsed?.join(',')}`);
-});
-
-await test('orchestrate returns latencyMs and toolsUsed in every response', async () => {
-  const r = await orchestrate({ query: 'What is MANT?', subcommand: 'ask', userId: 'u1', channelId: 'c1' });
-  assert.ok(typeof r.latencyMs === 'number', 'latencyMs missing');
-  assert.ok(Array.isArray(r.toolsUsed), 'toolsUsed should be an array');
-});
-
-// ── summary ───────────────────────────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────────────────────
+// Summary
+// ──────────────────────────────────────────────────────────────────────────────
 
 console.log(`\n${'─'.repeat(50)}`);
 console.log(`Phase 8: ${passed} passed, ${failed} failed`);

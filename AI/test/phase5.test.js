@@ -31,10 +31,11 @@ function section(title) {
 
 section('TopicFilter — import');
 
-const { classify, offTopicMessage } = await import('../TopicFilter.js');
+const { classify, classifyAsync, offTopicMessage } = await import('../TopicFilter.js');
 
-await test('module exports classify and offTopicMessage', () => {
+await test('module exports classify, classifyAsync, and offTopicMessage', () => {
   assert.equal(typeof classify,        'function');
+  assert.equal(typeof classifyAsync,   'function');
   assert.equal(typeof offTopicMessage, 'function');
 });
 
@@ -239,6 +240,7 @@ await test('result has topic, complexity, confidence, method, rejected, rejectio
   assert.ok('method'           in r, 'method missing');
   assert.ok('rejected'         in r, 'rejected missing');
   assert.ok('rejectionMessage' in r, 'rejectionMessage missing');
+  assert.ok('subtopic'         in r, 'subtopic missing');
 });
 
 await test('confidence is a number in [0, 1]', () => {
@@ -249,7 +251,7 @@ await test('confidence is a number in [0, 1]', () => {
 
 await test('method is one of the documented values', () => {
   const r = classify('What is MANT?');
-  const validMethods = ['keyword', 'semantic', 'command-override', 'off-topic-indicator'];
+  const validMethods = ['keyword', 'semantic', 'hybrid', 'command-override', 'off-topic-indicator'];
   assert.ok(validMethods.includes(r.method), `unexpected method: ${r.method}`);
 });
 
@@ -373,6 +375,120 @@ await test('any returned chunks conform to the shared chunk schema', async () =>
     assert.ok(typeof c.score    === 'number', 'score should be number');
     assert.equal(c.source, 'web',             'source should be "web"');
   }
+});
+
+// ── TopicFilter v2 — synonym expansion ────────────────────────────────────────
+
+section('TopicFilter — synonym expansion (user phrasing)');
+
+await test('"how do I get more followers" → umamusume (synonym: followers)', () => {
+  const r = classify('how do I get more followers for my circle');
+  assert.equal(r.topic, 'umamusume');
+  assert.equal(r.rejected, false);
+});
+
+await test('"gaining fans quickly" → umamusume (synonym: gaining fans)', () => {
+  const r = classify('what is the best way of gaining fans quickly in uma musume');
+  assert.equal(r.topic, 'umamusume');
+});
+
+await test('"how to train my horse girl" → umamusume (synonym: train my)', () => {
+  const r = classify('how to train my horse girl for races');
+  assert.equal(r.topic, 'umamusume');
+});
+
+await test('"best support card for inheritance" → umamusume (synonym: support card + inherit)', () => {
+  const r = classify('what is the best support card for inheritance factor');
+  assert.equal(r.topic, 'umamusume');
+});
+
+await test('"which horse girl is best" → umamusume (synonym: which horse + best girl)', () => {
+  const r = classify('which horse girl is best for racing');
+  assert.equal(r.topic, 'umamusume');
+});
+
+await test('"my circle level" → umamusume (synonym: my circle + circle level)', () => {
+  const r = classify('how to increase my circle level');
+  assert.equal(r.topic, 'umamusume');
+});
+
+await test('"ssr card build" → umamusume (synonym: ssr card + card build)', () => {
+  const r = classify('best ssr card build for speed stat');
+  assert.equal(r.topic, 'umamusume');
+});
+
+await test('"how to earn more fans" → umamusume (synonym: earn fans)', () => {
+  const r = classify('how to earn more fans in uma musume');
+  assert.equal(r.topic, 'umamusume');
+});
+
+await test('"training guide for beginners" → umamusume (synonym: training guide)', () => {
+  const r = classify('is there a training guide for beginners');
+  assert.equal(r.topic, 'umamusume');
+});
+
+await test('"best card recommendation" → umamusume (synonym: best card + card recommendation)', () => {
+  const r = classify('what is the best card recommendation for speed');
+  assert.equal(r.topic, 'umamusume');
+});
+
+section('TopicFilter — bot_assist subtopic');
+
+await test('"how to link my account" → umamusume + subtopic=bot_assist', () => {
+  const r = classify('how to link my account to the bot');
+  assert.equal(r.topic, 'umamusume');
+  assert.equal(r.subtopic, 'bot_assist');
+  assert.equal(r.rejected, false);
+});
+
+await test('"what commands are available" → umamusume + subtopic=bot_assist', () => {
+  const r = classify('what commands are available');
+  assert.equal(r.subtopic, 'bot_assist');
+});
+
+await test('"help me with linking" → umamusume + subtopic=bot_assist', () => {
+  const r = classify('can you help me with linking my uma.moe account');
+  assert.equal(r.subtopic, 'bot_assist');
+});
+
+await test('"how do I check my profile" → umamusume + subtopic=bot_assist', () => {
+  const r = classify('how do I check my profile on the bot');
+  assert.equal(r.subtopic, 'bot_assist');
+});
+
+await test('normal umamusume query has no subtopic', () => {
+  const r = classify('What is MANT?');
+  assert.equal(r.subtopic, null);
+});
+
+section('TopicFilter — classifyAsync (semantic fallback)');
+
+await test('classifyAsync returns ClassificationResult for unambiguous query', async () => {
+  const r = await classifyAsync('What is MANT?');
+  assert.equal(r.topic, 'umamusume');
+  assert.equal(r.rejected, false);
+});
+
+await test('classifyAsync returns ClassificationResult with schema fields', async () => {
+  const r = await classifyAsync('What is MANT?');
+  assert.ok('topic'            in r);
+  assert.ok('complexity'       in r);
+  assert.ok('confidence'       in r);
+  assert.ok('method'           in r);
+  assert.ok('subtopic'         in r);
+  assert.ok('rejected'         in r);
+  assert.ok('rejectionMessage' in r);
+});
+
+await test('classifyAsync preserves command override', async () => {
+  const r = await classifyAsync('any query', '/ai search');
+  assert.equal(r.topic, 'repository');
+  assert.equal(r.method, 'command-override');
+});
+
+await test('classifyAsync rejects off-topic queries', async () => {
+  const r = await classifyAsync('Who is the president of the US?');
+  assert.equal(r.rejected, true);
 });
 
 // ── summary ───────────────────────────────────────────────────────────────────

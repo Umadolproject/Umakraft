@@ -6,7 +6,7 @@ import { initialize as initDocs, search, isOnTopic, stats as documentSearchStats
 import { build as buildPrompt } from './promptBuilder.js';
 import { get as cacheGet, set as cacheSet, stats as cacheStats, prewarm as cachePrewarm } from './cache.js';
 import { validate, hardRejectMessage } from './ResponseValidator.js';
-import { classify, offTopicMessage } from './TopicFilter.js';
+import { classifyAsync, offTopicMessage } from './TopicFilter.js';
 import { search as searchWeb, isConfigured as webSearchConfigured, stats as webSearchStats } from './webSearch.js';
 import config from './Configuration.js';
 import log from '../core/log.js';
@@ -92,7 +92,7 @@ function buildCacheContext(query, subcommand, retrievalMode = 'local_docs', mode
   };
 }
 
-function resolveClassification(subcommand, query) {
+async function resolveClassification(subcommand, query) {
   const overrides = {
     ask: '/ask',
     explain: '/ai explain',
@@ -104,7 +104,8 @@ function resolveClassification(subcommand, query) {
     live: '/ai live',
   };
 
-  return classify(query, overrides[subcommand] ?? '/ask');
+  // Use classifyAsync for semantic embedding fallback on ambiguous queries
+  return classifyAsync(query, overrides[subcommand] ?? '/ask');
 }
 
 function isDegraded() {
@@ -264,7 +265,7 @@ export async function answer({ query, subcommand, interaction, userId, mode = 'c
 
   await initialize();
 
-  const classification = resolveClassification(subcommand, query);
+  const classification = await resolveClassification(subcommand, query);
   log.info(`[AI/LocalService] user=${userId} cmd=${subcommand} mode=${mode} classification=${classification.topic} degraded=${isDegraded()} query="${query.slice(0, 80)}"`);
 
   if (!isOnTopic(query) || classification.rejected) {
