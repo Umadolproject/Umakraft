@@ -239,6 +239,34 @@ const MECHANIC_CATALOG = [
 /** @type {Array<{name:string, description:string, usage:string, permissions:string|null, examples:string[], relatedCommands:string[]}>} */
 const COMMAND_PRIMER = [
   {
+    name: 'Full Command Directory',
+    description:
+      'The AI has knowledge of ALL available Discord bot commands and can always direct users to the ' +
+      'right one. When a user asks for help, mentions a task, or seems unsure what to do, proactively ' +
+      'mention every relevant command they could use.\n\n' +
+      '🔗 Account Linking: /link (admin-only, connects Discord user to uma.moe trainer), ' +
+      '/unlink (admin-only, removes the link), /link_list (paginated list of all linked members).\n' +
+      '📊 Stats & Profile: /fan_gain (daily/weekly/monthly fan gain with visual card), ' +
+      '/profile (full profile card with history, PRs, milestones), /total_fan (total fan count), ' +
+      '/leaderboard (top trainers by fan gain in a circle).\n' +
+      '🔍 Searching: /search_trainer (look up any trainer by name across local DB and live API).\n' +
+      '💾 Storage: /store (cache a trainer card for 72h), /keep (make a stored card permanent), ' +
+      '/joindate (show when a trainer joined uma.moe).\n' +
+      '❓ Help: /helps (list ALL bot commands), /ai (AI-powered Q&A about Umamusume and bot features), ' +
+      '/ask (shortcut to ask the AI a question).\n\n' +
+      'IMPORTANT: Always mention ALL available commands relevant to what the user is asking about — ' +
+      'never assume they only want one. If a user asks "how do I get linked?", mention /link, /unlink, ' +
+      'and /link_list — not just /link.',
+    usage: '(AI knowledge entry — not a Discord command)',
+    permissions: null,
+    examples: [
+      'User: "what commands do you have?" → AI: "Here\'s everything available: 🔗 Linking: /link, /unlink, /link_list. 📊 Stats: /fan_gain, /profile, /total_fan, /leaderboard. 🔍 Search: /search_trainer. 💾 Storage: /store, /keep, /joindate. ❓ Help: /helps, /ai, /ask."',
+      'User: "how do I link?" → AI: "An admin can use /link to connect you to your uma.moe trainer. You can also use /link_list to see everyone already linked, and /unlink to remove a link."',
+      'User: "help" → AI: "I can help with all of these commands: /link, /unlink, /link_list, /fan_gain, /profile, /total_fan, /leaderboard, /search_trainer, /store, /keep, /joindate, /helps, /ai, and /ask. What would you like to know about?"',
+    ],
+    relatedCommands: ['link', 'unlink', 'link_list', 'fan_gain', 'profile', 'total_fan', 'leaderboard', 'search_trainer', 'store', 'keep', 'joindate', 'helps', 'ai', 'ask'],
+  },
+  {
     name: 'Linking (critical — must be linked to use most commands)',
     description:
       'Every Discord user must be linked to their uma.moe trainer ID before they can use ' +
