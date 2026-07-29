@@ -90,6 +90,7 @@ export async function generate(prompt, options = {}) {
       ];
 
   let allFailed = true;
+  let lastErr = null;
   for (const { name, fn } of chain) {
     try {
       const result = await fn();
@@ -102,6 +103,7 @@ export async function generate(prompt, options = {}) {
       });
       return result;
     } catch (err) {
+      lastErr = err;
       if (err.isRateLimit) {
         log.warn(`[AIManager] "${name}" rate-limited — next provider`);
       } else if (err.message?.includes('not set')) {
@@ -113,7 +115,7 @@ export async function generate(prompt, options = {}) {
   }
 
   // ── All providers failed — open circuit breaker ─────────────────────────
-  openCircuit(err?.message ?? 'all providers exhausted');
+  openCircuit(lastErr?.message ?? 'all providers exhausted');
 
   // ── Try stale cache as last resort ──────────────────────────────────────
   const stale = getResponse(cacheKey, `ai:${complexity}`);

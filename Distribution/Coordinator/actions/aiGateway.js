@@ -192,7 +192,8 @@ let _latestConfidence = null;
 
 function resolvePromptMode(subcommand, topic, query) {
   switch (subcommand) {
-    case 'search': return 'search';
+    case 'search':
+    case 'web-search': return 'search';
     case 'docs': return 'docs';
     case 'browse': return 'knowledge';
     default:
@@ -221,7 +222,8 @@ function isCommandHelpQuery(query) {
 function extractQuery(subcommand, options) {
   switch (subcommand) {
     case 'ask': return options.question ?? '';
-    case 'search': return options.query ?? '';
+    case 'search':
+    case 'web-search': return options.query ?? '';
     case 'docs': return options.file ?? '';
     case 'message': return options.type ?? '';
     case 'browse': return options.query ?? '';
@@ -346,7 +348,7 @@ export async function aiCommand(payload) {
   }
 
   if (config.aiProvider === 'local') {
-    const retrievalOverride = (subcommand === 'browse' || subcommand === 'search') ? 'web-only' : undefined;
+    const retrievalOverride = (subcommand === 'browse' || subcommand === 'search' || subcommand === 'web-search') ? 'web-only' : undefined;
     const localResult = await localAnswer({ query, subcommand, interaction, userId: payload.userId, retrievalOverride });
 
     // ── Feed into LearningManager ───────────────────────────────────────
@@ -462,7 +464,7 @@ export async function aiCommand(payload) {
 
   try {
     // /browse and /search force web-only search
-    if (subcommand === 'browse' || subcommand === 'search') {
+    if (subcommand === 'browse' || subcommand === 'search' || subcommand === 'web-search') {
       chunks = await Router.search(query);
     } else if (classification.topic === 'web') {
       chunks = await Router.search(query);
