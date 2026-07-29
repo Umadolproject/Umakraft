@@ -74,6 +74,8 @@ export async function generate(prompt, options = {}) {
     }
     throw new Error(`[AIManager] Circuit breaker OPEN — ${_circuitReason}`);
   }
+
+  const chain = complexity === 'complex'
     ? [
         { name: 'Mistral',       fn: () => mistralGenerate(prompt, { model: 'mistral-large-latest', ...options }) },
         { name: 'OpenAI',        fn: () => legacyGenerate(prompt, { ...options, forceProvider: 'openai' }) },
