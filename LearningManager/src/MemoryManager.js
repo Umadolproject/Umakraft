@@ -156,16 +156,22 @@ export class MemoryManager {
       }
     });
 
-    // Verify
-    const memCount  = await this.count();
-    const convCount = await this._convCount();
-    const cacheCount = await this._cacheCount();
-    console.log(
-      `[MemoryManager] Initialized (${USE_TURSO ? 'Turso' : 'sql.js'}) — ` +
-      `${memCount} memories, ${convCount} conversations, ${cacheCount} cached responses`
-    );
-
+    // Mark ready before calling count methods (they call _ensureReady internally)
     this._ready = true;
+
+    // Verify — counts are informational only; failure must not prevent startup
+    try {
+      const memCount   = await this.count();
+      const convCount  = await this._convCount();
+      const cacheCount = await this._cacheCount();
+      console.log(
+        `[MemoryManager] Initialized (${USE_TURSO ? 'Turso' : 'sql.js'}) — ` +
+        `${memCount} memories, ${convCount} conversations, ${cacheCount} cached responses`
+      );
+    } catch (err) {
+      console.warn('[MemoryManager] Startup count failed (non-fatal):', err?.message ?? err);
+    }
+
     return this;
   }
 
