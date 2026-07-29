@@ -8,11 +8,12 @@
 
 export default {
   // ── Database ────────────────────────────────────────────────────────────
-  // Turso (distributed SQLite) — set TURSO_DB_URL + TURSO_AUTH_TOKEN
-  // Falls back to in-memory if not configured (works for dev/testing).
+  // Turso (distributed SQLite) — cognitive memories persist to Turso.
+  // Priority: TURSO_DATABASE_URL (shared with core/sqlite.js) → TURSO_DB_URL
+  // (dedicated cognitive memory DB) → in-memory fallback.
   db: {
-    url:       process.env.TURSO_DB_URL      ?? null,
-    authToken: process.env.TURSO_AUTH_TOKEN  ?? null,
+    url:       process.env.TURSO_DATABASE_URL ?? process.env.TURSO_DB_URL ?? null,
+    authToken: process.env.TURSO_AUTH_TOKEN   ?? null,
   },
 
   // ── Vector Store ────────────────────────────────────────────────────────

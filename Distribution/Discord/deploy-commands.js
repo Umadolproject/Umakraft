@@ -291,7 +291,7 @@ const ask = new SlashCommandBuilder()
 
 const ai = new SlashCommandBuilder()
   .setName('ai')
-  .setDescription('Umakraft AI Knowledge Service — search, docs, live (admin)')
+  .setDescription('Umakraft AI Knowledge Service — search, docs (admin)')
   .addSubcommand(sub => sub
     .setName('search')
     .setDescription('Similarity search across the Umakraft repository codebase')
@@ -305,13 +305,6 @@ const ai = new SlashCommandBuilder()
     .addStringOption(o => o
       .setName('file')
       .setDescription('File path or component name (e.g. Refinery/Refiner/refiner.js)')
-      .setRequired(true)))
-  .addSubcommand(sub => sub
-    .setName('live')
-    .setDescription('Search live uma.moe data and current rankings via web')
-    .addStringOption(o => o
-      .setName('query')
-      .setDescription('Your question about current live data')
       .setRequired(true)));
 
 // ─── Command Array ─────────────────────────────────────────────────────────────

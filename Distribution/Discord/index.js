@@ -5,6 +5,16 @@
 // Discord login requires DISCORD_TOKEN. Without it, the health/preview server
 // remains available in preview mode so Replit can still run the artifact.
 
+// Validate Node.js version — ?. and ?? require Node >= 14
+const NODE_MAJOR = Number(process.versions.node.split('.')[0]);
+if (NODE_MAJOR < 18) {
+  console.error(`[FATAL] Node.js v${process.version} is too old. UmaKraft requires Node.js >= 18.`);
+  console.error('[FATAL] Ensure Railway is using the Dockerfile (builder = "dockerfile" in railway.toml).');
+  console.error('[FATAL] If deploying via zip, Railway may not rebuild the Docker image — redeploy via Git or trigger a rebuild.');
+  process.exit(1);
+}
+console.log(`[startup] Node.js ${process.version} — OK`);
+
 process.on('uncaughtException', (err) => {
   console.error('[FATAL] Uncaught exception:', err);
   process.exit(1);

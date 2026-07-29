@@ -11,6 +11,7 @@ import { validate } from '../../../AI/ResponseValidator.js';
 import { answer as localAnswer } from '../../../AI/aiService.js';
 import { Router } from '../../../AI/router/Router.js';
 import { getResponse, setResponse, responseKey } from '../../../AI/Cache.js';
+import { synthesize as synthesizeFacts, formatForPrompt as formatSynthesis } from '../../../AI/Synthesizer.js';
 import { scopeUmaQuery } from '../../../AI/WebSearchEngine.js';
 import config from '../../../AI/Configuration.js';
 import { log as logQuestion } from '../../../Operation/AskLogger.js';
@@ -425,6 +426,24 @@ export async function aiCommand(payload) {
       }
     }
   } catch { /* memory enrichment is additive — fine if it fails */ }
+
+  // ── Synthesize web results into deduplicated, ranked facts ────────────
+  // Prevents the LLM from listing "According to Source A... Source B..."
+  // when multiple sources agree. Runs in-process, no extra LLM calls.
+  try {
+    const webChunks = (chunks || []).filter(c => c?.source === 'web');
+    if (webChunks.length > 0) {
+      const webSnippets = webChunks.map(c => c.content).filter(Boolean);
+      const synthesis = synthesizeFacts({
+        question: query,
+        snippets: webSnippets,
+        intent: classification?.topic || 'general',
+      });
+      if (synthesis.facts.length > 0) {
+        prompt += '\n\n' + formatSynthesis(synthesis);
+      }
+    }
+  } catch { /* synthesis is additive — fine if it fails */ }
 
   let text;
   try {
