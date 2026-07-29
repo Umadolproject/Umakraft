@@ -499,12 +499,6 @@ function _auditLog(query, result) {
  */
 export function offTopicMessage() {
   return (
-    "I'm the Umakraft AI Knowledge Service. I can help with:\n" +
-    '• **Repository questions** — ask about any part of the Umakraft codebase\n' +
-    '• **Umamusume knowledge** — ask about game mechanics, terms, or circle concepts\n' +
-    '• **Web search** — ask me anything and I\'ll search the web for answers\n' +
-    '• **Live data** — use `/ai live` to ask about current rankings or recent updates\n' +
-    '• **Community messages** — use `/ai message` to generate a message\n\n' +
-    "I can't help with topics like politics, cryptocurrency, medical advice, or other explicitly off-topic subjects."
+    'i am the bot of umakraft'
   );
 }
