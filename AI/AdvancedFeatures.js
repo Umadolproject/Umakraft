@@ -87,6 +87,17 @@ export function addConversationTurn(userId, channelId, query, response) {
 
   // Prune stale sessions
   pruneConversations();
+
+  // ── Persist to Turso (fire-and-forget, never blocks the hot path) ──
+  (async () => {
+    try {
+      await global.__learningManager?.memory?.storeConversation({
+        userId, channelId, query,
+        response: typeof response === 'string' ? response.slice(0, 500) : '',
+        guildId: global.__currentGuildId,
+      });
+    } catch { /* best-effort */ }
+  })();
 }
 
 /**
@@ -124,6 +135,13 @@ export function getConversationContext(userId, channelId) {
  */
 export function clearConversation(userId, channelId) {
   _sessions.delete(sessionKey(userId, channelId));
+
+  // ── Also clear from Turso (fire-and-forget) ──
+  (async () => {
+    try {
+      await global.__learningManager?.memory?.clearConversations(userId, channelId);
+    } catch { /* best-effort */ }
+  })();
 }
 
 /**
@@ -148,6 +166,60 @@ export function pruneConversations() {
 export function activeSessionCount() {
   pruneConversations();
   return _sessions.size;
+}
+
+/**
+ * Preload recent conversation turns from Turso into the in-memory Map.
+ * Call once on startup so getConversationContext() has data immediately.
+ * Fire-and-forget — failure silently leaves the Map empty (acceptable).
+ *
+ * @returns {Promise<void>}
+ */
+export async function preloadConversations() {
+  const memory = global.__learningManager?.memory;
+  if (!memory?.getTurso()) return;
+
+  try {
+    // Load ALL recent conversations (last 30min) — the getConversations
+    // method already enforces the TTL via SQL WHERE recorded_at > cutoff.
+    // We load all user+channel pairs from the DB and hydrate them.
+    const turso = memory.getTurso();
+    const cutoff = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+    const { rows } = await turso.execute({
+      sql: `SELECT user_id, channel_id, query, response, recorded_at
+            FROM conversations
+            WHERE recorded_at > ?
+            ORDER BY recorded_at ASC`,
+      args: [cutoff],
+    });
+
+    let loaded = 0;
+    for (const row of rows) {
+      const key = sessionKey(row.user_id, row.channel_id);
+      let turns = _sessions.get(key);
+      if (!turns) {
+        turns = [];
+        _sessions.set(key, turns);
+      }
+      turns.push({
+        query: row.query,
+        response: row.response,
+        recordedAt: new Date(row.recorded_at).getTime(),
+      });
+      // Enforce max turns per session
+      if (turns.length > MAX_TURNS_PER_SESSION) {
+        turns.splice(0, turns.length - MAX_TURNS_PER_SESSION);
+      }
+      loaded++;
+    }
+
+    if (loaded > 0) {
+      const sessions = _sessions.size;
+      console.log(`[AdvancedFeatures] Preloaded ${loaded} conversation turns across ${sessions} sessions`);
+    }
+  } catch (err) {
+    console.warn('[AdvancedFeatures] Conversation preload failed (non-fatal):', err?.message ?? err);
+  }
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

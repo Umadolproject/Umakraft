@@ -9,7 +9,9 @@
 //   responseCache  — validated response objects keyed by SHA-256 of (query + classification + variables)
 //
 // Both caches use LRU eviction and configurable TTL.
-// Cache state is in-memory only — does not survive process restarts.
+// Cache state is in-memory with optional Turso persistence for restart survival.
+// On startup, preloadCache() hydrates the LRU from Turso.
+// On every setResponse(), data is also written to Turso (fire-and-forget).
 
 import { createHash } from 'node:crypto';
 import log from '../core/log.js';
@@ -263,7 +265,23 @@ export function getResponse(query, classification, variables = {}) {
  */
 export function setResponse(query, classification, response, variables = {}) {
   if (!config.cacheEnabled) return;
-  _responseCache.set(responseKey(query, classification, variables), response);
+  const key = responseKey(query, classification, variables);
+  _responseCache.set(key, response);
+
+  // ── Persist to Turso (fire-and-forget, never blocks) ──
+  (async () => {
+    try {
+      await global.__learningManager?.memory?.setCachedResponse({
+        cacheKey: key,
+        query,
+        classification,
+        responseText: response?.text ?? '',
+        citations: response?.citations ?? [],
+        model: response?.model ?? 'cloud',
+        tokens: response?.tokens ?? 0,
+      });
+    } catch { /* best-effort */ }
+  })();
 }
 
 // ---------------------------------------------------------------------------
@@ -276,6 +294,17 @@ export function setResponse(query, classification, response, variables = {}) {
 export function clearAll() {
   _embeddingCache.clear();
   _responseCache.clear();
+
+  // Also clear Turso cache
+  (async () => {
+    try {
+      const turso = global.__learningManager?.memory?.getTurso();
+      if (turso) {
+        await turso.execute('DELETE FROM response_cache');
+      }
+    } catch { /* best-effort */ }
+  })();
+
   log.info('[AI/Cache] All caches cleared.');
 }
 
@@ -289,3 +318,45 @@ export function stats() {
     responseSize:  _responseCache.size,
   };
 }
+
+/**
+ * Preload recent cached responses from Turso into the in-memory LRU.
+ * Call once on startup so repeated queries are fast immediately.
+ * Only loads entries stored within the last 10 minutes (respecting cache TTL).
+ *
+ * @returns {Promise<void>}
+ */
+export async function preloadCache() {
+  const memory = global.__learningManager?.memory;
+  if (!memory?.getTurso()) return;
+
+  try {
+    const cutoff = new Date(Date.now() - config.cacheResponseTtlMs).toISOString();
+    const turso = memory.getTurso();
+    const { rows } = await turso.execute({
+      sql: `SELECT cache_key, query, classification, response_text, citations, model, tokens
+            FROM response_cache WHERE stored_at > ? ORDER BY stored_at DESC LIMIT ?`,
+      args: [cutoff, config.cacheResponseMax ?? 500],
+    });
+
+    let loaded = 0;
+    for (const row of rows) {
+      _responseCache.set(row.cache_key, {
+        text: row.response_text,
+        citations: row.citations ? JSON.parse(row.citations) : [],
+        model: row.model ?? 'cloud',
+        tokens: Number(row.tokens ?? 0),
+      });
+      loaded++;
+    }
+
+    if (loaded > 0) {
+      console.log(`[AI/Cache] Preloaded ${loaded} cached responses from Turso`);
+    }
+  } catch (err) {
+    console.warn('[AI/Cache] Response cache preload failed (non-fatal):', err?.message ?? err);
+  }
+}
+
+// Re-export responseKey for external use (e.g. aiGateway Turso fallback)
+export { responseKey };

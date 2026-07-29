@@ -76,6 +76,7 @@ async function _getProfileManager() {
 // ──────────────────────────────────────────────────────────────────────────────
 
 const MAX_TOOL_ATTEMPTS = 2;
+const ORCHESTRATION_TIMEOUT_MS = 45_000; // 45 sec overall agent timeout
 
 // plan() is now imported from ./Planner.js as buildPlan
 
@@ -167,7 +168,7 @@ function collectContext(toolResults) {
 // Prompt mode resolution
 // ──────────────────────────────────────────────────────────────────────────────
 
-function resolvePromptMode(topic, subcommand) {
+function resolvePromptMode(topic, subcommand, subtopic) {
   switch (subcommand) {
     case 'search':   return 'search';
     case 'explain':  return 'explain';
@@ -175,6 +176,7 @@ function resolvePromptMode(topic, subcommand) {
     case 'glossary': return 'glossary';
     case 'live':     return 'knowledge';
     default:
+      if (subtopic === 'bot_assist') return 'assistant';
       if (topic === 'umamusume') return 'knowledge';
       if (topic === 'web') return 'web';
       return 'repository';
@@ -202,11 +204,34 @@ const DISCORD_MAX = 2000;
  */
 export async function orchestrate(request = {}) {
   const startTime = Date.now();
-  const { query, subcommand = 'ask', userId, channelId } = request;
+  const { query, subcommand = 'ask', userId, channelId, guildId } = request;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    log.warn('[AI/Agent] Orchestration timeout — aborting');
+    controller.abort();
+  }, ORCHESTRATION_TIMEOUT_MS);
 
+  try {
   // Phase 0: validation
   if (!query || !query.trim()) {
     return { success: true, content: '⚠️ Please provide a question or query.', topic: 'empty', toolsUsed: [], latencyMs: 0 };
+  }
+
+  // ── Per-user rate limit check ───────────────────────────────────────────
+  if (userId) {
+    const { checkUserRateLimit } = await import('./APIProvider.js');
+    try { checkUserRateLimit(userId); } catch (err) {
+      if (err.code === 'USER_RATE_LIMITED') {
+        return {
+          success: true,
+          content: '⏳ You\'re asking a bit too fast! Please wait a moment before your next question~ 💕',
+          topic: 'rate-limited',
+          toolsUsed: [],
+          latencyMs: 0,
+        };
+      }
+      throw err;
+    }
   }
 
   // ── Phase 1: Classify intent ───────────────────────────────────────────
@@ -314,7 +339,7 @@ export async function orchestrate(request = {}) {
 
   // ── Phase 4: Build context window ──────────────────────────────────────
   const { allChunks, memoryContext } = collectContext(toolResults);
-  const promptMode = resolvePromptMode(topic, subcommand);
+  const promptMode = resolvePromptMode(topic, subcommand, classification.subtopic);
 
   let { context: mainContext, citations } = buildContext([allChunks]);
   if (memoryContext) {
@@ -325,6 +350,7 @@ export async function orchestrate(request = {}) {
   let finalAnswer  = null;
   let finalReflect = null;
   let searchWebAttempted = toolsUsed.includes('search_web');
+  const allExecutedTools = [...toolsUsed];
 
   // ── Enrich context with user profile (Chapter 7 — Learning) ─────────────
   const { enrichPrompt: enrich } = await _getProfileManager();
@@ -385,19 +411,22 @@ export async function orchestrate(request = {}) {
           log.info(`[AI/Agent] Re-plan: adding tool "${toolName}"`);
         }
       }
-      const extraResults = await executePlan(toolPlan.slice(toolsUsed.length));
-      const moreContext  = collectContext(extraResults.results);
-      allChunks.push(...moreContext.allChunks);
-      if (moreContext.memoryContext && !memoryContext) {
-        mainContext = `${moreContext.memoryContext}\n\n---\n\n${mainContext}`;
-      } else {
-        // Rebuild context with new chunks
-        const rebuilt = buildContext([allChunks]);
-        mainContext = rebuilt.context;
-        citations   = rebuilt.citations;
+      const freshTools = toolPlan.filter(t => !allExecutedTools.includes(t.tool));
+      if (freshTools.length > 0) {
+        const extraResults = await executePlan(freshTools);
+        const moreContext  = collectContext(extraResults.results);
+        allChunks.push(...moreContext.allChunks);
+        if (moreContext.memoryContext && !memoryContext) {
+          mainContext = `${moreContext.memoryContext}\n\n---\n\n${mainContext}`;
+        } else {
+          const rebuilt = buildContext([allChunks]);
+          mainContext = rebuilt.context;
+          citations   = rebuilt.citations;
+        }
+        toolsUsed.push(...extraResults.toolsUsed);
+        allExecutedTools.push(...extraResults.toolsUsed);
+        searchWebAttempted = searchWebAttempted || toolsUsed.includes('search_web');
       }
-      toolsUsed.push(...extraResults.toolsUsed);
-      searchWebAttempted = searchWebAttempted || toolsUsed.includes('search_web');
       continue;
     }
 
@@ -468,9 +497,8 @@ export async function orchestrate(request = {}) {
     }).catch(() => {});
   }
 
-  // ── Soft-validate contracts in dev mode ───────────────────────────────
-  if (config.devMode) {
-    softValidate({
+  // ── Soft-validate contracts — always validate, log failures in all modes ──
+  softValidate({
       query,
       subcommand,
       userId,
@@ -480,7 +508,6 @@ export async function orchestrate(request = {}) {
       plan: { steps: toolPlan, complexity, description: `Plan for topic=${topic}`, estimatedLatencyMs: latencyMs, isDecomposed: false },
       toolResults: toolsUsed.map(t => ({ tool: t, ok: true, data: null, error: null, durationMs: 0, source: 'agent' })),
     });
-  }
 
   const latencyMs = Date.now() - startTime;
 
@@ -528,6 +555,9 @@ export async function orchestrate(request = {}) {
     latencyMs,
     citations,
   };
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

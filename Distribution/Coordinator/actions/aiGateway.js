@@ -10,7 +10,7 @@ import { assemble as assemblePrompt } from '../../../AI/PromptSystem.js';
 import { validate } from '../../../AI/ResponseValidator.js';
 import { answer as localAnswer } from '../../../AI/aiService.js';
 import { Router } from '../../../AI/router/Router.js';
-import { getResponse, setResponse } from '../../../AI/Cache.js';
+import { getResponse, setResponse, responseKey } from '../../../AI/Cache.js';
 import { scopeUmaQuery } from '../../../AI/WebSearchEngine.js';
 import config from '../../../AI/Configuration.js';
 import { log as logQuestion } from '../../../Operation/AskLogger.js';
@@ -47,7 +47,6 @@ function resolvePromptMode(subcommand, topic, query) {
   switch (subcommand) {
     case 'search': return 'search';
     case 'docs': return 'docs';
-    case 'live': return 'knowledge';
     case 'browse': return 'knowledge';
     default:
       // Detect command-help intents for /ask
@@ -78,7 +77,6 @@ function extractQuery(subcommand, options) {
     case 'search': return options.query ?? '';
     case 'docs': return options.file ?? '';
     case 'message': return options.type ?? '';
-    case 'live': return options.query ?? '';
     case 'browse': return options.query ?? '';
     default: return options.question ?? options.query ?? '';
   }
@@ -274,7 +272,28 @@ export async function aiCommand(payload) {
 
   // ── Classic pipeline path (default) ────────────────────────────────────
   // ── Response cache check — same question = instant answer, no API calls ──
-  const cached = getResponse(query, classification.topic, { subcommand });
+  let cached = getResponse(query, classification.topic, { subcommand });
+
+  // ── Turso cache fallback — checks persisted cache on LRU miss ────────
+  if (!cached) {
+    try {
+      const lm = global.__learningManager;
+      if (lm?.memory) {
+        const key = responseKey(query, classification.topic, { subcommand });
+        const tursoHit = await lm.memory.getCachedResponse(key);
+        if (tursoHit) {
+          // Hydrate the in-memory LRU so next lookup is instant
+          setResponse(query, classification.topic, tursoHit, { subcommand });
+          cached = tursoHit;
+          log.info(
+            `[AI/Gateway] Cache HIT (Turso) user=${payload.userId} topic=${classification.topic} ` +
+            `query="${query.slice(0, 60)}"`
+          );
+        }
+      }
+    } catch { /* Turso miss or unavailable — proceed to generation */ }
+  }
+
   if (cached) {
     log.info(
       `[AI/Gateway] Cache HIT user=${payload.userId} topic=${classification.topic} ` +
@@ -298,7 +317,7 @@ export async function aiCommand(payload) {
     // /browse and /search force web-only search
     if (subcommand === 'browse' || subcommand === 'search') {
       chunks = await Router.search(query);
-    } else if (classification.topic === 'live' || classification.topic === 'web') {
+    } else if (classification.topic === 'web') {
       chunks = await Router.search(query);
       // Low-confidence web results often miss character names, game terms, etc.
       // Supplement with knowledge base so the AI has relevant domain context.

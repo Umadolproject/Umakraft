@@ -52,18 +52,18 @@ export class LearningManager {
   async process(interaction) {
     if (!this.ready) throw new Error('LearningManager not initialized');
 
-    const { userId, query, response, metadata } = interaction;
+    const { userId, guildId, query, response, metadata } = interaction;
     const startedAt = Date.now();
 
     // 1. Extract knowledge from the interaction
-    const extracted = await this.extractor.extract({ query, response, userId });
+    const extracted = await this.extractor.extract({ query, response, userId, guildId });
 
     // 2. Score importance of each extracted item
     const scored = [];
     for (const item of extracted) {
       // Use extractor-set importance if present, otherwise compute with ImportanceEngine
       const importance = item.importance ?? await this.importance.score(item, {
-        existingMemories: await this.memory.getRecent(userId, 20),
+        existingMemories: await this.memory.getRecent(userId, 20, guildId),
         domain: metadata?.domain ?? 'general',
         interaction: { text: query + ' ' + response },
         usedInResponse: item.type === 'fact',
@@ -76,12 +76,18 @@ export class LearningManager {
     // 3. Store scored items in appropriate memory tier
     for (const item of scored) {
       const tier = this._determineTier(item.importance);
+      // Determine trust level for memory poisoning protection
+      const fromTrustedUser = metadata?.trusted === true;
       await this.memory.store({
         ...item,
         userId,
+        guildId: guildId ?? '',
         tier,
         value: item.importance,
         source: metadata?.interactionId,
+        confidence: fromTrustedUser ? (item.confidence ?? 0.7) : (item.confidence ?? 0.3),
+        protected: item.type === 'correction' && !fromTrustedUser,
+        metadata: item.metadata ?? (fromTrustedUser ? null : JSON.stringify({ requiresValidation: true })),
       });
     }
 

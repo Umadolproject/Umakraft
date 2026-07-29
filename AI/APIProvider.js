@@ -27,30 +27,41 @@ import { embed as embedCohere } from './providers/embeddings/cohereEmbeddingProv
 /** @type {number[]} timestamps of recent requests (ms) */
 const _requestTimestamps = [];
 
+/** @type {Map<string, number[]>} per-user rate limit tracking */
+const _userTimestamps = new Map();
+const USER_RATE_LIMIT_RPM = 10; // 10 requests per minute per user
+
 /**
- * Check and record a new request against the guild-level rate limit.
- * Throws a rate-limit error if the per-minute cap is exceeded.
+ * Check and record a new request against the per-user rate limit.
+ * Throws a rate-limit error if the per-minute user cap is exceeded.
  *
- * @param {number} limitRpm
+ * @param {string} userId
+ * @param {number} [limitRpm]
  */
-function checkRateLimit(limitRpm = config.rateLimitRpm) {
+export function checkUserRateLimit(userId, limitRpm = USER_RATE_LIMIT_RPM) {
+  if (!userId) return;
   const now = Date.now();
-  const windowStart = now - 60_000; // 1-minute sliding window
-
-  // Drop timestamps outside the window
-  while (_requestTimestamps.length > 0 && _requestTimestamps[0] < windowStart) {
-    _requestTimestamps.shift();
+  const windowStart = now - 60_000;
+  let timestamps = _userTimestamps.get(userId);
+  if (!timestamps) {
+    timestamps = [];
+    _userTimestamps.set(userId, timestamps);
   }
-
-  if (_requestTimestamps.length >= limitRpm) {
-    const retryAfterMs = _requestTimestamps[0] - windowStart;
+  while (timestamps.length > 0 && timestamps[0] < windowStart) {
+    timestamps.shift();
+  }
+  if (timestamps.length >= limitRpm) {
+    const retryAfterMs = timestamps[0] - windowStart;
     throw Object.assign(
-      new Error(`[AI/APIProvider] Rate limit exceeded (${limitRpm} RPM). Retry after ${Math.ceil(retryAfterMs / 1000)}s.`),
-      { code: 'RATE_LIMITED', retryAfterMs }
+      new Error(`[AI/APIProvider] User rate limit exceeded (${limitRpm} RPM). Retry after ${Math.ceil(retryAfterMs / 1000)}s.`),
+      { code: 'USER_RATE_LIMITED', retryAfterMs }
     );
   }
+  timestamps.push(now);
+}
 
-  _requestTimestamps.push(now);
+export function userRateLimitStats() {
+  return { activeUsers: _userTimestamps.size, limitRpm: USER_RATE_LIMIT_RPM };
 }
 
 // ---------------------------------------------------------------------------

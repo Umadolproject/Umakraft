@@ -69,7 +69,8 @@ export function buildSafePrompt(template, userInput, variables = {}) {
   }
 
   // System block is always first — structurally separated from user content
-  return `${SYSTEM_CONSTRAINT_BLOCK}\n\n---\n\n${body}`;
+  // XML delimiters prevent prompt injection by clearly scoping user input
+  return `${SYSTEM_CONSTRAINT_BLOCK}\n\n<user_query>\n${sanitised}\n</user_query>\n\n---\n\n${body}`;
 }
 
 /**

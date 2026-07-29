@@ -47,6 +47,21 @@ export async function execute(client) {
     global.__learningManager = new LearningManager(lmConfig);
     await global.__learningManager.init();
     console.log('[ready] LearningManager initialised');
+
+    // ── Preload conversation history & response cache from Turso ──
+    // Fire-and-forget — failures here must never block startup.
+    (async () => {
+      try {
+        const { preloadConversations } = await import('../../../../AI/AdvancedFeatures.js');
+        await preloadConversations();
+      } catch { /* non-fatal */ }
+    })();
+    (async () => {
+      try {
+        const { preloadCache } = await import('../../../../AI/Cache.js');
+        await preloadCache();
+      } catch { /* non-fatal */ }
+    })();
   } catch (err) {
     console.warn('[ready] LearningManager not available (non-fatal):', err?.message ?? err);
     global.__learningManager = null;
