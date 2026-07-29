@@ -311,11 +311,11 @@ async function callSerpAPI(query, maxResults) {
 // ---------------------------------------------------------------------------
 
 const PROVIDERS = [
-  { name: 'SearXNG',    fn: callSearXNG,   failoverEvent: 'SEARXNG_FAILOVER'   },
   { name: 'Tavily',     fn: callTavily,    failoverEvent: 'TAVILY_FAILOVER'    },
   { name: 'Brave',      fn: callBrave,     failoverEvent: 'BRAVE_FAILOVER'     },
   { name: 'Google CSE', fn: callGoogleCSE, failoverEvent: 'GCSE_FAILOVER'      },
-  { name: 'SerpAPI',    fn: callSerpAPI,   failoverEvent: null                  },
+  { name: 'SerpAPI',    fn: callSerpAPI,   failoverEvent: 'SERPAPI_FAILOVER'   },
+  { name: 'SearXNG',    fn: callSearXNG,   failoverEvent: null                  },
 ];
 
 /**
