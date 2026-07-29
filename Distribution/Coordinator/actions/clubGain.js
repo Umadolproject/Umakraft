@@ -17,7 +17,7 @@ function fmtGain(n) {
  * Club Gain embed matching blueprint:
  *   Club name + Period → Daily gain table → Summary (total/avg/high/low)
  */
-function buildClubGainEmbed(clubId, clubName, days, rows, summary) {
+function buildClubGainEmbed(clubId, clubName, days, rows, summary, interaction) {
   const fields = [];
 
   // Daily gain table (compact)
@@ -46,6 +46,7 @@ function buildClubGainEmbed(clubId, clubName, days, rows, summary) {
     success:   true,
     type:      'embed',
     ephemeral: false,
+    interaction,
     result: {
       title:       `📈 Club Gain — ${clubName ?? `Circle ${clubId}`}`,
       description: `**Period:** Last ${days} days`,
@@ -80,7 +81,7 @@ export async function clubGain(payload) {
 
   // Text mode — skip Puppeteer for low-RAM environments (Railway)
   if (PUPPETEER_DISABLED) {
-    return buildClubGainEmbed(cId, clubName, days, rows, summary);
+    return buildClubGainEmbed(cId, clubName, days, rows, summary, interaction);
   }
 
   const fabricatorInput = {
@@ -98,13 +99,13 @@ export async function clubGain(payload) {
   const produced = await produce(fabricatorInput);
   if (!produced.success) {
     console.warn(`[clubGain] Fabricator failed — falling back to text embed. Error: ${produced.message}`);
-    return buildClubGainEmbed(cId, clubName, days, rows, summary);
+    return buildClubGainEmbed(cId, clubName, days, rows, summary, interaction);
   }
 
   const claimed = await claimDeliverable(produced.terminalId);
   if (!claimed.success) {
     console.warn(`[clubGain] Terminal claim failed — falling back to text embed. Error: ${claimed.message}`);
-    return buildClubGainEmbed(cId, clubName, days, rows, summary);
+    return buildClubGainEmbed(cId, clubName, days, rows, summary, interaction);
   }
 
   return {

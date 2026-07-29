@@ -1,6 +1,6 @@
 // Distribution/Commands/handlers/ai.js
 // Handler for /ai — AI Knowledge Service subcommands:
-//   search, docs, live
+//   search, docs
 // ADMIN-ONLY: regular members must use @mention or /ask instead.
 //
 // NOTE: /ai explain and /ai glossary have been merged into /ask.
@@ -34,10 +34,6 @@ export async function execute(interaction, coordinator) {
 
     case 'docs':
       options.file = interaction.options.getString('file', true);
-      break;
-
-    case 'live':
-      options.query = interaction.options.getString('query', true);
       break;
 
     default:

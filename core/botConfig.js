@@ -27,26 +27,32 @@ export const OPS_CHANNEL_ID = process.env.OPS_CHANNEL_ID || '';
 
 // ── Announcement channel ─────────────────────────────────────────────────────
 // Discord channel ID for bot announcements (fan deficit, moderation, milestones).
-export const ANNOUNCEMENT_CHANNEL_ID = process.env.ANNOUNCEMENT_CHANNEL_ID || '1530929079551791124';
+// Set via ANNOUNCEMENT_CHANNEL_ID environment variable / secret.
+export const ANNOUNCEMENT_CHANNEL_ID = process.env.ANNOUNCEMENT_CHANNEL_ID || '';
 
 // Webhook URL for announcement cross-posting (optional, falls back to channel send).
-export const ANNOUNCEMENT_WEBHOOK_URL = process.env.ANNOUNCEMENT_WEBHOOK_URL || 'https://discord.com/api/webhooks/1531199299713503342/FgumW3O2bU9dmOVn3L-hH_6pRQ9sAWkGaNuQgQlrxB_vZrauFidJ0hacsQdj2frOpRKv';
+// Set via ANNOUNCEMENT_WEBHOOK_URL environment variable / secret.
+export const ANNOUNCEMENT_WEBHOOK_URL = process.env.ANNOUNCEMENT_WEBHOOK_URL || '';
 
 // ── Message channel ───────────────────────────────────────────────────────────
 // Discord channel ID for community messages (greetings, milestones, leaderboards,
 // achievements). These are the positive, celebratory bot notifications.
-export const MESSAGE_CHANNEL_ID = process.env.MESSAGE_CHANNEL_ID || '1531139811421978786';
+// Set via MESSAGE_CHANNEL_ID environment variable / secret.
+export const MESSAGE_CHANNEL_ID = process.env.MESSAGE_CHANNEL_ID || '';
 
 // Webhook URL for message cross-posting (optional, falls back to channel send).
-export const MESSAGE_WEBHOOK_URL = process.env.MESSAGE_WEBHOOK_URL || 'https://discord.com/api/webhooks/1531204407415275530/kSlnDyklhlZgbG7PtajJxWAFehBV4V69Lra3d9gp4bEGa7J_Prba37vPeCcZZZnWfD1i';
+// Set via MESSAGE_WEBHOOK_URL environment variable / secret.
+export const MESSAGE_WEBHOOK_URL = process.env.MESSAGE_WEBHOOK_URL || '';
 
 // ── Chat channel ──────────────────────────────────────────────────────────────
 // Discord channel ID for @mention Q&A — users mention the bot here and the AI
 // responds to qualified questions via the messageCreate handler.
-export const CHAT_CHANNEL_ID = process.env.CHAT_CHANNEL_ID || '1531205995009671201';
+// Set via CHAT_CHANNEL_ID environment variable / secret.
+export const CHAT_CHANNEL_ID = process.env.CHAT_CHANNEL_ID || '';
 
 // Webhook URL for posting to #bot-chat (e.g. proactive bot messages, AI responses).
-export const CHAT_WEBHOOK_URL = process.env.CHAT_WEBHOOK_URL || 'https://discord.com/api/webhooks/1531208382239740127/u9ROij-q1bEnTtSbLaOjQGp7xCnWFDbSgWIhnUIGCXSHTPvEfjJRdmrKlW8X_iKOdaTv';
+// Set via CHAT_WEBHOOK_URL environment variable / secret.
+export const CHAT_WEBHOOK_URL = process.env.CHAT_WEBHOOK_URL || '';
 
 // Railway webhook and log-drain authentication. These are secrets and must
 // only be configured as Railway/Replit environment secrets.

@@ -37,6 +37,7 @@ Only actual API keys and tokens belong here. Set them in Railway Variables / Rep
 | Secret | Purpose |
 |---|---|
 | `DISCORD_TOKEN` | Bot authentication — **required** |
+| `UMA_MOE_API_KEY` | Uma.moe API auth — **required** (unauthenticated requests are rate-limited / rejected) |
 | `OPENAI_API_KEY` | Embeddings (optional — local model handles generation) |
 | `OPENAI_API_KEY_2` | OpenAI backup key (optional) |
 | `GEMINI_API_KEY` | Gemini Flash fallback (optional) |
@@ -54,12 +55,18 @@ Only actual API keys and tokens belong here. Set them in Railway Variables / Rep
 
 ## Non-sensitive configuration (edit files, not secrets)
 
-| Value | File |
+| Value | How to set |
 |---|---|
-| `DISCORD_CLIENT_ID` | `core/botConfig.js` |
-| `DISCORD_GUILD_ID` | `core/botConfig.js` |
-| `OPS_CHANNEL_ID` | `core/botConfig.js` — defaults to the Railway/Discord operations channel `1529852035590127686` |
-| `CONFIGURED_CIRCLES` | `core/botConfig.js` |
+| `DISCORD_CLIENT_ID` | `core/botConfig.js` or `DISCORD_CLIENT_ID` env var |
+| `DISCORD_GUILD_ID` | `core/botConfig.js` or `DISCORD_GUILD_ID` env var |
+| `OPS_CHANNEL_ID` | `OPS_CHANNEL_ID` env var — Discord channel for ops/alert messages |
+| `ANNOUNCEMENT_CHANNEL_ID` | `ANNOUNCEMENT_CHANNEL_ID` env var — channel for milestone/fan-deficit alerts |
+| `MESSAGE_CHANNEL_ID` | `MESSAGE_CHANNEL_ID` env var — channel for greetings/leaderboard posts |
+| `CHAT_CHANNEL_ID` | `CHAT_CHANNEL_ID` env var — channel for @mention AI replies |
+| `ANNOUNCEMENT_WEBHOOK_URL` | `ANNOUNCEMENT_WEBHOOK_URL` secret — webhook for cross-posting announcements (optional) |
+| `MESSAGE_WEBHOOK_URL` | `MESSAGE_WEBHOOK_URL` secret — webhook for cross-posting messages (optional) |
+| `CHAT_WEBHOOK_URL` | `CHAT_WEBHOOK_URL` secret — webhook for posting to bot-chat (optional) |
+| `CONFIGURED_CIRCLES` | `core/botConfig.js` or `CONFIGURED_CIRCLES` env var (comma-separated) |
 | AI model, cache, search tuning | `AI/Configuration.js` |
 | Miner timeouts / retries | `umamoe/Miner/config.js` |
 
