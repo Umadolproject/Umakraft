@@ -384,39 +384,43 @@ export async function aiCommand(payload) {
     if (lm && payload.userId) {
       const memories = await lm.retrieveContext(query, payload.userId);
       if (memories && memories.length > 0) {
-        // Tag and sort: user corrections are the primary answer source;
-        // verified evidence provides supporting detail and confirms correctness.
+        // [VERIFIED] = web-validated data — the most complete and accurate source.
+        // [USER CORRECTION] = what the user claimed — confirmed correct but may lack detail.
+        // Priority: bot learning from the best source > preserving user wording.
         const tagged = [];
         const seenContent = new Set();
-        let hasLackingCorrection = false;
+        let correctionWordCount = 0;
+        let verifiedWordCount = 0;
         for (const m of memories.slice(0, 8)) {
           const key = m.content?.slice(0, 60).toLowerCase();
           if (seenContent.has(key)) continue;
           seenContent.add(key);
 
           let prefix = '';
+          const words = (m.content || '').split(/\s+/).length;
           if (m.type === 'correction') {
             prefix = '[USER CORRECTION] ';
-            // Detect if the correction is short/incomplete
-            const words = (m.content || '').split(/\s+/).length;
-            if ((m.content?.length ?? 0) < 50 && words < 6) hasLackingCorrection = true;
+            correctionWordCount += words;
           } else if (!m.protected && (m.confidence ?? 0) >= 0.7) {
             prefix = '[VERIFIED] ';
+            verifiedWordCount += words;
           }
           tagged.push({ ...m, prefix });
         }
-        // Sort: USER CORRECTIONS first (primary), then VERIFIED (supporting), then others
+        // Sort: VERIFIED first (best learning source), then USER CORRECTION, then others
         tagged.sort((a, b) => {
-          const rank = (p) => p === '[USER CORRECTION] ' ? 0 : p === '[VERIFIED] ' ? 1 : 2;
+          const rank = (p) => p === '[VERIFIED] ' ? 0 : p === '[USER CORRECTION] ' ? 1 : 2;
           return rank(a.prefix) - rank(b.prefix);
         });
         const memoryLines = tagged.slice(0, 5).map(m =>
           `- ${m.prefix}${m.content} (${m.tier}, confidence: ${m.confidence?.toFixed(2) ?? '?'})`
         );
-        if (hasLackingCorrection) {
-          prompt += `\n\n[Learned knowledge — the [USER CORRECTION] below is the preferred answer wording. Combine any lacking [USER CORRECTION] with the [VERIFIED] supporting detail into one complete, natural answer. The user's correction is the core — use the verified evidence to fill in missing detail:]\n${memoryLines.join('\n')}`;
+        // Lacking = verified evidence has 1.5x+ more content than the correction
+        const isLacking = verifiedWordCount > 0 && verifiedWordCount >= correctionWordCount * 1.5;
+        if (isLacking) {
+          prompt += `\n\n[Learned knowledge — the [VERIFIED] entry is the most complete and accurate answer (independently confirmed by web search). Use it as the primary source. The [USER CORRECTION] is a simplified version that was confirmed correct:]\n${memoryLines.join('\n')}`;
         } else {
-          prompt += `\n\n[Learned knowledge — the [USER CORRECTION] is the preferred answer (verified as correct by [VERIFIED] evidence). Use the user's wording, not the web snippet:]\n${memoryLines.join('\n')}`;
+          prompt += `\n\n[Learned knowledge — both entries below are verified and accurate. The [VERIFIED] entry is the primary learning source. Use the most complete one when answering:]\n${memoryLines.join('\n')}`;
         }
       }
     }
