@@ -283,7 +283,15 @@ export async function execute(message, client) {
   const fakeInteraction = messageToInteraction(message);
 
   try {
-    const result = await coordinator.aiCommand(fakeInteraction, query, 'messageCreate');
+    const result = await coordinator.aiCommand({
+      commandName: 'ask',
+      subcommand:  'ask',
+      interaction: fakeInteraction,
+      options:     { question: query },
+      guildId:     message.guildId,
+      userId:      message.author.id,
+      channelId:   message.channelId,
+    });
 
     if (result && result.success) {
       // ── Request feedback ──────────────────────────────────────────────────

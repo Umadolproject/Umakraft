@@ -42,7 +42,7 @@ export async function execute(client) {
   // Initialised lazily on first use via the global accessor.
   // Fire-and-forget — failure here must never prevent the bot from starting.
   try {
-    const { LearningManager } = await import('../../../../LearningManager/src/LearningManager.js');
+    const { LearningManager } = await import('../../../LearningManager/src/LearningManager.js');
     const lmConfig = (await import('../../../AI/knowledge/learningManagerConfig.js')).default;
     global.__learningManager = new LearningManager(lmConfig);
     await global.__learningManager.init();
@@ -52,13 +52,13 @@ export async function execute(client) {
     // Fire-and-forget — failures here must never block startup.
     (async () => {
       try {
-        const { preloadConversations } = await import('../../../../AI/AdvancedFeatures.js');
+        const { preloadConversations } = await import('../../../AI/AdvancedFeatures.js');
         await preloadConversations();
       } catch { /* non-fatal */ }
     })();
     (async () => {
       try {
-        const { preloadCache } = await import('../../../../AI/Cache.js');
+        const { preloadCache } = await import('../../../AI/Cache.js');
         await preloadCache();
       } catch { /* non-fatal */ }
     })();
@@ -68,7 +68,7 @@ export async function execute(client) {
     // Fire-and-forget with delayed start (5s) so it doesn't compete with startup.
     (async () => {
       try {
-        const { retroValidateCorrections } = await import('../../../../AI/FeedbackManager.js');
+        const { retroValidateCorrections } = await import('../../../AI/FeedbackManager.js');
         await new Promise(r => setTimeout(r, 5000));  // let startup settle first
         const result = await retroValidateCorrections();
         console.log(`[ready] Retro-validation complete: ${result.scanned} scanned, ${result.verified} verified, ${result.downgraded} downgraded`);
