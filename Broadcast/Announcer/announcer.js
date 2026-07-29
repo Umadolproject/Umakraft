@@ -135,7 +135,11 @@ export async function _postChannel(record, cardBuffer, client) {
 
     try {
       const ch = await client.channels.fetch(channelId);
-      const messageOpts = { content: payload?.message ?? undefined };
+      const memberDms  = recipients?.memberDms ?? [];
+      const mentionStr = memberDms.length > 0
+        ? memberDms.map(id => `<@${id}>`).join(' ') + '\n'
+        : '';
+      const messageOpts = { content: mentionStr + (payload?.message ?? '') || undefined };
       if (cardBuffer) messageOpts.files = [_toAttachment(cardBuffer, _buildFilename(type))];
       const msg = await ch.send(messageOpts);
       logger.info('channel posted', { notificationKey, channelId, messageId: msg.id });
