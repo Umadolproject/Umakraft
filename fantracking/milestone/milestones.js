@@ -326,7 +326,10 @@ async function buildMilestonePayload(milestone, circleId) {
  * @returns {{ channels: string[], memberDms: string[], leaderDm: string|null }}
  */
 function resolveRecipients(milestone, circleId) {
-  const channels  = [botConfig.OPS_CHANNEL_ID].filter(Boolean);
+  // Post to ANNOUNCEMENT_CHANNEL_ID for public milestone posts.
+  // Fall back to OPS_CHANNEL_ID if announcement channel is not configured.
+  const announcementChannel = botConfig.ANNOUNCEMENT_CHANNEL_ID || botConfig.OPS_CHANNEL_ID;
+  const channels  = [announcementChannel].filter(Boolean);
   const memberDms = milestone.discordUserId ? [milestone.discordUserId] : [];
   const leaderDm  = null; // circle leader DM (configurable later)
 

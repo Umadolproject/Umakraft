@@ -159,11 +159,20 @@ export async function runReminder(client, config = {}) {
     circleName,
     details,
     stakes,
-    channelId  = botConfig.OPS_CHANNEL_ID,
+    // Reminders are member-facing — post to ANNOUNCEMENT_CHANNEL_ID.
+    // Fall back through MESSAGE_CHANNEL_ID then OPS_CHANNEL_ID.
+    channelId  = botConfig.ANNOUNCEMENT_CHANNEL_ID
+               || botConfig.MESSAGE_CHANNEL_ID
+               || botConfig.OPS_CHANNEL_ID,
   } = config;
 
   if (!eventName || !eventDate) {
     log.error('[reminder] Missing required config: eventName and eventDate');
+    return;
+  }
+
+  if (!channelId) {
+    log.error('[reminder] No channel configured — set ANNOUNCEMENT_CHANNEL_ID, MESSAGE_CHANNEL_ID, or OPS_CHANNEL_ID');
     return;
   }
 

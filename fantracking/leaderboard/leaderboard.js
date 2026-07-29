@@ -319,8 +319,11 @@ async function buildLeaderboardPayload(scope, topTrainers, totalTrainers, circle
 // ---------------------------------------------------------------------------
 
 function resolveRecipients() {
+  // Post to ANNOUNCEMENT_CHANNEL_ID for public leaderboard posts.
+  // Fall back to OPS_CHANNEL_ID if announcement channel is not configured.
+  const announcementChannel = botConfig.ANNOUNCEMENT_CHANNEL_ID || botConfig.OPS_CHANNEL_ID;
   return {
-    channels:  [botConfig.OPS_CHANNEL_ID].filter(Boolean),
+    channels:  [announcementChannel].filter(Boolean),
     memberDms: [],
     leaderDm:  null,
   };

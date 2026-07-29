@@ -94,8 +94,11 @@ function extractQuery(message, client) {
 // ─── Entry point ────────────────────────────────────────────────────────────
 
 export async function execute(message, client) {
-  // ── Gate 1: Only #bot-chat ───────────────────────────────────────────────
-  if (message.channelId !== BOT_CHAT_CHANNEL_ID) return;
+  // ── Gate 1: Channel restriction ──────────────────────────────────────────
+  // When CHAT_CHANNEL_ID is configured, restrict to that channel only.
+  // When it is not set, allow @mentions in any channel so the bot is still
+  // usable without channel configuration (never gate on an empty string).
+  if (BOT_CHAT_CHANNEL_ID && message.channelId !== BOT_CHAT_CHANNEL_ID) return;
 
   // ── Gate 2: Ignore bots (including self) ──────────────────────────────────
   if (message.author.bot) return;

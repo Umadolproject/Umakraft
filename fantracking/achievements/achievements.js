@@ -311,7 +311,10 @@ async function buildAchievementPayload(ach, trainer) {
 // ---------------------------------------------------------------------------
 
 function resolveRecipients(trainer) {
-  const channels  = [botConfig.OPS_CHANNEL_ID].filter(Boolean);
+  // Post to ANNOUNCEMENT_CHANNEL_ID for public achievement posts.
+  // Fall back to OPS_CHANNEL_ID if announcement channel is not configured.
+  const announcementChannel = botConfig.ANNOUNCEMENT_CHANNEL_ID || botConfig.OPS_CHANNEL_ID;
+  const channels  = [announcementChannel].filter(Boolean);
   const memberDms = trainer.discordUserId ? [trainer.discordUserId] : [];
   return { channels, memberDms, leaderDm: null };
 }
