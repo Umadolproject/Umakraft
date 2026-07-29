@@ -472,7 +472,7 @@ export async function execute(message, client) {
 
   // ── AI chat pipeline: topic filter + AI response ─────────────────────────
   const classification = topicClassify(query);
-  if (!classification.isQualified) {
+  if (classification.rejected) {
     const declineMsg = offTopicMessage(query, classification);
     await message.reply({ content: declineMsg, allowedMentions: { repliedUser: true } });
     return;
