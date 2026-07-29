@@ -6,9 +6,10 @@
 // Reuses the same data layer the /fan_gain slash command uses, but returns
 // a personality-rich text summary instead of an image card.
 
-import { getLinkByDiscordId, listLinks } from '../Distribution/Coordinator/utils/memberLinks.js';
+import { getLinkByDiscordId, getLinkByTrainerName, listLinks } from '../Distribution/Coordinator/utils/memberLinks.js';
 import { retrieve }            from '../Refinery/Depot/depot.js';
 import { createLogger }        from '../core/pipelineLogger.js';
+import { getByName as getTrainerByName } from '../Distribution/Coordinator/utils/trainerDb.js';
 
 const logger = createLogger('personalStats');
 
@@ -25,39 +26,125 @@ function fmtDiff(n) {
   return (v >= 0 ? '+' : '−') + Math.abs(v).toLocaleString('en-US');
 }
 
-// ─── Single trainer lookup ───────────────────────────────────────────────────
+// ─── Period / embed helpers ───────────────────────────────────────────────────
+
+const PERIOD_LABEL = { daily: "Today's Gains", weekly: 'This Week', monthly: 'This Month', lifetime: 'Lifetime' };
+const PERIOD_EMOJI = { daily: '📈', weekly: '📅', monthly: '📆', lifetime: '🏆' };
+
+/**
+ * Parse the intended time period from a free-text query. Defaults to 'daily'.
+ * @param {string} query
+ * @returns {'daily'|'weekly'|'monthly'|'lifetime'}
+ */
+function parsePeriod(query) {
+  const lower = query.toLowerCase();
+  if (/\b(monthly|month|this\s+month)\b/.test(lower))                  return 'monthly';
+  if (/\b(weekly|week|this\s+week)\b/.test(lower))                     return 'weekly';
+  if (/\b(lifetime|all[\s-]time|alltime|overall|total\s+fans?)\b/.test(lower)) return 'lifetime';
+  return 'daily';
+}
+
+/**
+ * Format a number as a signed gain string, e.g. +1,234,567 or −800,000.
+ */
+function fmtGainVal(n) {
+  if (n == null) return '—';
+  const v = Number(n);
+  return (v >= 0 ? '+' : '−') + Math.abs(v).toLocaleString('en-US');
+}
+
+/**
+ * Format an unsigned number compactly for embed footers / secondary fields.
+ */
+function fmtCompact(n) {
+  if (n == null) return '—';
+  const abs = Math.abs(Number(n));
+  if (abs >= 1_000_000_000) return `${(abs / 1_000_000_000).toFixed(1)}B`;
+  if (abs >= 1_000_000)     return `${(abs / 1_000_000).toFixed(1)}M`;
+  if (abs >= 1_000)         return `${(abs / 1_000).toFixed(1)}K`;
+  return abs.toLocaleString('en-US');
+}
+
+/**
+ * Extract up to two trainer names from plain text (no Discord @mentions needed).
+ * Handles: "between X and Y", "X vs Y", "gap of fans X to Y".
+ */
+function extractTextNames(query) {
+  const stripped = query.replace(/<@!?\d+>/g, '').replace(/[?!.,]/g, '').trim();
+  const lower    = stripped.toLowerCase();
+
+  // "between X and Y"
+  const between = lower.match(/between\s+(.+?)\s+and\s+(.+)/);
+  if (between) return [between[1].trim(), between[2].trim()];
+
+  // "X vs Y" / "X versus Y" — strip leading noise
+  const vs = lower.match(/^(.+?)\s+(?:vs\.?|versus)\s+(.+)$/);
+  if (vs) {
+    const a = vs[1].replace(/^(?:the\s+)?(?:gap|difference)(?:\s+of\s+fans?)?\s+/i, '').trim();
+    const b = vs[2].trim();
+    if (a && b) return [a, b];
+  }
+
+  // "gap/difference … X to Y"
+  const to = lower.match(/(?:gap|difference)(?:\s+of\s+fans?)?\s+(.+?)\s+to\s+(.+)/);
+  if (to) return [to[1].trim(), to[2].trim()];
+
+  return [];
+}
+
+// ─── Trainer data resolution ──────────────────────────────────────────────────
+
+/**
+ * Resolve a trainer ID directly to Depot fan data.
+ */
+async function resolveDepotData(trainerId, fallbackName) {
+  const { product } = await retrieve(trainerId);
+  if (!product?.compiledProduct) {
+    return { trainerName: fallbackName, trainerId, noData: true };
+  }
+  const cp   = product.compiledProduct;
+  const meta = cp.meta ?? {};
+  const fans = cp.fans ?? {};
+  return {
+    trainerName: meta.trainerName ?? fallbackName ?? trainerId,
+    trainerId,
+    lifetime: fans.lifetime,
+    daily:    fans.daily,
+    weekly:   fans.weekly,
+    monthly:  fans.monthly,
+    rank:     cp.rank,
+    storedAt: product.storedAt,
+  };
+}
 
 /**
  * Resolve a Discord user to their trainer data from the Depot.
- * Returns { trainerName, trainerId, lifetime, daily, weekly, monthly, rank, storedAt } or null.
+ * Returns data object or null if not linked.
  */
 async function resolveTrainerData(discordId, guildId) {
   const link = await getLinkByDiscordId(discordId, guildId);
   if (!link) return null;
+  return resolveDepotData(link.trainerId, link.trainerName);
+}
 
-  const { product } = await retrieve(link.trainerId);
-  if (!product?.compiledProduct) {
-    return {
-      trainerName: link.trainerName,
-      trainerId: link.trainerId,
-      noData: true,
-    };
-  }
+/**
+ * Resolve a trainer by name — checks member_links (case-insensitive) then the
+ * local trainer DB (exact match). Returns data object or { notFound: true, name }.
+ */
+async function resolveTrainerDataByName(name, guildId) {
+  // 1. member_links
+  const link = await getLinkByTrainerName(name, guildId);
+  if (link) return resolveDepotData(link.trainerId, link.trainerName);
 
-  const cp   = product.compiledProduct;
-  const meta = cp.meta ?? {};
-  const fans = cp.fans ?? {};
+  // 2. Local trainer DB
+  try {
+    const dbEntry = await getTrainerByName(name);
+    if (dbEntry?.trainer_id) {
+      return resolveDepotData(dbEntry.trainer_id, dbEntry.trainer_name ?? name);
+    }
+  } catch { /* trainer DB unavailable */ }
 
-  return {
-    trainerName: meta.trainerName ?? link.trainerName ?? link.trainerId,
-    trainerId:   link.trainerId,
-    lifetime:    fans.lifetime,
-    daily:       fans.daily,
-    weekly:      fans.weekly,
-    monthly:     fans.monthly,
-    rank:        cp.rank,
-    storedAt:    product.storedAt,
-  };
+  return { notFound: true, name };
 }
 
 /**
@@ -164,170 +251,208 @@ export async function getStats(discordId, guildId) {
   return { success: true, content: lines.join('\n') };
 }
 
-// ─── Fan comparison ──────────────────────────────────────────────────────────
+// ─── Fan comparison (two trainers) ───────────────────────────────────────────
 
 /**
- * Compare fan counts between two trainers.
+ * Build a Discord embed for a two-trainer fan comparison.
  *
- * @param {string}   discordIdA — Discord ID of first trainer (or the asker)
- * @param {string}   guildId
- * @param {string}   query      — original query (for extracting subjects)
- * @param {Map|Collection} mentions — Discord message.mentions.users Collection
- * @returns {Promise<{ success: boolean, content: string }>}
+ * @param {object} dataA   — resolved trainer data for subject A
+ * @param {string} displayA — display label for A ("You", "@username", or trainer name)
+ * @param {object} dataB
+ * @param {string} displayB
+ * @param {'daily'|'weekly'|'monthly'|'lifetime'} period — primary comparison period
+ * @returns {object} Discord embed object
  */
-export async function compareStats(discordIdA, guildId, query, mentions) {
-  // ── Determine who the two subjects are ──────────────────────────────────
-  const lower = query.toLowerCase();
-  const mentionedUsers = mentions ? [...mentions.values()] : [];
-
-  let subjectA = null; // { discordId, label, tag }
-  let subjectB = null;
-
-  // Case 1: "me/my/i" + @mention → asker vs mentioned
-  const hasSelfRef = /\b(me|my|mine|i)\b/i.test(lower);
-  const hasOneMention = mentionedUsers.length === 1 && hasSelfRef;
-
-  if (hasOneMention) {
-    const mentioned = mentionedUsers[0];
-    subjectA = { discordId: discordIdA, label: 'You', tag: null };
-    subjectB = { discordId: mentioned.id, label: null, tag: mentioned.username };
-  }
-
-  // Case 2: two @mentions → mentioned1 vs mentioned2
-  else if (mentionedUsers.length >= 2) {
-    const first  = mentionedUsers[0];
-    const second = mentionedUsers[1];
-    subjectA = { discordId: first.id,  label: null, tag: first.username };
-    subjectB = { discordId: second.id, label: null, tag: second.username };
-  }
-
-  // Case 3: one @mention without self-ref → mentioned vs asker (implied)
-  else if (mentionedUsers.length === 1) {
-    const mentioned = mentionedUsers[0];
-    subjectA = { discordId: discordIdA, label: 'You', tag: null };
-    subjectB = { discordId: mentioned.id, label: null, tag: mentioned.username };
-  }
-
-  // Case 4: only self-ref, no mentions → fallback to personal stats
-  else {
-    return getStats(discordIdA, guildId);
-  }
-
-  // Prevent comparing self with self
-  if (subjectA.discordId === subjectB.discordId) {
-    return {
-      success: false,
-      content: "ehe~ that's... just you! 😂 want to compare with someone else? mention them and i'll do it~! 💕",
-    };
-  }
-
-  // ── Resolve both trainers ───────────────────────────────────────────────
-  const [dataA, dataB] = await Promise.all([
-    resolveTrainerData(subjectA.discordId, guildId),
-    resolveTrainerData(subjectB.discordId, guildId),
-  ]);
-
-  const displayA = subjectA.label ?? `@${subjectA.tag}`;
-  const displayB = subjectB.label ?? `@${subjectB.tag}`;
-
-  // Error cases
-  if (!dataA) {
-    return {
-      success: false,
-      content: `hmm... ${displayA} doesn't seem to be linked to a trainer yet! 😣 they need to use \`/link\` first~`,
-    };
-  }
-  if (!dataB) {
-    return {
-      success: false,
-      content: `hmm... ${displayB} doesn't seem to be linked to a trainer yet! 😣 they need to use \`/link\` first~`,
-    };
-  }
-  if (dataA.noData && dataB.noData) {
-    return {
-      success: false,
-      content: `neither ${displayA} nor ${displayB} have any recent fan data... 😢 both of you try running \`/fan_gain\` first~! 💕`,
-    };
-  }
-  if (dataA.noData) {
-    return {
-      success: false,
-      content: `${displayA} (${dataA.trainerName}) doesn't have recent fan data yet... 😢 try running \`/fan_gain\` first~!`,
-    };
-  }
-  if (dataB.noData) {
-    return {
-      success: false,
-      content: `${displayB} (${dataB.trainerName}) doesn't have recent fan data yet... 😢 try running \`/fan_gain\` first~!`,
-    };
-  }
-
-  // ── Build comparison reply ──────────────────────────────────────────────
-  const lines = [];
-  lines.push('📊 **Fan Comparison~!**');
-  lines.push('');
-
+function buildComparisonEmbed(dataA, displayA, dataB, displayB, period) {
   const nameA = `${displayA} (${dataA.trainerName})`;
   const nameB = `${displayB} (${dataB.trainerName})`;
+  const fields = [];
 
-  // Lifetime fans
-  if (dataA.lifetime != null && dataB.lifetime != null) {
-    const diff = dataA.lifetime - dataB.lifetime;
-    lines.push(`🏇 **${nameA}**: ${fmt(dataA.lifetime)}`);
-    lines.push(`🏇 **${nameB}**: ${fmt(dataB.lifetime)}`);
-    lines.push('');
+  // ── Primary period (full-width, most prominent) ──────────────────────────
+  const valA = dataA[period];
+  const valB = dataB[period];
 
-    if (diff !== 0) {
-      const leader = diff > 0 ? displayA : displayB;
-      const gap     = Math.abs(diff).toLocaleString('en-US');
-      const emoji   = Math.abs(diff) > 100_000_000 ? '😱' : Math.abs(diff) > 10_000_000 ? '📈' : '🤏';
-      lines.push(`📏 **Difference**: ${fmtDiff(diff)} fans`);
-      lines.push(`👑 **${leader}** is ahead by **${gap}**! ${emoji}`);
-    } else {
-      lines.push(`✨ It's a tie! Both have ${fmt(dataA.lifetime)} fans~!`);
-    }
+  if (valA != null && valB != null) {
+    const diff   = valA - valB;
+    const leader = diff > 0 ? displayA : diff < 0 ? displayB : null;
+    const gapLine = leader
+      ? `\n📏 **${leader}** ahead by **${fmtCompact(Math.abs(diff))}**`
+      : '\n✨ Exactly tied!';
+
+    fields.push({
+      name:   `${PERIOD_EMOJI[period]} ${PERIOD_LABEL[period]}`,
+      value:  `**${nameA}**: ${fmtGainVal(valA)}\n**${nameB}**: ${fmtGainVal(valB)}${gapLine}`,
+      inline: false,
+    });
   } else {
-    lines.push(`🏇 **${nameA}**: ${dataA.lifetime != null ? fmt(dataA.lifetime) : '—'}`);
-    lines.push(`🏇 **${nameB}**: ${dataB.lifetime != null ? fmt(dataB.lifetime) : '—'}`);
-    lines.push('');
-    lines.push('📏 Not enough data to compare yet~ 😅');
+    fields.push({
+      name:   `${PERIOD_EMOJI[period]} ${PERIOD_LABEL[period]}`,
+      value:  `**${nameA}**: ${valA != null ? fmtGainVal(valA) : '—'}\n**${nameB}**: ${valB != null ? fmtGainVal(valB) : '—'}\n_Not enough data to compare_`,
+      inline: false,
+    });
   }
 
-  // Today's gains (bonus)
-  if (dataA.daily != null && dataB.daily != null) {
-    const dayDiff = dataA.daily - dataB.daily;
-    const dayLeader = dayDiff > 0 ? displayA : dayDiff < 0 ? displayB : null;
-    if (dayLeader) {
-      lines.push('');
-      lines.push(`📊 **Today**: ${dayLeader} is ahead by **${Math.abs(dayDiff).toLocaleString('en-US')}** fans~! 🔥`);
-    } else {
-      lines.push('');
-      lines.push(`📊 **Today**: both tied at ${fmtDiff(dataA.daily)}~! 🤝`);
+  // ── Secondary periods (inline pairs) ─────────────────────────────────────
+  const secondaryPeriods = ['daily', 'weekly', 'monthly', 'lifetime'].filter(p => p !== period);
+  const secondaryFields  = [];
+
+  for (const p of secondaryPeriods) {
+    const a = dataA[p];
+    const b = dataB[p];
+    if (a == null && b == null) continue;
+
+    const isGain = p !== 'lifetime';
+    const fmtA = isGain ? fmtGainVal(a) : (a != null ? fmt(a) : '—');
+    const fmtB = isGain ? fmtGainVal(b) : (b != null ? fmt(b) : '—');
+
+    secondaryFields.push({
+      name:   `${PERIOD_EMOJI[p]} ${PERIOD_LABEL[p]}`,
+      value:  `**${displayA}**: ${fmtA}\n**${displayB}**: ${fmtB}`,
+      inline: true,
+    });
+  }
+
+  // Pad inline fields to groups of 3 (Discord renders 3-per-row)
+  while (secondaryFields.length % 3 !== 0) {
+    secondaryFields.push({ name: '\u200b', value: '\u200b', inline: true });
+  }
+  fields.push(...secondaryFields);
+
+  // ── Ranks ─────────────────────────────────────────────────────────────────
+  if (dataA.rank != null || dataB.rank != null) {
+    fields.push({
+      name:   '📊 Circle Rank',
+      value:  `**${displayA}**: ${dataA.rank != null ? `#${dataA.rank}` : '—'}\n**${displayB}**: ${dataB.rank != null ? `#${dataB.rank}` : '—'}`,
+      inline: true,
+    });
+  }
+
+  // ── Freshness footer ──────────────────────────────────────────────────────
+  const ages = [];
+  for (const [d, label] of [[dataA, displayA], [dataB, displayB]]) {
+    if (d.storedAt) {
+      const age = Math.round((Date.now() - new Date(d.storedAt).getTime()) / 60000);
+      if (age > 60) ages.push(`${label}: ${age}m ago`);
     }
   }
 
-  // Ranks
-  if (dataA.rank != null && dataB.rank != null) {
-    lines.push('');
-    lines.push(`📊 **Rank**: ${displayA} #${dataA.rank} · ${displayB} #${dataB.rank}`);
+  return {
+    title:       `📊 Fan Comparison — ${PERIOD_LABEL[period]}`,
+    description: `**${nameA}** vs **${nameB}**`,
+    color:       0x5865F2,
+    fields,
+    footer:      { text: ages.length > 0 ? `⏱ ${ages.join(' · ')} — /fan_gain to refresh` : 'UmaKraft · fan comparison' },
+    timestamp:   new Date().toISOString(),
+  };
+}
+
+/**
+ * Compare fan gains between two trainers.
+ * Subjects are resolved from Discord @mentions, self-references ("me"), or
+ * plain trainer names extracted from the query text.
+ *
+ * @param {string}          discordIdA — Discord ID of the message author
+ * @param {string}          guildId
+ * @param {string}          query      — cleaned message text
+ * @param {Map|Collection}  mentions   — Discord message.mentions.users
+ * @returns {Promise<{ success: boolean, embed?: object, content?: string }>}
+ */
+export async function compareStats(discordIdA, guildId, query, mentions) {
+  const lower          = query.toLowerCase();
+  const mentionedUsers = mentions ? [...mentions.values()] : [];
+  const period         = parsePeriod(query);
+
+  // ── Subject resolution ────────────────────────────────────────────────────
+  // Types: { kind: 'discord', discordId, display }
+  //        { kind: 'name',    name,      display }
+  //        { kind: 'self',    discordId, display }
+
+  let subjectA = null;
+  let subjectB = null;
+
+  const hasSelfRef   = /\b(me|my|mine|i)\b/i.test(lower);
+  const isObjectMe   = /\b(show|tell|give|let|gimme|lemme|pull|rank|list|sort|compare|send|display)\s+me\b/i.test(lower);
+  const effectiveSelf = hasSelfRef && !isObjectMe;
+
+  if (effectiveSelf && mentionedUsers.length === 1) {
+    // Me vs @mention
+    subjectA = { kind: 'self',    discordId: discordIdA,         display: 'You'                       };
+    subjectB = { kind: 'discord', discordId: mentionedUsers[0].id, display: `@${mentionedUsers[0].username}` };
+  } else if (mentionedUsers.length >= 2) {
+    // @A vs @B
+    subjectA = { kind: 'discord', discordId: mentionedUsers[0].id, display: `@${mentionedUsers[0].username}` };
+    subjectB = { kind: 'discord', discordId: mentionedUsers[1].id, display: `@${mentionedUsers[1].username}` };
+  } else if (mentionedUsers.length === 1 && !effectiveSelf) {
+    // Implied self + @mention
+    subjectA = { kind: 'self',    discordId: discordIdA,         display: 'You'                       };
+    subjectB = { kind: 'discord', discordId: mentionedUsers[0].id, display: `@${mentionedUsers[0].username}` };
+  } else {
+    // No @mentions — try to extract trainer names from text
+    const textNames = extractTextNames(query);
+
+    if (textNames.length >= 2) {
+      const [rawA, rawB] = textNames;
+      const selfA = /^(me|my|mine|myself|i)$/i.test(rawA);
+      const selfB = /^(me|my|mine|myself|i)$/i.test(rawB);
+
+      subjectA = selfA
+        ? { kind: 'self', discordId: discordIdA, display: 'You' }
+        : { kind: 'name', name: rawA, display: rawA };
+      subjectB = selfB
+        ? { kind: 'self', discordId: discordIdA, display: 'You' }
+        : { kind: 'name', name: rawB, display: rawB };
+    } else if (textNames.length === 1 && effectiveSelf) {
+      subjectA = { kind: 'self', discordId: discordIdA, display: 'You' };
+      subjectB = { kind: 'name', name: textNames[0], display: textNames[0] };
+    } else {
+      // No subjects found — fall back to personal stats
+      return getStats(discordIdA, guildId);
+    }
   }
 
-  // Freshness note
-  const ages = [];
-  if (dataA.storedAt) {
-    const age = Math.round((Date.now() - new Date(dataA.storedAt).getTime()) / 60000);
-    if (age > 60) ages.push(`${displayA}: ${age}m ago`);
-  }
-  if (dataB.storedAt) {
-    const age = Math.round((Date.now() - new Date(dataB.storedAt).getTime()) / 60000);
-    if (age > 60) ages.push(`${displayB}: ${age}m ago`);
-  }
-  if (ages.length > 0) {
-    lines.push('');
-    lines.push(`📌 _${ages.join(' · ')} — run \`/fan_gain\` for fresher data~_`);
+  // Prevent self-vs-self
+  if (subjectA.kind !== 'name' && subjectB.kind !== 'name' &&
+      subjectA.discordId === subjectB.discordId) {
+    return {
+      success: false,
+      content: "ehe~ that's... just you! 😂 want to compare with someone else? mention them or tell me their trainer name~! 💕",
+    };
   }
 
-  return { success: true, content: lines.join('\n') };
+  // ── Resolve trainer data ──────────────────────────────────────────────────
+  async function resolveSubject(subject) {
+    if (subject.kind === 'name') return resolveTrainerDataByName(subject.name, guildId);
+    return resolveTrainerData(subject.discordId, guildId);
+  }
+
+  const [dataA, dataB] = await Promise.all([
+    resolveSubject(subjectA),
+    resolveSubject(subjectB),
+  ]);
+
+  const displayA = subjectA.display;
+  const displayB = subjectB.display;
+
+  // ── Error responses (text, no embed needed) ───────────────────────────────
+  if (!dataA || dataA.notFound) {
+    return { success: false, content: `hmm... I couldn't find trainer **"${subjectA.kind === 'name' ? subjectA.name : displayA}"**... 😣 are they linked? try mentioning them with @~! 💕` };
+  }
+  if (!dataB || dataB.notFound) {
+    return { success: false, content: `hmm... I couldn't find trainer **"${subjectB.kind === 'name' ? subjectB.name : displayB}"**... 😣 are they linked? try mentioning them with @~! 💕` };
+  }
+  if (dataA.noData && dataB.noData) {
+    return { success: false, content: `neither **${displayA}** nor **${displayB}** have fan data yet... 😢 both try \`/fan_gain\` first~! 💕` };
+  }
+  if (dataA.noData) {
+    return { success: false, content: `**${displayA}** (${dataA.trainerName}) has no fan data yet... 😢 try \`/fan_gain\` first~!` };
+  }
+  if (dataB.noData) {
+    return { success: false, content: `**${displayB}** (${dataB.trainerName}) has no fan data yet... 😢 try \`/fan_gain\` first~!` };
+  }
+
+  // ── Build embed ───────────────────────────────────────────────────────────
+  const embed = buildComparisonEmbed(dataA, displayA, dataB, displayB, period);
+  return { success: true, embed };
 }
 
 /**
@@ -453,20 +578,20 @@ export function isMultiComparison(query) {
 }
 
 /**
- * Compare fan counts across 3–30 trainers with a ranked leaderboard.
+ * Compare fan gains across 3–30 trainers, returning a ranked embed.
+ * Period is detected from the query; defaults to daily.
  */
 export async function compareMulti(discordId, guildId, query, mentions) {
-  const MAX_TRAINERS = 30;
-  const lower = query.toLowerCase();
+  const MAX_TRAINERS  = 30;
+  const lower         = query.toLowerCase();
   const mentionedUsers = mentions ? [...mentions.values()] : [];
+  const period        = parsePeriod(query);
 
-  // ── Collect subjects (deduplicated) ─────────────────────────────────────
+  // ── Collect subjects ───────────────────────────────────────────────────
   const subjects = [];
-  const seen = new Set();
-
+  const seen     = new Set();
   const isEveryone = /@everyone|@here/i.test(query);
 
-  // @everyone / @here → fetch ALL linked members from the guild
   if (isEveryone) {
     const { links } = await listLinks(guildId, { limit: MAX_TRAINERS });
     for (const link of links) {
@@ -481,7 +606,6 @@ export async function compareMulti(discordId, guildId, query, mentions) {
       seen.add(discordId);
       subjects.push({ discordId, displayName: 'You' });
     }
-
     for (const user of mentionedUsers) {
       if (!seen.has(user.id)) {
         seen.add(user.id);
@@ -495,7 +619,7 @@ export async function compareMulti(discordId, guildId, query, mentions) {
     return { success: false, content: "hmm... i don't see anyone to compare! 😅 mention the trainers~! 💕" };
   }
 
-  // ── Resolve all in parallel ─────────────────────────────────────────────
+  // ── Resolve all in parallel ────────────────────────────────────────────
   const results = await Promise.all(capped.map(async (s) => {
     const data = await resolveTrainerData(s.discordId, guildId);
     return { subject: s, data };
@@ -506,100 +630,76 @@ export async function compareMulti(discordId, guildId, query, mentions) {
   const notLinked = [];
 
   for (const r of results) {
-    if (!r.data)          notLinked.push(r.subject);
+    if (!r.data)            notLinked.push(r.subject);
     else if (r.data.noData) noData.push({ displayName: r.subject.displayName, name: r.data.trainerName });
-    else                   ranked.push({ displayName: r.subject.displayName, ...r.data });
+    else                    ranked.push({ displayName: r.subject.displayName, ...r.data });
   }
 
-  ranked.sort((a, b) => (b.lifetime ?? 0) - (a.lifetime ?? 0));
+  // Sort by the requested period descending (fall back to lifetime)
+  ranked.sort((a, b) => ((b[period] ?? b.lifetime ?? 0) - (a[period] ?? a.lifetime ?? 0)));
 
-  // ── Build reply ─────────────────────────────────────────────────────────
-  const lines = [];
-  const total = capped.length;
-  const header = isEveryone
-    ? `📊 **Circle Fan Comparison — ${ranked.length} of ${total} linked trainers~!**`
-    : `📊 **Fan Comparison — ${ranked.length} of ${total} trainers~!**`;
-  lines.push(header);
-  lines.push('');
+  // ── Build embed description (ranked list) ─────────────────────────────
+  const total   = capped.length;
+  const medals  = ['🥇', '🥈', '🥉'];
+  const topVal  = ranked[0]?.[period] ?? ranked[0]?.lifetime ?? 0;
+  const isGain  = period !== 'lifetime';
 
+  let description = '';
   if (ranked.length === 0) {
-    if (notLinked.length > 0) {
-      lines.push(`no one is linked... 😢 ${notLinked.map(s => s.displayName).join(', ')} need \`/link\`~!`);
-    } else {
-      lines.push('no fan data yet... 😢 everyone try `/fan_gain` first~! 💕');
-    }
+    description = notLinked.length > 0
+      ? `No one is linked yet — ${notLinked.map(s => s.displayName).join(', ')} need \`/link\`~!`
+      : 'No fan data yet — everyone try `/fan_gain` first~! 💕';
   } else {
-    const medals  = ['🥇', '🥈', '🥉'];
-    const topFans = ranked[0].lifetime ?? 0;
-    const useCompact = ranked.length > 12;
+    const lines = ranked.map((r, i) => {
+      const posLabel = medals[i] ?? `${String(i + 1).padStart(2, ' ')}.`;
+      const val      = r[period] ?? r.lifetime;
+      const valStr   = isGain ? fmtGainVal(val) : fmtCompact(val);
+      const gap      = i > 0 && topVal > 0 && val != null ? val - topVal : null;
+      const gapStr   = gap != null && gap !== 0
+        ? ` _(${fmtCompact(Math.abs(gap))} behind)_`
+        : '';
+      return `${posLabel} **${r.displayName}** (${r.trainerName}): ${valStr}${gapStr}`;
+    });
 
-    for (let i = 0; i < ranked.length; i++) {
-      const r  = ranked[i];
-      const pos = i + 1;
-      const posLabel = medals[i] ?? `${pos}.`.padStart(3, ' ');
-      const name = `${r.displayName} (${r.trainerName})`;
-
-      let fanStr;
-      if (useCompact && r.lifetime >= 1_000_000_000) {
-        fanStr = `${(r.lifetime / 1_000_000_000).toFixed(1)}B`;
-      } else if (useCompact && r.lifetime >= 1_000_000) {
-        fanStr = `${(r.lifetime / 1_000_000).toFixed(1)}M`;
-      } else if (useCompact && r.lifetime >= 1_000) {
-        fanStr = `${(r.lifetime / 1_000).toFixed(1)}K`;
-      } else {
-        fanStr = fmt(r.lifetime);
-      }
-
-      let gapStr = '';
-      if (i > 0 && topFans > 0 && r.lifetime != null) {
-        const gap = r.lifetime - topFans;
-        if (gap !== 0) {
-          if (useCompact && Math.abs(gap) >= 1_000_000) {
-            gapStr = `  (−${(Math.abs(gap) / 1_000_000).toFixed(1)}M)`;
-          } else if (useCompact && Math.abs(gap) >= 1_000) {
-            gapStr = `  (−${(Math.abs(gap) / 1_000).toFixed(1)}K)`;
-          } else {
-            gapStr = `  (${fmtDiff(gap)})`;
-          }
-        }
-      }
-
-      lines.push(`${posLabel} ${name}: ${fanStr}${gapStr}`);
+    description = lines.join('\n');
+    // Discord embed description cap: 4096 chars
+    if (description.length > 3900) {
+      const cutoff = description.lastIndexOf('\n', 3850);
+      description  = description.slice(0, cutoff > 0 ? cutoff : 3850);
+      description += '\n\n_...truncated — use `/leaderboard` for the full list~_ 😅';
     }
   }
 
-  // ── Warnings ────────────────────────────────────────────────────────────
-  if (notLinked.length > 0 || noData.length > 0) {
-    lines.push('');
-    const parts = [];
-    if (notLinked.length > 0) {
-      parts.push(`🔗 ${notLinked.length} not linked: ${notLinked.map(s => s.displayName).join(', ')}`);
-    }
-    if (noData.length > 0) {
-      parts.push(`📭 ${noData.length} no data: ${noData.map(n => `${n.displayName} (${n.name})`).join(', ')}`);
-    }
-    lines.push(`⚠️ ${parts.join(' · ')}`);
+  // ── Warnings field ────────────────────────────────────────────────────
+  const fields = [];
+  const warnParts = [];
+  if (notLinked.length > 0) warnParts.push(`🔗 Not linked: ${notLinked.map(s => s.displayName).join(', ')}`);
+  if (noData.length   > 0) warnParts.push(`📭 No data: ${noData.map(n => n.displayName).join(', ')}`);
+  if (warnParts.length > 0) {
+    fields.push({ name: '⚠️ Warnings', value: warnParts.join('\n'), inline: false });
   }
 
-  // ── Freshness ───────────────────────────────────────────────────────────
-  const maxAge = Math.max(...ranked.map(r => {
-    if (!r.storedAt) return 0;
-    return Math.round((Date.now() - new Date(r.storedAt).getTime()) / 60000);
-  }));
-  if (maxAge > 60) {
-    lines.push('');
-    lines.push(`📌 _oldest data ${maxAge}m ago — run \`/fan_gain\` for fresher stats~_`);
-  }
+  // ── Freshness footer ─────────────────────────────────────────────────
+  const maxAge = ranked.length > 0
+    ? Math.max(...ranked.map(r => r.storedAt
+        ? Math.round((Date.now() - new Date(r.storedAt).getTime()) / 60000)
+        : 0))
+    : 0;
 
-  // ── Discord 2000-char safety ────────────────────────────────────────────
-  let content = lines.join('\n');
-  if (content.length > 1950) {
-    const cutoff = content.lastIndexOf('\n', 1900);
-    content = content.slice(0, cutoff > 0 ? cutoff : 1900);
-    content += '\n\n📌 _...truncated for Discord~_\n\n💡 _try comparing fewer trainers next time!_ 😅';
-  }
+  const footerText = isEveryone
+    ? `Circle comparison · ${ranked.length} of ${total} trainers${maxAge > 60 ? ` · oldest data ${maxAge}m ago — /fan_gain to refresh` : ''}`
+    : `${ranked.length} of ${total} trainers${maxAge > 60 ? ` · oldest data ${maxAge}m ago — /fan_gain to refresh` : ''}`;
 
-  return { success: true, content };
+  const embed = {
+    title:       `📊 Fan Comparison — ${PERIOD_LABEL[period]}`,
+    description,
+    color:       0x5865F2,
+    fields,
+    footer:      { text: footerText },
+    timestamp:   new Date().toISOString(),
+  };
+
+  return { success: true, embed };
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

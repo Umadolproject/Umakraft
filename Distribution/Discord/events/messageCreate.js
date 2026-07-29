@@ -399,7 +399,13 @@ export async function execute(message, client) {
     await message.channel.sendTyping().catch(() => {});
     try {
       const result = await compareMulti(message.author.id, message.guildId, query, message.mentions?.users);
-      await message.reply({ content: result.content, allowedMentions: { repliedUser: true } });
+      if (!result.success) {
+        await message.reply({ content: result.content ?? 'Something went wrong~ 😣', allowedMentions: { repliedUser: true } });
+      } else if (result.embed) {
+        await message.reply({ embeds: [result.embed], allowedMentions: { repliedUser: true } });
+      } else {
+        await message.reply({ content: result.content, allowedMentions: { repliedUser: true } });
+      }
     } catch (err) {
       logger.error(`compareMulti failed for ${userTag}: ${err.message}`);
       await message.reply({
@@ -416,7 +422,13 @@ export async function execute(message, client) {
     await message.channel.sendTyping().catch(() => {});
     try {
       const result = await compareStats(message.author.id, message.guildId, query, message.mentions?.users);
-      await message.reply({ content: result.content, allowedMentions: { repliedUser: true } });
+      if (!result.success) {
+        await message.reply({ content: result.content ?? 'Something went wrong~ 😣', allowedMentions: { repliedUser: true } });
+      } else if (result.embed) {
+        await message.reply({ embeds: [result.embed], allowedMentions: { repliedUser: true } });
+      } else {
+        await message.reply({ content: result.content, allowedMentions: { repliedUser: true } });
+      }
     } catch (err) {
       logger.error(`compareStats failed for ${userTag}: ${err.message}`);
       await message.reply({
