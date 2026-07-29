@@ -459,6 +459,61 @@ const REFERENCES = [
     bestFor: ['meta tier list', 'reroll guide', 'walkthrough', 'jp server', 'strategy', 'ranking'],
     keywords: ['meta', 'reroll', 'jp', 'japan', 'walkthrough', 'strategy', 'best character', 'tier list'],
   },
+  {
+    name: 'Umamusume.run',
+    url: 'https://umamusume.run',
+    description:
+      'Character and support card database with beginner guides. Good reference for looking up ' +
+      'character stats, support card details, and getting started tips.',
+    bestFor: ['character database', 'support card database', 'beginner guide', 'character stats'],
+    keywords: ['character', 'support card', 'beginner', 'database', 'card stats'],
+  },
+  {
+    name: 'UmamusumeDB',
+    url: 'https://umamusumedb.com',
+    description:
+      'Comprehensive database with tools: factor calculator, training calculator, character ' +
+      'comparison, and deck builder. Best for: number-crunching, comparing characters, ' +
+      'calculating factors, and planning decks.',
+    bestFor: ['factor calculator', 'training calculator', 'character comparison', 'deck builder', 'factor planning'],
+    keywords: ['factor', 'calculator', 'compare', 'deck', 'training calc', 'factor calc'],
+  },
+  {
+    name: 'Umamusume.gg',
+    url: 'https://umamusume.gg',
+    description:
+      'Event guides, banner reviews, reroll guide, and training tips. Best for: current events, ' +
+      'gacha banner advice, reroll recommendations, and quick training tips.',
+    bestFor: ['event guide', 'banner review', 'reroll guide', 'training tips', 'gacha'],
+    keywords: ['event', 'banner', 'gacha', 'reroll', 'pull', 'summon', 'training tip'],
+  },
+  {
+    name: 'Umalator',
+    url: 'https://umalator.app',
+    description:
+      'Simulation and planning tool for Umamusume training runs. Best for: simulating training ' +
+      'outcomes, planning skill combinations, and optimising builds before committing.',
+    bestFor: ['training simulation', 'skill planning', 'build optimisation', 'simulator'],
+    keywords: ['simulate', 'simulation', 'optimise', 'optimize', 'planner', 'plan build'],
+  },
+  {
+    name: 'UmaArchive',
+    url: 'https://umaarchive.net',
+    description:
+      'Learn about the real-life racehorses that inspired each Umamusume character. Best for: ' +
+      'lore, real horse history, character background, and inspiration behind each uma.',
+    bestFor: ['real horse', 'character lore', 'horse history', 'inspiration', 'background'],
+    keywords: ['real', 'history', 'lore', 'inspire', 'based on', 'origin', 'racehorse', 'archive'],
+  },
+  {
+    name: 'r/UmaMusume Wiki',
+    url: 'https://www.reddit.com/r/UmaMusume/wiki',
+    description:
+      'Community wiki on Reddit covering general game info, character guides, and community ' +
+      'resources. Best for: community tips, FAQs, and quick overviews.',
+    bestFor: ['community guide', 'faq', 'reddit guide', 'general info', 'community tips'],
+    keywords: ['reddit', 'community', 'faq', 'wiki', 'general', 'overview', 'tip'],
+  },
 ];
 
 /**

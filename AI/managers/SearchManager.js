@@ -23,7 +23,7 @@ import { search as firecrawlSearch } from '../providers/search/firecrawlSearchPr
 function scopeQuery(query) {
   const q = query.trim();
   if (!q) return q;
-  const UMA_DOMAINS = ['uma.moe', 'gametora.com/umamusume', 'uma.guide', 'umamusume.com', 'game8.co/games/umamusume'];
+  const UMA_DOMAINS = ['uma.moe', 'gametora.com/umamusume', 'uma.guide', 'umamusume.com', 'game8.co/games/umamusume', 'umamusume.run', 'umamusumedb.com', 'umamusume.gg', 'umalator.app', 'umaarchive.net'];
   if (UMA_DOMAINS.some(d => q.toLowerCase().includes(d.toLowerCase()))) return q;
   if (q.toLowerCase().includes('umamusume')) return q;
   return `${q} Umamusume Pretty Derby`;

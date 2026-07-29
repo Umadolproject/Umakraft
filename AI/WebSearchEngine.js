@@ -31,7 +31,7 @@ function scopeQuery(query) {
   const q = query.trim();
   if (!q) return q;
   // Don't double-inject if already scoped to any of the 5 trusted domains
-  const UMA_DOMAINS = ['uma.moe', 'gametora.com/umamusume', 'uma.guide', 'umamusume.com', 'game8.co/games/umamusume'];
+  const UMA_DOMAINS = ['uma.moe', 'gametora.com/umamusume', 'uma.guide', 'umamusume.com', 'game8.co/games/umamusume', 'umamusume.run', 'umamusumedb.com', 'umamusume.gg', 'umalator.app', 'umaarchive.net'];
   if (UMA_DOMAINS.some(d => q.toLowerCase().includes(d.toLowerCase()))) return q;
   if (q.toLowerCase().includes('umamusume')) return q;
   return `${q} Umamusume Pretty Derby`;
@@ -56,6 +56,12 @@ export function scopeUmaQuery(query) {
     'game8.co',
     'umamusume.com',
     'uma.moe',
+    'umamusume.run',
+    'umamusumedb.com',
+    'umamusume.gg',
+    'umalator.app',
+    'umaarchive.net',
+    'reddit.com/r/UmaMusume',
   ];
 
   // Build site-scoped query: (query) (umamusume) (site:a OR site:b OR ...)
@@ -194,7 +200,7 @@ async function callTavily(query, maxResults) {
         query,
         search_depth:    'advanced',
         max_results:     maxResults,
-        include_domains: ['uma.moe', 'gametora.com', 'uma.guide', 'umamusume.com', 'game8.co'],
+        include_domains: ['uma.moe', 'gametora.com', 'uma.guide', 'umamusume.com', 'game8.co', 'umamusume.run', 'umamusumedb.com', 'umamusume.gg', 'umalator.app', 'umaarchive.net'],
         include_answer:  false,
       }),
       signal: AbortSignal.timeout(config.searchProviderTimeoutMs),

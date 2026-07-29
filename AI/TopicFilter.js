@@ -64,7 +64,18 @@ const UMAMUSUME_KEYWORDS = [
   // ── Stats ─────────────────────────────────────────────────────────────
   'speed stat', 'stamina stat', 'power stat', 'guts stat', 'wisdom stat',
   // ── Resources / tools ─────────────────────────────────────────────────
-  'gametora', 'uma guide', 'game8',
+  'gametora', 'uma guide', 'game8', 'umamusume.run', 'umamusumedb', 'umamusume.gg',
+  'umalator', 'umaarchive', 'uma archive', 'uma reference', 'umareference',
+  // ── Character / horse names (prevent false off-topic rejections) ───────
+  'king halo', 'special week', 'silence suzuka', 'tokai teio', 'mejiro mcqueen',
+  'rice shower', 'el condor pasa', 'grass wonder', 'seiun sky', 'air groove',
+  'admire vega', 'taiki shuttle', 'agnes tachyon', 'fine motion', 'air shakur',
+  'symboli rudolf', 'oguri cap', 'tamamo cross', 'vodka', 'daiwa scarlet',
+  'gold ship', 'mayano top gun', 'narita brian', 'biwa hayahide', 'nishino flower',
+  'winning ticket', 'super creek', 'manhattan cafe', 'zenno rob roy', 'smartfalcon',
+  'sweep tosho', 'sakura bakushin o', 'twin turbo', 'haru urara', 'maruzensky',
+  'fuji kiseki', 'narita taishin', 'curren chan', 'yukino bijin', 'ikuno dictus',
+  'wonder acute', 'nice nature', 'mihono bourbon', 'takarakosmos', 'hokko tarumae',
 ];
 
 const MESSAGE_KEYWORDS = [
