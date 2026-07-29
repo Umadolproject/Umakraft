@@ -12,8 +12,7 @@ const envInt = (name, fallback) => {
 
 const config = {
   aiProvider: process.env.AI_PROVIDER
-    || (process.env.OPENAI_API_KEY  ? 'openai'  : null)
-    || (process.env.GEMINI_API_KEY ? 'gemini'   : null)
+    || (process.env.GROQ_API_KEY    ? 'groq'    : null)
     || (process.env.MISTRAL_API_KEY ? 'mistral' : null)
     || (process.env.COHERE_API_KEY  ? 'cohere'  : null)
     || 'local',
@@ -25,17 +24,19 @@ const config = {
   localFailureThreshold: envInt('AI_LOCAL_FAILURE_THRESHOLD', 3),
   localDegradedModeMs: envInt('AI_LOCAL_DEGRADED_MS', 5 * 60 * 1000),
 
-  complexModel: 'gpt-4o-mini',
-  simpleModel: 'gemini-1.5-flash',
-  embeddingModel: 'text-embedding-3-small',
+  complexModel: process.env.AI_COMPLEX_MODEL || 'llama-3.1-70b-versatile',
+  simpleModel:  process.env.AI_SIMPLE_MODEL  || 'llama-3.1-8b-instant',
+  embeddingModel: process.env.AI_EMBEDDING_MODEL || 'Xenova/all-MiniLM-L6-v2',
   maxRetries: 3,
   retryBaseDelayMs: 1000,
   rateLimitRpm: 60,
 
-  openaiApiKey:  process.env.OPENAI_API_KEY  || null,
-  geminiApiKey:  process.env.GEMINI_API_KEY  || null,
-  openaiApiKey2: process.env.OPENAI_API_KEY_2 || null,
-  geminiApiKey2: process.env.GEMINI_API_KEY_2 || null,
+  // OpenAI and Gemini removed — provider is Groq.
+  // Keys retained as null so downstream guards (requireApiKey) don't crash.
+  openaiApiKey:  null,
+  geminiApiKey:  null,
+  openaiApiKey2: null,
+  geminiApiKey2: null,
 
   qdrantUrl:        process.env.QDRANT_URL        || null,
   qdrantApiKey:     process.env.QDRANT_API_KEY    || null,
