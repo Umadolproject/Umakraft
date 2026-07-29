@@ -1,10 +1,41 @@
-// MemoryManager.js — 8-tier cognitive memory system
-// Dual-mode storage: Turso (persistent) when TURSO_DB_URL is set,
-// falls back to in-memory Map for local dev / testing.
+// AI/managers/MemoryManager.js
+// Memory Manager — stores and retrieves cognitive memories, conversations, and cached responses.
+//
+// Uses the same storage backend as the rest of Umakraft via core/sqlite.js:
+//   • TURSO_DATABASE_URL set → Turso / libSQL (cloud)
+//   • Not set                 → sql.js WASM (local /data/umakraft.sqlite)
+//
+// This eliminates the dual @libsql/client import — all persistence flows
+// through core/sqlite.js's withRead / withWrite wrappers. No in-memory Map
+// fallback: sql.js already runs in WASM memory with periodic disk flushes.
+//
+// Public API:
+//   store(entry)               → store a cognitive memory
+//   get(id)                    → fetch by id
+//   update(id, fields)         → patch a memory
+//   delete(id)                 → remove a memory
+//   getRecent(userId, limit, guildId) → recent memories for a user
+//   search(userId, query, opts)→ keyword search
+//   count(userId, tier, guildId)→ count matching filters
+//   getByTier(tier, opts)      → filter by tier
+//   storeConversation({...})   → store a conversation turn
+//   getConversations(uId, chId)→ recent conversation turns
+//   clearConversations(uId,chId)→ delete conversation history
+//   getCachedResponse(key)     → lookup a cached AI response
+//   setCachedResponse(key, resp)→ store a cached AI response
+//   stats()                    → { backend, size, ... }
 
-// ─── SQL column mapping (snake_case DB ↔ camelCase JS) ────────────────────
+import { withRead, withWrite, queryAll, queryOne } from '../../core/sqlite.js';
+
+const DB_PATH = '/data/umakraft.sqlite'; // shared database with core bot tables
+
+// ══════════════════════════════════════════════════════════════════════════
+// SQL column mapping (snake_case DB ↔ camelCase JS)
+// ══════════════════════════════════════════════════════════════════════════
+
 const COLUMN_MAP = {
   user_id:          'userId',
+  guild_id:         'guildId',
   decay_rate:       'decayRate',
   access_count:     'accessCount',
   created_at:       'createdAt',
@@ -16,12 +47,8 @@ const COLUMN_MAP = {
 function dbRowToMem(row) {
   const mem = { ...row };
   for (const [dbCol, jsKey] of Object.entries(COLUMN_MAP)) {
-    if (dbCol in mem) {
-      mem[jsKey] = mem[dbCol];
-      delete mem[dbCol];
-    }
+    if (dbCol in mem) { mem[jsKey] = mem[dbCol]; delete mem[dbCol]; }
   }
-  // Convert numeric fields
   if (typeof mem.importance === 'string') mem.importance = Number(mem.importance);
   if (typeof mem.confidence === 'string') mem.confidence = Number(mem.confidence);
   if (typeof mem.value === 'string') mem.value = Number(mem.value);
@@ -31,7 +58,10 @@ function dbRowToMem(row) {
   return mem;
 }
 
-// ─── CREATE TABLE DDL ──────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════
+// CREATE TABLE DDL
+// ══════════════════════════════════════════════════════════════════════════
+
 const CREATE_TABLE_SQL = `
   CREATE TABLE IF NOT EXISTS memories (
     id               TEXT PRIMARY KEY,
@@ -70,14 +100,14 @@ const CREATE_CONVERSATIONS_SQL = `
 
 const CREATE_RESPONSE_CACHE_SQL = `
   CREATE TABLE IF NOT EXISTS response_cache (
-    cache_key       TEXT PRIMARY KEY,
-    query           TEXT NOT NULL,
-    classification  TEXT NOT NULL,
-    response_text   TEXT NOT NULL,
-    citations       TEXT,
-    model           TEXT,
-    tokens          INTEGER DEFAULT 0,
-    stored_at       TEXT NOT NULL
+    cache_key      TEXT PRIMARY KEY,
+    query          TEXT,
+    classification TEXT,
+    response_text  TEXT NOT NULL,
+    citations      TEXT,
+    model          TEXT DEFAULT 'unknown',
+    tokens         INTEGER DEFAULT 0,
+    stored_at      TEXT NOT NULL
   )
 `;
 
@@ -93,499 +123,351 @@ const INDEXES_SQL = [
   `CREATE INDEX IF NOT EXISTS idx_cache_stored ON response_cache(stored_at)`,
 ];
 
+// ══════════════════════════════════════════════════════════════════════════
+// MemoryManager class
+// ══════════════════════════════════════════════════════════════════════════
+
+const USE_TURSO = Boolean(process.env.TURSO_DATABASE_URL);
+
 export class MemoryManager {
-  constructor(dbConfig) {
-    this.dbConfig = dbConfig;
-    this._turso = null;     // libSQL client when connected
-    this._store = null;     // Map fallback
-    this.tiers = {
-      working:     { capacity: 10,   decayRate: 1.386,  ttlMinutes: 5 },
-      short_term:  { capacity: 100,  decayRate: 0.231,  ttlHours: 6 },
-      long_term:   { capacity: 1000, decayRate: 0.050,  ttlDays: 30 },
-      semantic:    { capacity: Infinity, decayRate: 0, ttlDays: Infinity },
-      episodic:    { capacity: Infinity, decayRate: 0, ttlDays: Infinity },
-      procedural:  { capacity: Infinity, decayRate: 0, ttlDays: Infinity },
-      preference:  { capacity: Infinity, decayRate: 0, ttlDays: Infinity },
-      goal:        { capacity: Infinity, decayRate: 0.010, ttlDays: Infinity },
-    };
+  constructor(opts = {}) {
+    this._dbPath = opts.dbPath ?? DB_PATH;
+    this._ready  = false;
   }
 
+  // ── init() — create schema + run migrations ────────────────────────────────
   async init() {
-    const { url, authToken } = this.dbConfig ?? {};
+    if (this._ready) return this;
 
-    if (url) {
-      // ── Turso / libSQL persistent mode ──────────────────────────────────
-      try {
-        const { createClient } = await import('@libsql/client');
-        this._turso = createClient({ url, authToken: authToken ?? '' });
-
-        // Create schema — cognitive memories + conversations + response cache
-        await this._turso.execute(CREATE_TABLE_SQL);
-        await this._turso.execute(CREATE_CONVERSATIONS_SQL);
-        await this._turso.execute(CREATE_RESPONSE_CACHE_SQL);
-        for (const idxSql of INDEXES_SQL) {
-          await this._turso.execute(idxSql);
-        }
-
-        // ── Migration: add guild_id column to pre-existing tables ────────
-        for (const { table, col } of [
-          { table: 'memories', col: 'guild_id TEXT NOT NULL DEFAULT \'\'' },
-          { table: 'conversations', col: 'guild_id TEXT NOT NULL DEFAULT \'\'' },
-        ]) {
-          try { await this._turso.execute(`ALTER TABLE ${table} ADD COLUMN ${col}`); }
-          catch { /* column already exists — safe to ignore */ }
-        }
-
-        // Verify connection
-        const { rows } = await this._turso.execute('SELECT count(*) as cnt FROM memories');
-        const convRows = await this._turso.execute('SELECT count(*) as cnt FROM conversations');
-        const cacheRows = await this._turso.execute('SELECT count(*) as cnt FROM response_cache');
-        console.log(
-          `[MemoryManager] Initialized (Turso mode) — ${rows[0]?.cnt ?? 0} memories, ` +
-          `${convRows.rows[0]?.cnt ?? 0} conversations, ${cacheRows.rows[0]?.cnt ?? 0} cached responses`
-        );
-      } catch (err) {
-        console.warn(
-          `[MemoryManager] Turso connection failed — falling back to in-memory: ${err?.message ?? err}`
-        );
-        this._turso = null;
-        this._store = new Map();
-        console.log('[MemoryManager] Initialized (in-memory fallback mode)');
+    await withWrite(this._dbPath, async (db) => {
+      await db.run(CREATE_TABLE_SQL);
+      await db.run(CREATE_CONVERSATIONS_SQL);
+      await db.run(CREATE_RESPONSE_CACHE_SQL);
+      for (const idxSql of INDEXES_SQL) {
+        try { await db.run(idxSql); } catch { /* index may already exist */ }
       }
-    } else {
-      // ── In-memory fallback ──────────────────────────────────────────────
-      this._store = new Map();
-      console.log('[MemoryManager] Initialized (in-memory mode)');
-    }
+      // Migration: add guild_id to pre-existing tables
+      for (const { table, col } of [
+        { table: 'memories', col: "guild_id TEXT NOT NULL DEFAULT ''" },
+        { table: 'conversations', col: "guild_id TEXT NOT NULL DEFAULT ''" },
+      ]) {
+        try { await db.run(`ALTER TABLE ${table} ADD COLUMN ${col}`); }
+        catch { /* column already exists */ }
+      }
+    });
+
+    // Verify
+    const memCount  = await this.count();
+    const convCount = await this._convCount();
+    const cacheCount = await this._cacheCount();
+    console.log(
+      `[MemoryManager] Initialized (${USE_TURSO ? 'Turso' : 'sql.js'}) — ` +
+      `${memCount} memories, ${convCount} conversations, ${cacheCount} cached responses`
+    );
+
+    this._ready = true;
+    return this;
   }
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // store(entry) — persist a new memory
-  // ──────────────────────────────────────────────────────────────────────────
+  _ensureReady() {
+    if (!this._ready) throw new Error('MemoryManager not initialized — call await init() first');
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // Cognitive Memory CRUD
+  // ══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Store a cognitive memory entry.
+   * @param {Object} entry — { userId, guildId?, tier?, type?, content, importance?, confidence?, ... }
+   * @returns {Promise<Object>} the stored memory
+   */
   async store(entry) {
-    const id = entry.id ?? this._generateId();
+    this._ensureReady();
     const now = new Date().toISOString();
+    const id = `mem_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
     const memory = {
-      id,
-      userId: entry.userId,
-      guildId: entry.guildId ?? '',
-      tier: entry.tier ?? 'short_term',
-      type: entry.type ?? 'fact',
-      content: entry.content,
+      id, userId: entry.userId ?? 'unknown',
+      guildId: entry.guildId ?? '', tier: entry.tier ?? 'short_term',
+      type: entry.type ?? 'fact', content: entry.content ?? '',
       summary: entry.summary ?? null,
-      importance: entry.importance ?? 0.5,
+      importance: entry.importance ?? entry.value ?? 0.5,
       confidence: entry.confidence ?? 0.5,
       value: entry.value ?? entry.importance ?? 0.5,
-      decayRate: entry.decayRate ?? this.tiers[entry.tier ?? 'short_term'].decayRate,
-      accessCount: 0,
-      createdAt: now,
-      updatedAt: now,
-      lastAccessedAt: null,
-      expiresAt: null,
-      protected: entry.protected ?? false,
+      decayRate: entry.decayRate ?? 0.231,
+      accessCount: entry.accessCount ?? 0,
+      createdAt: now, updatedAt: now,
+      lastAccessedAt: null, expiresAt: entry.expiresAt ?? null,
+      protected: entry.protected ? 1 : 0,
       source: entry.source ?? null,
-      metadata: entry.metadata ? (typeof entry.metadata === 'string' ? entry.metadata : JSON.stringify(entry.metadata)) : null,
+      metadata: typeof entry.metadata === 'string' ? entry.metadata : JSON.stringify(entry.metadata ?? null),
     };
 
-    if (this._turso) {
-      await this._turso.execute({
-        sql: `INSERT INTO memories
-          (id, user_id, guild_id, tier, type, content, summary, importance, confidence, value,
-           decay_rate, access_count, created_at, updated_at, last_accessed_at,
-           expires_at, protected, source, metadata)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        args: [
-          memory.id, memory.userId, memory.guildId, memory.tier, memory.type, memory.content,
-          memory.summary, memory.importance, memory.confidence, memory.value,
-          memory.decayRate, memory.accessCount, memory.createdAt, memory.updatedAt,
-          memory.lastAccessedAt, memory.expiresAt,
-          memory.protected ? 1 : 0, memory.source, memory.metadata,
-        ],
-      });
-    } else if (this._store) {
-      this._store.set(id, memory);
-    }
+    await withWrite(this._dbPath, async (db) => {
+      await db.run(
+        `INSERT INTO memories (id, user_id, guild_id, tier, type, content, summary,
+          importance, confidence, value, decay_rate, access_count,
+          created_at, updated_at, last_accessed_at, expires_at, protected, source, metadata)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [memory.id, memory.userId, memory.guildId, memory.tier, memory.type,
+         memory.content, memory.summary, memory.importance, memory.confidence, memory.value,
+         memory.decayRate, memory.accessCount, memory.createdAt, memory.updatedAt,
+         memory.lastAccessedAt, memory.expiresAt, memory.protected, memory.source, memory.metadata],
+      );
+    });
 
     return memory;
   }
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // get(id) — retrieve a single memory by id
-  // ──────────────────────────────────────────────────────────────────────────
+  /**
+   * Fetch a single memory by id.
+   */
   async get(id) {
-    if (this._turso) {
-      const { rows } = await this._turso.execute({
-        sql: `SELECT * FROM memories WHERE id = ?`,
-        args: [id],
-      });
-      if (rows.length === 0) return null;
-
-      const mem = dbRowToMem(rows[0]);
-      // Update access metadata
-      await this._turso.execute({
-        sql: `UPDATE memories SET access_count = access_count + 1, last_accessed_at = ? WHERE id = ?`,
-        args: [new Date().toISOString(), id],
-      });
-      return mem;
-    }
-
-    if (this._store) {
-      const mem = this._store.get(id);
-      if (mem) {
-        mem.lastAccessedAt = new Date().toISOString();
-        mem.accessCount++;
-      }
-      return mem ?? null;
-    }
-
-    return null;
+    this._ensureReady();
+    return withRead(this._dbPath, async (db) => {
+      // Increment access count on read
+      await db.run(`UPDATE memories SET access_count = access_count + 1, last_accessed_at = ? WHERE id = ?`,
+        [new Date().toISOString(), id]);
+      const row = await queryOne(db, 'SELECT * FROM memories WHERE id = ?', [id]);
+      return row ? dbRowToMem(row) : null;
+    });
   }
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // getRecent(userId, limit, guildId) — most recent memories for a user
-  // ──────────────────────────────────────────────────────────────────────────
-  async getRecent(userId, limit = 20, guildId = null) {
-    if (this._turso) {
-      let sql = `SELECT * FROM memories WHERE user_id = ?`;
-      const args = [userId];
-      if (guildId) { sql += ` AND guild_id = ?`; args.push(guildId); }
-      sql += ` ORDER BY created_at DESC LIMIT ?`;
-      args.push(limit);
-
-      const { rows } = await this._turso.execute({ sql, args });
-      return rows.map(dbRowToMem);
-    }
-
-    if (this._store) {
-      const results = [];
-      for (const [, mem] of this._store) {
-        if (mem.userId !== userId) continue;
-        if (guildId && mem.guildId !== guildId) continue;
-        results.push(mem);
-      }
-      return results
-        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-        .slice(0, limit);
-    }
-
-    return [];
-  }
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // search(userId, query, { tier, limit, guildId }) — keyword search
-  // ──────────────────────────────────────────────────────────────────────────
-  async search(userId, query, { tier = null, limit = 10, guildId = null } = {}) {
-    if (this._turso) {
-      let sql = `SELECT * FROM memories WHERE user_id = ? AND content LIKE ?`;
-      const args = [userId, `%${query}%`];
-
-      if (guildId) { sql += ` AND guild_id = ?`; args.push(guildId); }
-      if (tier)    { sql += ` AND tier = ?`;     args.push(tier); }
-
-      sql += ` ORDER BY value DESC LIMIT ?`;
-      args.push(limit);
-
-      const { rows } = await this._turso.execute({ sql, args });
-      return rows.map(dbRowToMem);
-    }
-
-    if (this._store) {
-      const results = [];
-      for (const [, mem] of this._store) {
-        if (mem.userId !== userId) continue;
-        if (guildId && mem.guildId !== guildId) continue;
-        if (tier && mem.tier !== tier) continue;
-        if (mem.content.toLowerCase().includes(query.toLowerCase())) {
-          results.push(mem);
-        }
-      }
-      return results
-        .sort((a, b) => b.value - a.value)
-        .slice(0, limit);
-    }
-
-    return [];
-  }
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // update(id, fields) — patch a memory
-  // ──────────────────────────────────────────────────────────────────────────
+  /**
+   * Update specific fields of a memory.
+   */
   async update(id, fields) {
-    if (this._turso) {
-      // Fetch existing first
-      const { rows } = await this._turso.execute({
-        sql: `SELECT * FROM memories WHERE id = ?`,
-        args: [id],
-      });
-      if (rows.length === 0) return null;
+    this._ensureReady();
+    return withWrite(this._dbPath, async (db) => {
+      const existing = await queryOne(db, 'SELECT * FROM memories WHERE id = ?', [id]);
+      if (!existing) return null;
+      const merged = { ...dbRowToMem(existing), ...fields, updatedAt: new Date().toISOString() };
 
-      const existing = dbRowToMem(rows[0]);
-      const merged = { ...existing, ...fields, updatedAt: new Date().toISOString() };
-
-      await this._turso.execute({
-        sql: `UPDATE memories SET
+      await db.run(
+        `UPDATE memories SET
           user_id = ?, guild_id = ?, tier = ?, type = ?, content = ?, summary = ?,
           importance = ?, confidence = ?, value = ?, decay_rate = ?,
           access_count = ?, updated_at = ?, last_accessed_at = ?,
           expires_at = ?, protected = ?, source = ?, metadata = ?
-          WHERE id = ?`,
-        args: [
-          merged.userId, merged.guildId, merged.tier, merged.type, merged.content, merged.summary,
-          merged.importance, merged.confidence, merged.value, merged.decayRate,
-          merged.accessCount ?? 0, merged.updatedAt, merged.lastAccessedAt,
-          merged.expiresAt, merged.protected ? 1 : 0, merged.source, merged.metadata,
-          id,
-        ],
-      });
+        WHERE id = ?`,
+        [merged.userId, merged.guildId, merged.tier, merged.type, merged.content,
+         merged.summary, merged.importance, merged.confidence, merged.value,
+         merged.decayRate, merged.accessCount ?? 0, merged.updatedAt,
+         merged.lastAccessedAt, merged.expiresAt, merged.protected ? 1 : 0,
+         merged.source, merged.metadata, id],
+      );
 
       return merged;
-    }
-
-    if (this._store) {
-      const mem = this._store.get(id);
-      if (!mem) return null;
-      Object.assign(mem, fields, { updatedAt: new Date().toISOString() });
-      this._store.set(id, mem);
-      return mem;
-    }
-
-    return null;
+    });
   }
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // delete(id) — remove a memory
-  // ──────────────────────────────────────────────────────────────────────────
+  /**
+   * Delete a memory by id.
+   */
   async delete(id) {
-    if (this._turso) {
-      const result = await this._turso.execute({
-        sql: `DELETE FROM memories WHERE id = ?`,
-        args: [id],
-      });
-      return Number(result.rowsAffected ?? 0) > 0;
-    }
-
-    if (this._store) {
-      return this._store.delete(id);
-    }
-
-    return false;
-  }
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // count(userId, tier, guildId) — count memories matching filters
-  // ──────────────────────────────────────────────────────────────────────────
-  async count(userId = null, tier = null, guildId = null) {
-    if (this._turso) {
-      let sql = `SELECT COUNT(*) as cnt FROM memories WHERE 1=1`;
-      const args = [];
-
-      if (userId)  { sql += ` AND user_id = ?`;  args.push(userId);  }
-      if (guildId) { sql += ` AND guild_id = ?`; args.push(guildId); }
-      if (tier)    { sql += ` AND tier = ?`;     args.push(tier);    }
-
-      const { rows } = await this._turso.execute({ sql, args });
-      return Number(rows[0]?.cnt ?? 0);
-    }
-
-    if (this._store) {
-      let count = 0;
-      for (const [, mem] of this._store) {
-        if (userId && mem.userId !== userId) continue;
-        if (guildId && mem.guildId !== guildId) continue;
-        if (tier && mem.tier !== tier) continue;
-        count++;
-      }
-      return count;
-    }
-
-    return 0;
-  }
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // getByTier(tier, { userId, limit, guildId }) — filter by tier
-  // ──────────────────────────────────────────────────────────────────────────
-  async getByTier(tier, { userId = null, limit = 100, guildId = null } = {}) {
-    if (this._turso) {
-      let sql = `SELECT * FROM memories WHERE tier = ?`;
-      const args = [tier];
-
-      if (userId)  { sql += ` AND user_id = ?`;  args.push(userId);  }
-      if (guildId) { sql += ` AND guild_id = ?`; args.push(guildId); }
-
-      sql += ` ORDER BY value DESC LIMIT ?`;
-      args.push(limit);
-
-      const { rows } = await this._turso.execute({ sql, args });
-      return rows.map(dbRowToMem);
-    }
-
-    if (this._store) {
-      const results = [];
-      for (const [, mem] of this._store) {
-        if (mem.tier !== tier) continue;
-        if (userId && mem.userId !== userId) continue;
-        if (guildId && mem.guildId !== guildId) continue;
-        results.push(mem);
-      }
-      return results
-        .sort((a, b) => b.value - a.value)
-        .slice(0, limit);
-    }
-
-    return [];
-  }
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // promoteTier(id, newTier) — boost a memory to a higher tier
-  // ──────────────────────────────────────────────────────────────────────────
-  async promoteTier(id, newTier) {
-    if (this._turso) {
-      const { rows } = await this._turso.execute({
-        sql: `SELECT * FROM memories WHERE id = ?`,
-        args: [id],
-      });
-      if (rows.length === 0) return null;
-
-      const mem = dbRowToMem(rows[0]);
-      mem.tier = newTier;
-      mem.decayRate = this.tiers[newTier].decayRate;
-      mem.importance = Math.min(1, mem.importance * 1.1);
-      mem.updatedAt = new Date().toISOString();
-
-      await this._turso.execute({
-        sql: `UPDATE memories SET tier = ?, decay_rate = ?, importance = ?, updated_at = ? WHERE id = ?`,
-        args: [mem.tier, mem.decayRate, mem.importance, mem.updatedAt, id],
-      });
-
-      return mem;
-    }
-
-    if (this._store) {
-      const mem = this._store.get(id);
-      if (!mem) return null;
-      mem.tier = newTier;
-      mem.decayRate = this.tiers[newTier].decayRate;
-      mem.importance = Math.min(1, mem.importance * 1.1);
-      mem.updatedAt = new Date().toISOString();
-      return mem;
-    }
-
-    return null;
+    this._ensureReady();
+    return withWrite(this._dbPath, async (db) => {
+      await db.run('DELETE FROM memories WHERE id = ?', [id]);
+    }).then(() => true);
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // Conversation Memory (for AdvancedFeatures.js)
+  // Query methods
+  // ══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Get recent memories for a user, optionally scoped to a guild.
+   */
+  async getRecent(userId, limit = 20, guildId = null) {
+    this._ensureReady();
+    return withRead(this._dbPath, async (db) => {
+      let sql = 'SELECT * FROM memories WHERE user_id = ?';
+      const args = [userId];
+      if (guildId) { sql += ' AND guild_id = ?'; args.push(guildId); }
+      sql += ' ORDER BY created_at DESC LIMIT ?';
+      args.push(limit);
+      return (await queryAll(db, sql, args)).map(dbRowToMem);
+    });
+  }
+
+  /**
+   * Keyword search across memories, scoped to user + optional guild/tier.
+   */
+  async search(userId, query, { tier = null, limit = 10, guildId = null } = {}) {
+    this._ensureReady();
+    return withRead(this._dbPath, async (db) => {
+      let sql = 'SELECT * FROM memories WHERE user_id = ? AND content LIKE ?';
+      const args = [userId, `%${query}%`];
+      if (guildId) { sql += ' AND guild_id = ?'; args.push(guildId); }
+      if (tier)    { sql += ' AND tier = ?';      args.push(tier); }
+      sql += ' ORDER BY value DESC LIMIT ?';
+      args.push(limit);
+      return (await queryAll(db, sql, args)).map(dbRowToMem);
+    });
+  }
+
+  /**
+   * Count memories matching optional filters.
+   */
+  async count(userId = null, tier = null, guildId = null) {
+    this._ensureReady();
+    return withRead(this._dbPath, async (db) => {
+      let sql = 'SELECT COUNT(*) as cnt FROM memories WHERE 1=1';
+      const args = [];
+      if (userId)  { sql += ' AND user_id = ?';  args.push(userId);  }
+      if (guildId) { sql += ' AND guild_id = ?'; args.push(guildId); }
+      if (tier)    { sql += ' AND tier = ?';      args.push(tier);    }
+      const row = await queryOne(db, sql, args);
+      return Number(row?.cnt ?? 0);
+    });
+  }
+
+  /**
+   * Filter memories by tier, optionally by user/guild.
+   */
+  async getByTier(tier, { userId = null, limit = 100, guildId = null } = {}) {
+    this._ensureReady();
+    return withRead(this._dbPath, async (db) => {
+      let sql = 'SELECT * FROM memories WHERE tier = ?';
+      const args = [tier];
+      if (userId)  { sql += ' AND user_id = ?';  args.push(userId);  }
+      if (guildId) { sql += ' AND guild_id = ?'; args.push(guildId); }
+      sql += ' ORDER BY value DESC LIMIT ?';
+      args.push(limit);
+      return (await queryAll(db, sql, args)).map(dbRowToMem);
+    });
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // Conversation Memory
   // ══════════════════════════════════════════════════════════════════════════
 
   async storeConversation({ userId, channelId, query, response, guildId }) {
     if (!userId || !query) return;
+    this._ensureReady();
     const id = `conv_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
     const now = new Date().toISOString();
 
-    if (this._turso) {
-      try {
-        await this._turso.execute({
-          sql: `INSERT INTO conversations (id, user_id, guild_id, channel_id, query, response, recorded_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          args: [id, userId, guildId ?? '', channelId ?? 'dm', query, typeof response === 'string' ? response.slice(0, 500) : '', now],
-        });
-        // Cap at 5 turns per user+channel — delete oldest beyond limit
-        await this._turso.execute({
-          sql: `DELETE FROM conversations WHERE id IN (
-                  SELECT id FROM conversations
-                  WHERE user_id = ? AND channel_id = ?
-                  ORDER BY recorded_at DESC
-                  LIMIT -1 OFFSET 5
-                )`,
-          args: [userId, channelId ?? 'dm'],
-        });
-      } catch { /* fire-and-forget — never block the hot path */ }
-    }
+    try {
+      await withWrite(this._dbPath, async (db) => {
+        await db.run(
+          `INSERT INTO conversations (id, user_id, guild_id, channel_id, query, response, recorded_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [id, userId, guildId ?? '', channelId ?? 'dm', query,
+           typeof response === 'string' ? response.slice(0, 500) : '', now],
+        );
+        // Cap at 5 turns per user+channel
+        await db.run(
+          `DELETE FROM conversations WHERE id IN (
+            SELECT id FROM conversations
+            WHERE user_id = ? AND channel_id = ?
+            ORDER BY recorded_at DESC
+            LIMIT -1 OFFSET 5
+          )`,
+          [userId, channelId ?? 'dm'],
+        );
+      });
+    } catch { /* fire-and-forget */ }
   }
 
   async getConversations(userId, channelId, limit = 5) {
-    if (!this._turso) return [];
-    try {
-      const cutoff = new Date(Date.now() - 30 * 60 * 1000).toISOString(); // 30min TTL
-      const { rows } = await this._turso.execute({
-        sql: `SELECT user_id, guild_id, channel_id, query, response, recorded_at
-              FROM conversations
-              WHERE user_id = ? AND channel_id = ? AND recorded_at > ?
-              ORDER BY recorded_at DESC LIMIT ?`,
-        args: [userId, channelId ?? 'dm', cutoff, limit],
-      });
+    this._ensureReady();
+    return withRead(this._dbPath, async (db) => {
+      const cutoff = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+      const rows = await queryAll(db,
+        `SELECT user_id, guild_id, channel_id, query, response, recorded_at
+         FROM conversations
+         WHERE user_id = ? AND channel_id = ? AND recorded_at > ?
+         ORDER BY recorded_at DESC LIMIT ?`,
+        [userId, channelId ?? 'dm', cutoff, limit],
+      );
       return rows.reverse(); // oldest-first for context injection
-    } catch {
-      return [];
-    }
+    });
   }
 
   async clearConversations(userId, channelId) {
-    if (!this._turso) return;
+    this._ensureReady();
+    return withWrite(this._dbPath, async (db) => {
+      await db.run('DELETE FROM conversations WHERE user_id = ? AND channel_id = ?',
+        [userId, channelId ?? 'dm']);
+    });
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // Response Cache (used by aiGateway for Turso-based cache fallback)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  async getCachedResponse(cacheKey) {
+    this._ensureReady();
+    return withRead(this._dbPath, async (db) => {
+      const row = await queryOne(db,
+        `SELECT cache_key, query, classification, response_text, citations, model, tokens, stored_at
+         FROM response_cache WHERE cache_key = ?`,
+        [cacheKey],
+      );
+      if (!row) return null;
+      return {
+        cacheKey: row.cache_key,
+        query: row.query,
+        classification: row.classification,
+        responseText: row.response_text,
+        citations: row.citations ? JSON.parse(row.citations) : [],
+        model: row.model,
+        tokens: Number(row.tokens ?? 0),
+        storedAt: row.stored_at,
+      };
+    });
+  }
+
+  async setCachedResponse({ cacheKey, query, classification, responseText, citations, model, tokens }) {
+    this._ensureReady();
     try {
-      await this._turso.execute({
-        sql: `DELETE FROM conversations WHERE user_id = ? AND channel_id = ?`,
-        args: [userId, channelId ?? 'dm'],
+      await withWrite(this._dbPath, async (db) => {
+        await db.run(
+          `INSERT OR REPLACE INTO response_cache (cache_key, query, classification, response_text, citations, model, tokens, stored_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [cacheKey, query ?? '', classification ?? '', responseText ?? '',
+           citations ? JSON.stringify(citations) : null,
+           model ?? 'unknown', tokens ?? 0, new Date().toISOString()],
+        );
       });
     } catch { /* best-effort */ }
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // Response Cache (for Cache.js)
+  // Internal count helpers
   // ══════════════════════════════════════════════════════════════════════════
 
-  async getCachedResponse(cacheKey) {
-    if (!this._turso) return null;
+  async _convCount() {
     try {
-      const cutoff = new Date(Date.now() - 600_000).toISOString(); // 10min TTL
-      const { rows } = await this._turso.execute({
-        sql: `SELECT cache_key, query, classification, response_text, citations, model, tokens
-              FROM response_cache WHERE cache_key = ? AND stored_at > ?`,
-        args: [cacheKey, cutoff],
+      return withRead(this._dbPath, async (db) => {
+        const row = await queryOne(db, 'SELECT COUNT(*) as cnt FROM conversations');
+        return Number(row?.cnt ?? 0);
       });
-      if (rows.length === 0) return null;
-      const r = rows[0];
-      return {
-        text: r.response_text,
-        citations: r.citations ? JSON.parse(r.citations) : [],
-        model: r.model ?? 'cloud',
-        tokens: Number(r.tokens ?? 0),
-      };
-    } catch {
-      return null;
-    }
+    } catch { return 0; }
   }
 
-  async setCachedResponse({ cacheKey, query, classification, responseText, citations, model, tokens }) {
-    if (!this._turso) return;
+  async _cacheCount() {
     try {
-      const now = new Date().toISOString();
-      await this._turso.execute({
-        sql: `INSERT OR REPLACE INTO response_cache
-              (cache_key, query, classification, response_text, citations, model, tokens, stored_at)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        args: [
-          cacheKey, query, classification, responseText,
-          citations ? JSON.stringify(citations) : '[]',
-          model ?? 'cloud', tokens ?? 0, now,
-        ],
+      return withRead(this._dbPath, async (db) => {
+        const row = await queryOne(db, 'SELECT COUNT(*) as cnt FROM response_cache');
+        return Number(row?.cnt ?? 0);
       });
-    } catch { /* fire-and-forget */ }
+    } catch { return 0; }
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // Turso connection accessor — for external preload
+  // Stats
   // ══════════════════════════════════════════════════════════════════════════
 
-  getTurso() {
-    return this._turso;
-  }
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // _generateId() — unique memory identifier
-  // ──────────────────────────────────────────────────────────────────────────
-  _generateId() {
-    return `mem_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+  stats() {
+    return {
+      backend: USE_TURSO ? 'turso' : 'sqlite',
+      dbPath: this._dbPath,
+      ready: this._ready,
+    };
   }
 }
+
+export default MemoryManager;

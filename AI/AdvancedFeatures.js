@@ -6,6 +6,7 @@
 //
 // Four capabilities:
 //   1. ConversationMemory   — short-term session context across turns
+//   1b.ConversationManager  — active session tracking (mention bypass + exit detection)
 //   2. CitationMode         — user-facing citation toggle + formatting
 //   3. ConfidenceScore      — report retrieval confidence in every answer
 //   4. MultiLanguage        — detect user language + respond in-kind
@@ -26,6 +27,7 @@
 //   MultiLanguage.instructionForResponse(lang) — returns a prompt suffix
 
 import { createHash } from 'node:crypto';
+import { withRead, queryAll } from '../core/sqlite.js';
 
 // ──────────────────────────────────────────────────────────────────────────────
 // PART 1 — Conversation Memory
@@ -168,29 +170,114 @@ export function activeSessionCount() {
   return _sessions.size;
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// PART 1b — Active Session Management (Conversation Manager)
+// ═══════════════════════════════════════════════════════════════════════════════
+// A session is considered "active" when the user has recently triggered the AI.
+// While active, the bot responds to follow-up messages without requiring @mention.
+// Sessions expire after 180s of inactivity or when the user sends an exit phrase.
+
+const SESSION_TIMEOUT_MS = 180_000; // 3 minutes
+
+const EXIT_PHRASES = [
+  'thanks', 'thank you', 'bye', 'goodbye', 'resolved',
+  "that's all", 'got it', 'ok', 'okay', 'done',
+];
+
+/** @type {Map<string, { userId: string, channelId: string, guildId: string,
+  startedAt: number, expiresAt: number, topic: string|null }>} */
+const _activeSessions = new Map();
+
 /**
- * Preload recent conversation turns from Turso into the in-memory Map.
+ * Check if a message content is an exit/conversation-ending phrase.
+ * Only matches short messages (≤50 chars) to avoid false positives.
+ */
+export function isExitMessage(content) {
+  if (!content || content.length > 50) return false;
+  const normalized = content.trim().toLowerCase().replace(/[^a-z0-9 ]/g, '');
+  return EXIT_PHRASES.some(p => {
+    if (normalized === p) return true;
+    if (normalized.startsWith(p + ' ') || normalized.endsWith(' ' + p)) return true;
+    return false;
+  });
+}
+
+/** Start a new active session after the bot responds to a mention/query. */
+export function startSession(userId, channelId, guildId, topic) {
+  const key = sessionKey(userId, channelId);
+  _activeSessions.set(key, {
+    userId,
+    channelId,
+    guildId: guildId ?? '',
+    startedAt: Date.now(),
+    expiresAt: Date.now() + SESSION_TIMEOUT_MS,
+    topic: topic ?? null,
+  });
+}
+
+/** Refresh the session timer — call on each follow-up message. */
+export function continueSession(userId, channelId) {
+  const key = sessionKey(userId, channelId);
+  const session = _activeSessions.get(key);
+  if (session) {
+    session.expiresAt = Date.now() + SESSION_TIMEOUT_MS;
+    return true;
+  }
+  return false;
+}
+
+/** End a session immediately (exit phrase or manual trigger). */
+export function endSession(userId, channelId) {
+  _activeSessions.delete(sessionKey(userId, channelId));
+}
+
+/** Check if a session is active and not expired. */
+export function isSessionActive(userId, channelId) {
+  const key = sessionKey(userId, channelId);
+  const session = _activeSessions.get(key);
+  if (!session) return false;
+  if (Date.now() > session.expiresAt) {
+    _activeSessions.delete(key);
+    return false;
+  }
+  return true;
+}
+
+/** Remove all expired sessions (called on a 60s interval). */
+export function cleanupSessions() {
+  const now = Date.now();
+  for (const [key, session] of _activeSessions) {
+    if (now > session.expiresAt) _activeSessions.delete(key);
+  }
+}
+
+// ── Periodic cleanup ────────────────────────────────────────────────────────
+const _cleanupTimer = setInterval(cleanupSessions, 60_000);
+if (typeof _cleanupTimer.unref === 'function') _cleanupTimer.unref();
+
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Preload recent conversation turns from SQLite into the in-memory Map.
+ * Uses core/sqlite.js — works with both Turso and local sql.js.
  * Call once on startup so getConversationContext() has data immediately.
  * Fire-and-forget — failure silently leaves the Map empty (acceptable).
  *
  * @returns {Promise<void>}
  */
 export async function preloadConversations() {
-  const memory = global.__learningManager?.memory;
-  if (!memory?.getTurso()) return;
+  const DB_PATH = '/data/umakraft.sqlite';
 
   try {
-    // Load ALL recent conversations (last 30min) — the getConversations
-    // method already enforces the TTL via SQL WHERE recorded_at > cutoff.
-    // We load all user+channel pairs from the DB and hydrate them.
-    const turso = memory.getTurso();
     const cutoff = new Date(Date.now() - 30 * 60 * 1000).toISOString();
-    const { rows } = await turso.execute({
-      sql: `SELECT user_id, channel_id, query, response, recorded_at
-            FROM conversations
-            WHERE recorded_at > ?
-            ORDER BY recorded_at ASC`,
-      args: [cutoff],
+    const rows = await withRead(DB_PATH, async (db) => {
+      return queryAll(db,
+        `SELECT user_id, channel_id, query, response, recorded_at
+         FROM conversations
+         WHERE recorded_at > ?
+         ORDER BY recorded_at ASC`,
+        [cutoff],
+      );
     });
 
     let loaded = 0;
@@ -206,7 +293,6 @@ export async function preloadConversations() {
         response: row.response,
         recordedAt: new Date(row.recorded_at).getTime(),
       });
-      // Enforce max turns per session
       if (turns.length > MAX_TURNS_PER_SESSION) {
         turns.splice(0, turns.length - MAX_TURNS_PER_SESSION);
       }
@@ -215,7 +301,7 @@ export async function preloadConversations() {
 
     if (loaded > 0) {
       const sessions = _sessions.size;
-      console.log(`[AdvancedFeatures] Preloaded ${loaded} conversation turns across ${sessions} sessions`);
+      console.log(`[AdvancedFeatures] Preloaded ${loaded} conversation turns across ${sessions} sessions from SQLite`);
     }
   } catch (err) {
     console.warn('[AdvancedFeatures] Conversation preload failed (non-fatal):', err?.message ?? err);

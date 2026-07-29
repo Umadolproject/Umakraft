@@ -48,7 +48,7 @@ export async function execute(client) {
     await global.__learningManager.init();
     console.log('[ready] LearningManager initialised');
 
-    // ── Preload conversation history & response cache from Turso ──
+    // ── Preload conversation history & response cache ──
     // Fire-and-forget — failures here must never block startup.
     (async () => {
       try {
@@ -60,6 +60,18 @@ export async function execute(client) {
       try {
         const { preloadCache } = await import('../../../../AI/Cache.js');
         await preloadCache();
+      } catch { /* non-fatal */ }
+    })();
+
+    // ── Retro-validate old corrections ──────────────────────────────────
+    // One-time pass: validates corrections stored before web validation existed.
+    // Fire-and-forget with delayed start (5s) so it doesn't compete with startup.
+    (async () => {
+      try {
+        const { retroValidateCorrections } = await import('../../../../AI/FeedbackManager.js');
+        await new Promise(r => setTimeout(r, 5000));  // let startup settle first
+        const result = await retroValidateCorrections();
+        console.log(`[ready] Retro-validation complete: ${result.scanned} scanned, ${result.verified} verified, ${result.downgraded} downgraded`);
       } catch { /* non-fatal */ }
     })();
   } catch (err) {

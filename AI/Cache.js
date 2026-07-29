@@ -9,13 +9,14 @@
 //   responseCache  — validated response objects keyed by SHA-256 of (query + classification + variables)
 //
 // Both caches use LRU eviction and configurable TTL.
-// Cache state is in-memory with optional Turso persistence for restart survival.
-// On startup, preloadCache() hydrates the LRU from Turso.
-// On every setResponse(), data is also written to Turso (fire-and-forget).
+// Cache state is in-memory with SQLite persistence for restart survival.
+// On startup, preloadCache() hydrates the LRU from SQLite (local or Turso).
+// On every setResponse(), data is also written to SQLite (fire-and-forget).
 
 import { createHash } from 'node:crypto';
 import log from '../core/log.js';
 import config from './Configuration.js';
+import { withRead, withWrite, queryAll } from '../core/sqlite.js';
 
 // ---------------------------------------------------------------------------
 // LRU Store
@@ -268,7 +269,7 @@ export function setResponse(query, classification, response, variables = {}) {
   const key = responseKey(query, classification, variables);
   _responseCache.set(key, response);
 
-  // ── Persist to Turso (fire-and-forget, never blocks) ──
+  // ── Persist to SQLite via core/sqlite.js (fire-and-forget, never blocks) ──
   (async () => {
     try {
       await global.__learningManager?.memory?.setCachedResponse({
@@ -295,13 +296,13 @@ export function clearAll() {
   _embeddingCache.clear();
   _responseCache.clear();
 
-  // Also clear Turso cache
+  // Also clear SQLite cache via core/sqlite.js
   (async () => {
     try {
-      const turso = global.__learningManager?.memory?.getTurso();
-      if (turso) {
-        await turso.execute('DELETE FROM response_cache');
-      }
+      const DB_PATH = '/data/umakraft.sqlite';
+      await withWrite(DB_PATH, async (db) => {
+        await db.run('DELETE FROM response_cache');
+      });
     } catch { /* best-effort */ }
   })();
 
@@ -320,23 +321,24 @@ export function stats() {
 }
 
 /**
- * Preload recent cached responses from Turso into the in-memory LRU.
+ * Preload recent cached responses from SQLite into the in-memory LRU.
+ * Uses core/sqlite.js — works with both Turso and local sql.js.
  * Call once on startup so repeated queries are fast immediately.
- * Only loads entries stored within the last 10 minutes (respecting cache TTL).
+ * Only loads entries stored within the TTL window.
  *
  * @returns {Promise<void>}
  */
 export async function preloadCache() {
-  const memory = global.__learningManager?.memory;
-  if (!memory?.getTurso()) return;
+  const DB_PATH = '/data/umakraft.sqlite';
 
   try {
     const cutoff = new Date(Date.now() - config.cacheResponseTtlMs).toISOString();
-    const turso = memory.getTurso();
-    const { rows } = await turso.execute({
-      sql: `SELECT cache_key, query, classification, response_text, citations, model, tokens
-            FROM response_cache WHERE stored_at > ? ORDER BY stored_at DESC LIMIT ?`,
-      args: [cutoff, config.cacheResponseMax ?? 500],
+    const rows = await withRead(DB_PATH, async (db) => {
+      return queryAll(db,
+        `SELECT cache_key, response_text, citations, model, tokens
+         FROM response_cache WHERE stored_at > ? ORDER BY stored_at DESC LIMIT ?`,
+        [cutoff, config.cacheResponseMax ?? 500],
+      );
     });
 
     let loaded = 0;
@@ -351,7 +353,7 @@ export async function preloadCache() {
     }
 
     if (loaded > 0) {
-      console.log(`[AI/Cache] Preloaded ${loaded} cached responses from Turso`);
+      console.log(`[AI/Cache] Preloaded ${loaded} cached responses from SQLite`);
     }
   } catch (err) {
     console.warn('[AI/Cache] Response cache preload failed (non-fatal):', err?.message ?? err);

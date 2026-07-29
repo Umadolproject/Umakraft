@@ -15,12 +15,15 @@
 //   expireOld(minutes)                                    → expire stale requests
 //   isAffirmative(text)                                   → boolean
 //   isNegative(text)                                      → boolean
+//   isCommentLike(text)                                   → boolean
+//   retroValidateCorrections()                            → Promise<{scanned, verified, downgraded}>
 
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import log from '../core/log.js';
+import { search as searchWeb, isConfigured as webSearchConfigured } from './webSearch.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -348,11 +351,107 @@ export function hasPendingCorrection(userId, channelId) {
   });
 }
 
+// ─── Correction validation helpers ────────────────────────────────────────────
+
+/** Common stop words to filter out when extracting key terms. */
+const STOP_WORDS = new Set([
+  'a', 'an', 'the', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
+  'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
+  'should', 'may', 'might', 'can', 'shall', 'to', 'of', 'in', 'for',
+  'on', 'with', 'at', 'by', 'from', 'as', 'into', 'through', 'during',
+  'before', 'after', 'above', 'below', 'between', 'out', 'off', 'over',
+  'under', 'again', 'further', 'then', 'once', 'here', 'there', 'when',
+  'where', 'why', 'how', 'all', 'both', 'each', 'few', 'more', 'most',
+  'other', 'some', 'such', 'no', 'not', 'only', 'own', 'same', 'so',
+  'than', 'too', 'very', 'just', 'because', 'but', 'and', 'or', 'if',
+  'while', 'about', 'up', 'down', 'this', 'that', 'these', 'those',
+  'it', 'its', 'i', 'me', 'my', 'we', 'our', 'you', 'your', 'he', 'she',
+  'they', 'them', 'what', 'which', 'who', 'whom', 'also', 'get', 'got',
+]);
+
+/**
+ * Determine if a user's reply is a comment/dismissal, not a real correction.
+ * Returns true for short/noise messages that shouldn't be stored as corrections.
+ */
+function isCommentLike(text) {
+  if (!text || text.length < 3) return true;
+  const words = text.trim().split(/\s+/);
+  if (words.length <= 1) return true;
+  const dismissals = [
+    'idk', "i don't know", 'i dont know', 'nevermind', 'never mind', 'nvm',
+    "it's fine", 'its fine', 'whatever', 'skip', 'nah', 'nope', 'nothing',
+    "doesn't matter", 'doesnt matter', 'forget it', 'ignore', 'pass',
+    'just kidding', 'jk', "i'm not sure", 'im not sure', 'no idea',
+  ];
+  const normalized = text.toLowerCase().trim().replace(/[^a-z0-9 ']/g, '');
+  if (dismissals.some(d => normalized === d || normalized.startsWith(d + ' '))) return true;
+  return false;
+}
+
+/**
+ * Extract searchable key terms from a user's correction.
+ * Filters stop words and returns the most meaningful terms.
+ */
+function extractKeyTerms(text) {
+  const words = text.toLowerCase()
+    .replace(/[^a-z0-9 ]/g, '')
+    .split(/\s+/)
+    .filter(w => w.length > 2 && !STOP_WORDS.has(w));
+  return [...new Set(words)].slice(0, 10);
+}
+
+/**
+ * Validate a user's correction against web search results.
+ *
+ * @returns {{ isValid: boolean, confidence: number, snippet?: string }}
+ */
+async function validateCorrection(question, userAnswer) {
+  if (!webSearchConfigured()) {
+    return { isValid: true, confidence: 1.0 };
+  }
+  try {
+    const searchQuery = `${question.slice(0, 100)} ${userAnswer.slice(0, 100)}`;
+    const results = await searchWeb(searchQuery);
+    if (!results || results.length === 0) {
+      return { isValid: false, confidence: 0, snippet: null };
+    }
+    const answerTerms = extractKeyTerms(userAnswer);
+    if (answerTerms.length === 0) {
+      return { isValid: true, confidence: 0.5 };
+    }
+    let totalScore = 0;
+    let bestSnippet = null;
+    for (const result of results.slice(0, 5)) {
+      const snippet = (result.snippet || result.content || result.title || '').toLowerCase();
+      let matchCount = 0;
+      for (const term of answerTerms) {
+        if (snippet.includes(term)) matchCount++;
+      }
+      totalScore += matchCount / answerTerms.length;
+      if (!bestSnippet && matchCount > 0) bestSnippet = snippet.slice(0, 200);
+    }
+    const confidence = totalScore / Math.min(results.length, 5);
+    return {
+      isValid: confidence >= 0.25,
+      confidence: Math.round(confidence * 100) / 100,
+      snippet: bestSnippet,
+    };
+  } catch (err) {
+    log.warn(`[FeedbackManager] Web validation failed: ${err.message}`);
+    return { isValid: true, confidence: 0.5 };
+  }
+}
+
 /**
  * Process a user's correction response after they said "no" to feedback.
- * The user's entire message is treated as the correct answer.
+ *
+ * Flow:
+ *   1. Comment/dismissal → silently dismiss
+ *   2. Real correction     → validateCorrection()
+ *       a. Invalid (low confidence) → store with low confidence
+ *       b. Valid (high confidence)  → store with high confidence
  */
-export function processCorrection(userId, channelId, correctionText) {
+export async function processCorrection(userId, channelId, correctionText) {
   const table = loadTable();
   const pending = table.data
     .filter(r => r.userId === userId && r.channelId === channelId && r.feedback === 'correction_requested')
@@ -368,18 +467,150 @@ export function processCorrection(userId, channelId, correctionText) {
     };
   }
 
-  pending.feedback = 'corrected';
+  // ── Comment detection ──────────────────────────────────────────────────
+  if (isCommentLike(cleanCorrection)) {
+    pending.feedback = 'dismissed';
+    pending.userReply = `DISMISSED: ${cleanCorrection.slice(0, 200)}`;
+    saveTable(table);
+    log.info(`[FeedbackManager] User ${userId} dismissed correction: "${cleanCorrection.slice(0, 60)}"`);
+    return {
+      action: 'dismissed',
+      message: `no worries, <@${userId}>~! if you find the right info later, just @mention me again! 💕`,
+    };
+  }
+
+  // ── Web validation ─────────────────────────────────────────────────────
+  // Always store the correction, but validate to set confidence level.
+  const validation = await validateCorrection(pending.question, cleanCorrection);
+  const isVerified = validation.isValid;
+
+  pending.feedback = isVerified ? 'corrected' : 'corrected_unverified';
   pending.userReply = `CORRECTION: ${cleanCorrection.slice(0, 500)}`;
-  pending.answer = cleanCorrection.slice(0, 1000);  // replace the wrong answer with the correct one
+  pending.answer = cleanCorrection.slice(0, 1000);
+  if (validation.confidence !== undefined) {
+    pending.confidence = validation.confidence;
+  }
   saveTable(table);
 
-  log.info(`[FeedbackManager] User ${userId} provided correction: "${cleanCorrection.slice(0, 60)}"`);
+  log.info(
+    `[FeedbackManager] User ${userId} correction ${isVerified ? 'verified' : 'unverified'} ` +
+    `(confidence: ${validation.confidence}): "${cleanCorrection.slice(0, 60)}"`
+  );
+
+  if (isVerified) {
+    return {
+      action: 'corrected',
+      question: pending.question,
+      answer: pending.answer,
+      confidence: validation.confidence,
+      validationSnippet: validation.snippet || null,
+      message: `ahh, i see! i checked around and that checks out — thank you so much for teaching me, <@${userId}>~! 🎓 i'll remember that. 💕`,
+    };
+  }
+
   return {
-    action: 'corrected',
+    action: 'corrected_unverified',
     question: pending.question,
     answer: pending.answer,
-    message: `ahh, i see! thank you so much for teaching me, <@${userId}>~! 🎓 i'll remember that. 💕`,
+    confidence: validation.confidence,
+    validationSnippet: null,
+    message: `hmm, i looked it up and couldn't quite verify that... but i'll keep it in mind, <@${userId}>~! if you have sources, i'd love to see them! 📚`,
   };
+}
+
+/**
+ * Retroactively validate stored corrections that were saved before web validation
+ * existed. Only processes entries with `feedback === 'corrected'` that have no
+ * `confidence` field. Capped at 50 entries to avoid excessive API calls.
+ *
+ * Call once on startup (after web search is initialized).
+ *
+ * @returns {Promise<{ scanned: number, verified: number, downgraded: number }>}
+ */
+export async function retroValidateCorrections() {
+  if (!webSearchConfigured()) {
+    log.info('[FeedbackManager] Web search not configured — skipping retro-validation');
+    return { scanned: 0, verified: 0, downgraded: 0 };
+  }
+
+  const table = loadTable();
+  const candidates = table.data.filter(r =>
+    r.feedback === 'corrected' &&
+    r.userReply?.startsWith('CORRECTION:') &&
+    r.confidence === undefined
+  );
+
+  if (candidates.length === 0) {
+    log.info('[FeedbackManager] No unvalidated corrections to retro-validate');
+    return { scanned: 0, verified: 0, downgraded: 0 };
+  }
+
+  const toValidate = candidates.slice(0, 50);
+  let verified = 0;
+  let downgraded = 0;
+
+  log.info(`[FeedbackManager] Retro-validating ${toValidate.length} old corrections (${candidates.length} total, capped at 50)...`);
+
+  for (let i = 0; i < toValidate.length; i++) {
+    const entry = toValidate[i];
+    const correction = entry.userReply?.replace(/^CORRECTION:\s*/, '').trim();
+    if (!correction || correction.length < 10) {
+      entry.confidence = 0.3;
+      entry.feedback = 'corrected_unverified';
+      downgraded++;
+      continue;
+    }
+
+    if (i > 0) await new Promise(r => setTimeout(r, 1000));  // rate-limit: 1 req/sec
+
+    try {
+      const validation = await validateCorrection(entry.question, correction);
+      entry.confidence = validation.confidence;
+      if (!validation.isValid) {
+        entry.feedback = 'corrected_unverified';
+        downgraded++;
+      } else {
+        verified++;
+        // ── Feed verified correction into LearningManager ──────────────
+        try {
+          const lm = global.__learningManager;
+          if (lm) {
+            lm.process({
+              userId:   entry.userId,
+              query:    `CORRECTION: ${entry.question}`,
+              response: correction,
+              metadata: { domain: 'correction', feedback: -1, confidence: validation.confidence },
+            }).catch(() => {});
+            // Also store the validation evidence that confirmed it
+            if (validation.snippet) {
+              lm.process({
+                userId:   entry.userId,
+                query:    `VALIDATED: ${entry.question}`,
+                response: validation.snippet,
+                metadata: { domain: 'validation_evidence', feedback: 1, confidence: Math.min(1, validation.confidence + 0.1), trusted: true },
+              }).catch(() => {});
+            }
+          }
+        } catch { /* learning is additive */ }
+      }
+      log.info(
+        `[FeedbackManager] Retro-validated "${entry.question.slice(0, 40)}": ` +
+        `${validation.isValid ? 'verified' : 'downgraded'} (confidence: ${validation.confidence})`
+      );
+    } catch (err) {
+      entry.confidence = 0.3;
+      entry.feedback = 'corrected_unverified';
+      downgraded++;
+      log.warn(`[FeedbackManager] Retro-validation failed for "${entry.question.slice(0, 40)}": ${err.message}`);
+    }
+  }
+
+  saveTable(table);
+  log.info(
+    `[FeedbackManager] Retro-validation complete: ${verified} verified, ` +
+    `${downgraded} downgraded to unverified (${toValidate.length} total scanned)`
+  );
+  return { scanned: toValidate.length, verified, downgraded };
 }
 
 export function getPendingQuestion(userId, channelId) {

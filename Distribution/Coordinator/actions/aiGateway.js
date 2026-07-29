@@ -384,10 +384,40 @@ export async function aiCommand(payload) {
     if (lm && payload.userId) {
       const memories = await lm.retrieveContext(query, payload.userId);
       if (memories && memories.length > 0) {
-        const memoryLines = memories.slice(0, 5).map(m =>
-          `- ${m.content} (${m.tier}, confidence: ${m.confidence?.toFixed(2) ?? '?'})`
+        // Tag and sort: user corrections are the primary answer source;
+        // verified evidence provides supporting detail and confirms correctness.
+        const tagged = [];
+        const seenContent = new Set();
+        let hasLackingCorrection = false;
+        for (const m of memories.slice(0, 8)) {
+          const key = m.content?.slice(0, 60).toLowerCase();
+          if (seenContent.has(key)) continue;
+          seenContent.add(key);
+
+          let prefix = '';
+          if (m.type === 'correction') {
+            prefix = '[USER CORRECTION] ';
+            // Detect if the correction is short/incomplete
+            const words = (m.content || '').split(/\s+/).length;
+            if ((m.content?.length ?? 0) < 50 && words < 6) hasLackingCorrection = true;
+          } else if (!m.protected && (m.confidence ?? 0) >= 0.7) {
+            prefix = '[VERIFIED] ';
+          }
+          tagged.push({ ...m, prefix });
+        }
+        // Sort: USER CORRECTIONS first (primary), then VERIFIED (supporting), then others
+        tagged.sort((a, b) => {
+          const rank = (p) => p === '[USER CORRECTION] ' ? 0 : p === '[VERIFIED] ' ? 1 : 2;
+          return rank(a.prefix) - rank(b.prefix);
+        });
+        const memoryLines = tagged.slice(0, 5).map(m =>
+          `- ${m.prefix}${m.content} (${m.tier}, confidence: ${m.confidence?.toFixed(2) ?? '?'})`
         );
-        prompt += `\n\n[Relevant memories from past interactions:]\n${memoryLines.join('\n')}`;
+        if (hasLackingCorrection) {
+          prompt += `\n\n[Learned knowledge — the [USER CORRECTION] below is the preferred answer wording. Combine any lacking [USER CORRECTION] with the [VERIFIED] supporting detail into one complete, natural answer. The user's correction is the core — use the verified evidence to fill in missing detail:]\n${memoryLines.join('\n')}`;
+        } else {
+          prompt += `\n\n[Learned knowledge — the [USER CORRECTION] is the preferred answer (verified as correct by [VERIFIED] evidence). Use the user's wording, not the web snippet:]\n${memoryLines.join('\n')}`;
+        }
       }
     }
   } catch { /* memory enrichment is additive — fine if it fails */ }
