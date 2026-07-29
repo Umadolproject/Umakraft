@@ -216,9 +216,11 @@ async function buildAchievementPayload(ach, trainer) {
   try {
     const { generate } = await import('../../AI/ContentGenerator.js');
     const result = await generate('achievement', {
-      trainerName:     trainer.trainerName,
-      achievementName: ach.title,
-      description:     ach.description,
+      trainerName:          trainer.trainerName,
+      achievementName:      ach.title,
+      description:          ach.description,
+      achievementCategory:  ach.category,
+      achievementTitle:     ach.title,
     });
 
     if (result.usedFallback) {
@@ -357,12 +359,18 @@ export async function runAchievementCycle(client) {
     for (const ach of earned) {
       const key = achievementClaimKey(trainer.circleId, trainer.trainerId, ach.category, ach.title);
 
-      // ── 3. Lifetime dedup — each achievement fires once ever ──────────
+      // ── 3. Lifetime dedup — skip only if delivered; retry dead letters ──
       try {
         const existing = await archive.get(key);
         if (existing.record) {
-          logger.debug(`Achievement already fired (lifetime): ${key}`);
-          continue;
+          if (existing.record.deadLetter) {
+            logger.info(`Achievement dead-letter retry: ${key}`);
+            await archive.replayDeadLetter(key);
+            // Re-fetch after replay so delivery attempt proceeds below
+          } else {
+            logger.debug(`Achievement already fired (lifetime): ${key}`);
+            continue;
+          }
         }
       } catch (err) {
         logger.warn(`Archive dedup check failed for ${key}: ${err.message}`);
@@ -407,12 +415,20 @@ export async function runAchievementCycle(client) {
       try {
         const record = await archive.get(key);
         if (record.record && client) {
-          deliver(record.record, client).catch(err =>
-            logger.error(`Announcer delivery failed for ${key}: ${err.message}`)
-          );
+          deliver(record.record, client).catch(async err => {
+            logger.error(`Announcer delivery failed for ${key}: ${err.message}`);
+            await archive.markDeadLetter(key, {
+              reason: err.message,
+              step:   'announcer_delivery',
+            }).catch(() => {});
+          });
         }
       } catch (err) {
         logger.error(`Announcer dispatch failed for ${key}: ${err.message}`);
+        await archive.markDeadLetter(key, {
+          reason: err.message,
+          step:   'announcer_dispatch',
+        }).catch(() => {});
       }
 
       firedCount++;
