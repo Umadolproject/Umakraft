@@ -11,7 +11,6 @@ import { validate } from '../../../AI/ResponseValidator.js';
 import { answer as localAnswer } from '../../../AI/aiService.js';
 import { Router } from '../../../AI/router/Router.js';
 import { getResponse, setResponse, responseKey } from '../../../AI/Cache.js';
-import { synthesize as synthesizeFacts, formatForPrompt as formatSynthesis } from '../../../AI/Synthesizer.js';
 import { scopeUmaQuery } from '../../../AI/WebSearchEngine.js';
 import config from '../../../AI/Configuration.js';
 import { log as logQuestion } from '../../../Operation/AskLogger.js';
@@ -36,6 +35,153 @@ async function _getAgent() {
     } catch { /* Agent not available */ }
   }
   return _agent;
+}
+
+// ── Inline Synthesizer ───────────────────────────────────────────────────
+// Deduplication-free synthesis: normalize -> filter junk -> score -> rank -> budget.
+// The LLM handles semantic dedup naturally. No separate file = no import crash.
+
+var SYNTH_MIN_LENGTH = 25;
+var SYNTH_HIGH_CONF = 0.75;
+var SYNTH_LOW_CONF  = 0.30;
+
+var SYNTH_STOP_WORDS = new Set([
+  'the','a','an','is','are','was','were','be','been','being',
+  'have','has','had','do','does','did','will','would','shall',
+  'should','may','might','must','can','could','it','its','this',
+  'that','these','those','of','in','to','for','with','on','at',
+  'by','from','as','into','about','like','through','after','before',
+  'between','under','over','and','but','or','not','no','nor',
+  'so','than','too','very','just','also','then','now','here',
+  'there','when','where','why','how','all','each','every','both',
+  'few','more','most','some','any','such','only','other',
+]);
+
+var SYNTH_BUDGET = {
+  definition: { maxFacts: 2, maxWords: 120 },
+  general:    { maxFacts: 3, maxWords: 180 },
+  comparison: { maxFacts: 5, maxWords: 300 },
+  'how-to':   { maxFacts: 4, maxWords: 250 },
+  repository: { maxFacts: 3, maxWords: 300 },
+  knowledge:  { maxFacts: 3, maxWords: 200 },
+  web:        { maxFacts: 4, maxWords: 250 },
+  default:    { maxFacts: 3, maxWords: 180 },
+};
+
+var SYNTH_JUNK = [
+  /^(click|tap|learn more|read more|find out|discover|explore|check out)\b/i,
+  /^\d{1,2}\s*(min read|minute ago|minutes ago|hour ago|hours ago|day ago|days ago)/i,
+  /\b(sign up|subscribe|newsletter|advertisement|sponsored)\b/i,
+  /\b(cookie|privacy policy|terms of service|accept all)\b/i,
+  /\b(all rights reserved|copyright)\b/i,
+  /^(search result|search results|showing result|showing results|we found)\b/i,
+];
+
+function synthNormalize(text) {
+  return text
+    .replace(/\s+/g, ' ')
+    .replace(/\.{2,}/g, '')
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/^[^a-zA-Z0-9]*/, '')
+    .trim();
+}
+
+function synthTokenize(text) {
+  return new Set(
+    text.toLowerCase()
+      .replace(/[^a-z0-9 \-]/g, '')
+      .split(/\s+/)
+      .filter(function(w) { return w.length > 2 && !SYNTH_STOP_WORDS.has(w); })
+  );
+}
+
+function synthIsJunk(text) {
+  for (var i = 0; i < SYNTH_JUNK.length; i++) {
+    if (SYNTH_JUNK[i].test(text)) return true;
+  }
+  return false;
+}
+
+function synthesizeFacts(question, snippets, intent, maxFacts) {
+  intent = intent || 'general';
+  var budget = SYNTH_BUDGET[intent] || SYNTH_BUDGET.default;
+
+  if (!snippets || snippets.length === 0) {
+    return { facts: [], budget: budget, isHighConfidence: false };
+  }
+
+  var rawCount = snippets.length;
+
+  var facts = snippets
+    .map(function(s) { return synthNormalize(s); })
+    .filter(function(f) { return f.length >= SYNTH_MIN_LENGTH; })
+    .filter(function(f) { return !synthIsJunk(f); })
+    .map(function(text, i) { return { id: i, text: text, tokens: synthTokenize(text) }; });
+
+  if (facts.length === 0) {
+    return { facts: [], budget: budget, isHighConfidence: false };
+  }
+
+  // Score relevance to question
+  var qTokens = synthTokenize(question);
+  var qtArr = [];
+  qTokens.forEach(function(t) { qtArr.push(t); });
+
+  for (var i = 0; i < facts.length; i++) {
+    var f = facts[i];
+    var overlap = qtArr.filter(function(t) { return f.tokens.has(t); });
+    var relevance = qTokens.size > 0 ? overlap.length / qTokens.size : 0.5;
+    var lenRatio = f.text.length / SYNTH_MIN_LENGTH;
+    var lenPenalty = Math.max(0, (1 - Math.min(lenRatio, 2) / 2) * 0.10);
+    f.confidence = Math.round(Math.max(0.10, Math.min(0.98, relevance - lenPenalty)) * 100) / 100;
+  }
+
+  facts = facts.filter(function(f) { return f.confidence >= SYNTH_LOW_CONF; });
+  facts.sort(function(a, b) { return b.confidence - a.confidence; });
+
+  var limit = maxFacts || budget.maxFacts;
+  facts = facts.slice(0, limit);
+
+  var isHigh = facts.length > 0 && facts.every(function(f) { return f.confidence >= SYNTH_HIGH_CONF; });
+
+  log.info(
+    '[Synthesizer] ' + rawCount + ' raw -> ' + facts.length + ' ranked (' +
+    (isHigh ? 'high' : 'mixed') + ' confidence, ' + intent + ', <=' + budget.maxWords + 'w)'
+  );
+
+  return {
+    facts: facts.map(function(f) {
+      return { text: f.text, confidence: f.confidence, sourceCount: 1 };
+    }),
+    budget: budget,
+    isHighConfidence: isHigh,
+  };
+}
+
+function formatSynthesis(result) {
+  if (result.facts.length === 0) return '';
+
+  var facts = result.facts;
+  var budget = result.budget;
+
+  var confLabel = result.isHighConfidence
+    ? 'high-confidence'
+    : 'mixed confidence -- cross-check if uncertain';
+
+  var lines = [
+    '[Ranked knowledge (' + facts.length + ' facts, ' + confLabel +
+    ', <=' + budget.maxWords + ' words):]',
+  ];
+
+  for (var i = 0; i < facts.length; i++) {
+    lines.push('  - [' + Math.round(facts[i].confidence * 100) + '%] ' + facts[i].text);
+  }
+
+  lines.push('');
+  lines.push('IMPORTANT: Do NOT list sources inline. Synthesize naturally.');
+
+  return lines.join('\n');
 }
 
 const DISCORD_MAX = 2000;
@@ -431,14 +577,14 @@ export async function aiCommand(payload) {
   // Prevents the LLM from listing "According to Source A... Source B..."
   // when multiple sources agree. Runs in-process, no extra LLM calls.
   try {
-    const webChunks = (chunks || []).filter(c => c?.source === 'web');
+    const webChunks = (chunks || []).filter(function(c) { return c && c.source === 'web'; });
     if (webChunks.length > 0) {
       const webSnippets = webChunks.map(c => c.content).filter(Boolean);
-      const synthesis = synthesizeFacts({
-        question: query,
-        snippets: webSnippets,
-        intent: classification?.topic || 'general',
-      });
+      const synthesis = synthesizeFacts(
+        query,
+        webSnippets,
+        (classification && classification.topic) || 'general',
+      );
       if (synthesis.facts.length > 0) {
         prompt += '\n\n' + formatSynthesis(synthesis);
       }
