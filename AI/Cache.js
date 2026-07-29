@@ -357,6 +357,3 @@ export async function preloadCache() {
     console.warn('[AI/Cache] Response cache preload failed (non-fatal):', err?.message ?? err);
   }
 }
-
-// Re-export responseKey for external use (e.g. aiGateway Turso fallback)
-export { responseKey };
